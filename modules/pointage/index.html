@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pointage CSB</title>
+<!--
+  Pointage_CSB.html — v2.9
+  Gestion des heures de travail, absences et congés payés — Atelier CSB
+  Architecture : fichier HTML autonome + PocketBase (mêmes principes que les autres
+  outils CSB : pas de build, REST direct, aucune clé exposée côté client).
+
+  Collections PocketBase requises (règles d'accès ouvertes) :
+    pointage_employees : nom, prenom, role(select: utilisateur|administrateur),
+                          pin(text, optionnel), statut(select: actif|inactif),
+                          couleur, heures_base_mensuel, solde_conges, ordre
+    pointage_jours      : employee(rel), date("YYYY-MM-DD"), heures, heures_majorees,
+                          heures_absence, heures_retard, statut(select), motif
+    pointage_mensuel    : employee(rel), mois("YYYY-MM"), heures_base, heures_majorees,
+                          heures_absence, heures_retard, periode_absence, motif_absence,
+                          primes, acomptes, frais_atelier, conges_payes
+    pointage_settings   : pb_admin_pin (code maître, optionnel),
+                          jours_travailles (text, ex. "1,2,3,4,5" — 0=dim..6=sam),
+                          heures_jour_defaut (number, ex. 7)
+
+  Historique des versions :
+    v1.0 (2026-08-31) — création initiale.
+    v1.1 (2026-08-31) — profils utilisateurs avec rôle (utilisateur/administrateur),
+                         code personnel optionnel par profil, et statut (actif/inactif).
+    v1.2 (2026-08-31) — Vue d'ensemble : bouton "Remplir le mois" pour tous les employés,
+                         bouton "Remplir" par semaine, affichage du numéro de semaine (ISO).
+                         Paramètres : définition des jours travaillés et des heures/jour
+                         par défaut, utilisés pour le pré-remplissage et l'affichage.
+    v1.3 (2026-08-31) — correctif : les requêtes vers PocketBase étaient parfois mises en
+                         cache par le navigateur, ce qui pouvait masquer des écritures
+                         récentes (ex. "Remplir cette semaine") lors du réaffichage.
+                         Ajout de cache:'no-store' sur tous les appels réseau.
+    v1.4 (2026-08-31) — correctif : le remplissage automatique ignorait les jours ayant
+                         déjà un enregistrement, même avec un statut vide/invalide (ex.
+                         après un souci de nommage de champ côté PocketBase). Ces jours
+                         sont maintenant détectés comme "vides" et corrigés automatiquement.
+    v1.5 (2026-08-31) — diagnostic : le remplissage indique désormais le nombre de jours
+                         mis à jour / déjà remplis / en erreur (détail dans la console F12).
+                         Ajout d'un bouton "Tester l'écriture/lecture du statut" dans
+                         Paramètres pour vérifier en un clic la configuration PocketBase.
+    v1.6 (2026-08-31) — correctif racine : si le champ "date" de pointage_jours est de
+                         type Date (et non Texte) dans PocketBase, l'API renvoie une
+                         date-heure complète ("2026-08-03 00:00:00.000Z"). Les données
+                         étaient donc bien enregistrées mais jamais retrouvées à l'affichage
+                         (comparaison avec "2026-08-03" en échec). La date est maintenant
+                         normalisée ("YYYY-MM-DD") dès sa lecture, quel que soit le type
+                         de champ utilisé côté PocketBase.
+    v1.7 (2026-08-31) — le remplissage (mois / semaine) ouvre maintenant une fenêtre pour
+                         choisir le statut à appliquer : "Automatique" (comportement
+                         précédent, respecte les jours travaillés et ne touche pas aux
+                         jours déjà saisis), ou un statut fixe (Travail avec heures
+                         personnalisées, Congé payé, Arrêt maladie, RTT, etc.) qui est
+                         alors forcé sur toute la période pour tous les employés actifs.
+    v1.8 (2026-08-31) — ajout d'un diagnostic pour la collection pointage_employees
+                         (rôle / statut / code personnel), sur le même principe que celui
+                         des jours de pointage, pour identifier un éventuel champ mal
+                         nommé côté PocketBase. Un avertissement est aussi loggé en
+                         console si role/statut ne sont pas relus tels qu'envoyés après
+                         l'enregistrement d'un profil.
+    v1.9 (2026-08-31) — le diagnostic a révélé que le champ était nommé "status" (au lieu
+                         de "statut") et "sole_conges" (coquille, au lieu de "solde_conges")
+                         dans pointage_employees. Plutôt que d'exiger un renommage, l'appli
+                         écrit désormais sur les deux variantes possibles à chaque
+                         enregistrement et lit celle qui existe réellement — le statut et
+                         le solde de congés se mémorisent maintenant quel que soit le nom
+                         exact utilisé dans le schéma PocketBase.
+    v2.0 (2026-08-31) — Vue d'ensemble : nouveau mode "Sélection multi-jours" permettant de
+                         sélectionner plusieurs jours d'un même employé puis de les modifier
+                         en une seule fois (statut, heures, motif). Fenêtre de remplissage
+                         (mois / semaine) : ajout d'une liste d'employés à cocher pour
+                         choisir qui est concerné par le remplissage.
+    v2.1 (2026-08-31) — ajout de logs de diagnostic sur tout le parcours de la sélection
+                         multi-jours (clic sur une case, ouverture de la fenêtre de
+                         modification, application) pour identifier un cas où rien ne se
+                         passait pour une sélection d'un seul jour.
+    v2.2 (2026-08-31) — correctif racine : la recherche du jour existant lors d'un
+                         enregistrement (upsertJour) utilisait une égalité stricte sur la
+                         date, en échec avec un champ "date" de type Date PocketBase
+                         (valeur stockée avec une heure). Résultat : modifier un jour déjà
+                         saisi créait un doublon au lieu de le mettre à jour, et l'écran
+                         continuait d'afficher l'ancienne valeur. Recherche remplacée par
+                         une plage (date>=jour && date<jour+1), fonctionnant quel que soit
+                         le type de champ, avec nettoyage automatique des doublons déjà
+                         créés par ce bug.
+    v2.3 (2026-08-31) — le remplissage automatique (mois / semaine) ne touche plus du tout
+                         aux jours non travaillés (ex. samedi/dimanche selon les
+                         paramètres) : ils ne sont ni créés ni modifiés. Correctif du menu
+                         latéral de l'administration : l'onglet actif (surlignage violet)
+                         suit maintenant correctement le clic au lieu de rester bloqué sur
+                         "Vue d'ensemble".
+    v2.4 (2026-08-31) — ajout de logs détaillés dans upsertJour et saveDayModal (recherche,
+                         doublons, update/création) pour diagnostiquer un cas où le
+                         changement d'un jour via un clic sur une case ne se répercutait
+                         toujours pas à l'écran.
+    v2.5 (2026-08-31) — correctif racine (dernier morceau) : la récupération des jours du
+                         mois (loadJours) utilisait une borne supérieure "<= dernier jour
+                         du mois", qui exclut à tort ce dernier jour quand le champ "date"
+                         stocke une date-heure complète (sa valeur est alors lexicalement
+                         "après" la date seule). Seul le dernier jour de chaque mois était
+                         donc concerné. Borne remplacée par "< premier jour du mois
+                         suivant", qui fonctionne quel que soit le type de champ.
+    v2.6 (2026-08-31) — ajout du suivi des heures d'absence et de retard par jour, pour
+                         chaque employé (mode admin) : nouveaux champs dans la fiche jour
+                         (édition simple et édition groupée), petit indicatif sur la case
+                         de la grille quand ils sont renseignés, agrégation mensuelle
+                         automatique et deux nouvelles colonnes dans l'export (tableau
+                         éditable, Excel et impression).
+    v2.7 (2026-08-31) — correctif : "Période Absence" regroupait à tort les jours de
+                         Congé payé et RTT avec les vraies absences (arrêt maladie,
+                         absence injustifiée, autre), alors que les congés payés ont déjà
+                         leur propre colonne dans l'export. Seuls Arrêt maladie, Absence
+                         injustifiée et Autre comptent désormais comme "absence".
+    v2.8 (2026-08-31) — ajout d'un bouton "Imprimer / PDF" dans la Vue d'ensemble,
+                         permettant d'imprimer (ou d'enregistrer en PDF via la boîte de
+                         dialogue d'impression) la grille du mois complète avec l'en-tête
+                         SARL C.S.B. et la légende des statuts.
+    v2.9 (2026-08-31) — l'impression de la Vue d'ensemble reprend maintenant les couleurs
+                         des statuts affichées à l'écran (cases colorées, en-tête de
+                         tableau en indigo, légende avec pastilles de couleur), au lieu
+                         d'un tableau noir et blanc.
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="../../src/shared/csb-prompt.js"></script>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --border:#e5e7eb; --ink:#111827; --muted:#6b7280;
+    --accent:#4f46e5; --accent-dark:#3730a3; --accent-soft:#eef2ff;
+    --danger:#ef4444; --radius:14px; --shadow:0 1px 3px rgba(17,24,39,.06), 0 8px 24px rgba(17,24,39,.04);
+    --font: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink); font-family:var(--font); }
+  #app{ min-height:100vh; }
+  h1,h2,h3{ margin:0; }
+  .muted{ color:var(--muted); }
+  .small{ font-size:12.5px; }
+  button{ font-family:inherit; cursor:pointer; }
+
+  /* ---------- Login ---------- */
+  .login-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+    background: radial-gradient(1200px 600px at 10% -10%, #eef2ff 0%, transparent 60%),
+                radial-gradient(1000px 500px at 110% 110%, #f0fdfa 0%, transparent 60%), var(--bg); }
+  .login-card{ background:var(--card); border-radius:20px; box-shadow:var(--shadow); padding:36px; width:100%; max-width:640px; border:1px solid var(--border); }
+  .brand{ display:flex; align-items:center; gap:14px; margin-bottom:22px; }
+  .brand-mark{ width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,var(--accent),#7c3aed); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; letter-spacing:.5px; }
+  .brand h1{ font-size:22px; font-weight:800; }
+  .brand p{ margin:2px 0 0; font-size:13px; }
+  .section-label{ font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:18px 0 10px; }
+  .emp-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
+  .emp-tile{ --c:#4f46e5; position:relative; display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px 10px; border-radius:14px; border:1px solid var(--border); background:#fff; transition:.15s; }
+  .emp-tile:hover{ border-color:var(--c); box-shadow:0 4px 14px rgba(0,0,0,.06); transform:translateY(-1px); }
+  .avatar{ width:44px; height:44px; border-radius:50%; background:var(--c,#4f46e5); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .avatar.sm{ width:36px; height:36px; font-size:12px; }
+  .role-chip{ position:absolute; top:6px; right:6px; font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:999px; background:#eef2ff; color:var(--accent-dark); text-transform:uppercase; letter-spacing:.03em; }
+  .lock-chip{ position:absolute; top:6px; left:6px; font-size:11px; }
+  .login-footer{ margin-top:26px; display:flex; align-items:center; justify-content:space-between; }
+  .master-link{ background:none; border:none; color:var(--muted); text-decoration:underline; font-size:12.5px; padding:0; }
+  .alert{ background:#fef2f2; color:#991b1b; border:1px solid #fecaca; padding:10px 12px; border-radius:10px; font-size:13.5px; margin-bottom:6px; }
+  .link{ background:none; border:none; color:#991b1b; text-decoration:underline; padding:0; font-size:13.5px; }
+
+  /* ---------- Buttons ---------- */
+  .btn{ padding:9px 16px; border-radius:10px; border:1px solid transparent; font-weight:600; font-size:13.5px; }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-dark); }
+  .btn-dark{ background:#111827; color:#fff; }
+  .btn-ghost{ background:#fff; color:var(--ink); border-color:var(--border); }
+  .btn-ghost:hover{ background:#f3f4f6; }
+  .btn-sm{ padding:5px 10px; font-size:12px; border-radius:8px; }
+  .icon-btn{ width:34px; height:34px; border-radius:10px; border:1px solid var(--border); background:#fff; font-size:15px; }
+  .icon-btn:hover{ background:#f3f4f6; }
+
+  /* ---------- Topbar (employee view) ---------- */
+  .topbar{ display:flex; align-items:center; justify-content:space-between; background:#fff; border-bottom:1px solid var(--border); padding:14px 24px; position:sticky; top:0; z-index:5; }
+  .topbar-left{ display:flex; align-items:center; gap:12px; }
+  .topbar-right{ display:flex; align-items:center; gap:8px; }
+  .tb-title{ font-weight:700; font-size:15px; }
+  .tb-sub{ font-size:12px; }
+  .content{ max-width:1100px; margin:0 auto; padding:24px; }
+  .month-nav{ display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+  .month-nav h2{ font-size:19px; font-weight:700; min-width:180px; text-align:center; }
+
+  .stats-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat-card{ background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center; box-shadow:var(--shadow); }
+  .stat-val{ font-size:22px; font-weight:800; color:var(--accent); }
+  .stat-lbl{ font-size:12px; color:var(--muted); margin-top:2px; }
+
+  /* ---------- Day table (employee) ---------- */
+  .day-table{ background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); }
+  .day-row{ display:grid; grid-template-columns:70px 150px 120px 120px 1fr 24px; gap:8px; padding:9px 14px; align-items:center; border-bottom:1px solid #f1f2f5; }
+  .day-row:last-child{ border-bottom:none; }
+  .day-row.day-head{ background:#fafafa; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  .day-row.weekend{ background:#fbfbfe; }
+  .day-label{ display:flex; gap:6px; align-items:baseline; font-weight:600; }
+  .day-label .dow{ font-size:11px; color:var(--muted); text-transform:uppercase; }
+  .day-label .dnum{ font-size:14px; }
+  .statut-sel, .hrs-input, .motif-input{ padding:6px 8px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-family:inherit; width:100%; background:#fff; }
+  .statut-sel:disabled, .hrs-input:disabled, .motif-input:disabled{ background:#f9fafb; color:#9ca3af; }
+  .save-flag{ font-size:13px; text-align:center; }
+  .badge{ padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+
+  /* ---------- Admin shell ---------- */
+  .admin-shell{ display:flex; min-height:100vh; }
+  .sidebar{ width:230px; background:#111827; color:#fff; display:flex; flex-direction:column; padding:22px 16px; flex-shrink:0; }
+  .brand-side .brand-mark{ background:linear-gradient(135deg,#6366f1,#a855f7); }
+  .brand-side h1{ font-size:17px; color:#fff; }
+  .brand-side p{ color:#9ca3af; }
+  .sidebar nav{ display:flex; flex-direction:column; gap:4px; margin-top:26px; flex:1; }
+  .nav-item{ text-align:left; background:none; border:none; color:#d1d5db; padding:11px 12px; border-radius:10px; font-size:14px; font-weight:500; }
+  .nav-item:hover{ background:#1f2937; }
+  .nav-item.active{ background:var(--accent); color:#fff; }
+  .side-logout{ background:#1f2937; color:#d1d5db; border:none; }
+  .side-switch{ background:#1f2937; color:#fff; border:1px solid #374151; margin-top:6px; }
+  .admin-main{ flex:1; padding:28px 32px; overflow-x:auto; }
+  .admin-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+  .admin-header h2{ font-size:20px; font-weight:800; }
+  .admin-header-right{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); }
+  .legend-item{ display:flex; align-items:center; gap:5px; }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+  /* ---------- Grid (vue d'ensemble) ---------- */
+  .grid-scroll{ overflow:auto; background:#fff; border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+  table.pointage-grid{ border-collapse:collapse; width:100%; font-size:13px; }
+  table.pointage-grid th, table.pointage-grid td{ border:1px solid #f1f2f5; padding:8px 10px; text-align:center; white-space:nowrap; }
+  table.pointage-grid thead th{ background:#fafafa; font-weight:700; position:sticky; top:0; z-index:2; }
+  .sticky-col{ position:sticky; left:0; background:#fff; z-index:1; text-align:left !important; font-weight:600; }
+  thead .sticky-col{ z-index:3; }
+  tr.weekend td{ background:#fbfbfe; }
+  .grid-cell{ cursor:pointer; font-weight:600; }
+  .grid-cell:hover{ outline:2px solid var(--accent); outline-offset:-2px; }
+  .grid-cell.selected{ outline:3px solid var(--accent); outline-offset:-3px; background-color:#e0e7ff !important; }
+  .selection-bar{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; padding:12px 18px; border-radius:12px; display:flex; align-items:center; gap:14px; box-shadow:0 10px 30px rgba(0,0,0,.3); z-index:60; font-size:13.5px; }
+  .selection-bar .btn{ padding:7px 14px; }
+  tr.week-sep td{ background:#f8f9fc !important; border-top:2px solid var(--border); border-bottom:2px solid var(--border); text-align:left !important; padding:8px 12px; white-space:normal; }
+  .week-sep-inner{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .week-sep-label{ font-weight:700; font-size:12.5px; color:#374151; }
+  .week-sep-range{ font-weight:400; color:var(--muted); margin-left:6px; }
+
+  /* ---------- Tables (employees / export) ---------- */
+  .table-wrap{ background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:auto; box-shadow:var(--shadow); }
+  table.simple-table{ border-collapse:collapse; width:100%; font-size:13.5px; }
+  table.simple-table th, table.simple-table td{ padding:10px 12px; border-bottom:1px solid #f1f2f5; text-align:left; }
+  table.simple-table thead th{ background:#fafafa; font-weight:700; font-size:12px; text-transform:uppercase; color:var(--muted); letter-spacing:.03em; }
+  .row-actions{ display:flex; gap:6px; }
+  .export-table input{ width:100%; border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:12.5px; font-family:inherit; }
+  .role-badge{ padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; }
+  .role-badge.admin{ background:#eef2ff; color:var(--accent-dark); }
+  .role-badge.user{ background:#f3f4f6; color:#374151; }
+  .status-badge{ padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; }
+  .status-badge.on{ background:#dcfce7; color:#166534; }
+  .status-badge.off{ background:#f3f4f6; color:#6b7280; }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{ position:fixed; inset:0; background:rgba(17,24,39,.45); display:flex; align-items:center; justify-content:center; z-index:50; }
+  .modal{ background:#fff; border-radius:16px; padding:26px; width:100%; max-width:380px; box-shadow:0 20px 60px rgba(0,0,0,.25); max-height:90vh; overflow:auto; }
+  .modal h3{ margin-bottom:16px; font-size:16px; }
+  .modal label{ display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin:12px 0 5px; }
+  .modal input, .modal select{ width:100%; padding:9px 10px; border-radius:9px; border:1px solid var(--border); font-family:inherit; font-size:13.5px; }
+  .modal .checkbox-row{ display:flex; align-items:center; gap:8px; margin-top:14px; }
+  .modal .checkbox-row input{ width:auto; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+  .hint{ font-size:11.5px; color:var(--muted); margin-top:4px; }
+
+  .settings-card{ background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:24px; max-width:520px; box-shadow:var(--shadow); }
+  .settings-card label{ display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin:14px 0 6px; }
+  .settings-card input{ width:100%; padding:9px 10px; border-radius:9px; border:1px solid var(--border); font-family:inherit; }
+  .settings-card .btn{ margin-top:20px; }
+  .chk-days{ display:flex; gap:12px; flex-wrap:wrap; margin-top:2px; }
+  .chk-days label{ display:flex; align-items:center; gap:6px; font-weight:500; font-size:13.5px; color:var(--ink); text-transform:none; margin:0; }
+  .chk-days input{ width:auto; }
+  .emp-checklist{ display:flex; flex-direction:column; gap:6px; max-height:180px; overflow:auto; margin-top:4px; padding:8px; border:1px solid var(--border); border-radius:9px; }
+  .emp-checklist label{ display:flex; align-items:center; gap:8px; font-weight:500; font-size:13.5px; color:var(--ink); text-transform:none; margin:0; }
+  .emp-checklist input{ width:auto; }
+  .emp-checklist-actions{ display:flex; gap:10px; margin-top:6px; }
+  .emp-checklist-actions button{ background:none; border:none; color:var(--accent); font-size:12px; font-weight:600; padding:0; text-decoration:underline; }
+
+  .loading{ padding:60px; text-align:center; color:var(--muted); }
+
+  /* ---------- Toast ---------- */
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:#111827; color:#fff; padding:11px 20px; border-radius:10px; font-size:13.5px; opacity:0; transition:.25s; z-index:100; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast-err{ background:#991b1b; }
+
+  /* ---------- Print ---------- */
+  .print-only{ display:none; }
+  @media print{
+    body *{ visibility:hidden; }
+    #printArea, #printArea *{ visibility:visible; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
+    #printArea{ display:block; position:absolute; top:0; left:0; width:100%; padding:16px; font-family:'Inter', system-ui, sans-serif; }
+    .print-header{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; font-size:12.5px; }
+    .print-header h2{ font-size:16px; color:#3730a3; }
+    table.print-table{ width:100%; border-collapse:collapse; font-size:10.5px; }
+    table.print-table th, table.print-table td{ border:1px solid #d1d5db; padding:5px 6px; text-align:center; }
+    table.print-table td:first-child, table.print-table th:first-child{ text-align:left; font-weight:600; white-space:nowrap; }
+    table.print-table thead th{ background:#4f46e5; color:#fff; font-weight:700; }
+    tr.print-weekend td:first-child{ background:#f3f4f6; }
+    .print-legend{ display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; font-size:10px; }
+    .print-legend span.item{ display:inline-flex; align-items:center; gap:4px; }
+    .print-legend .sw{ width:10px; height:10px; border-radius:3px; display:inline-block; border:1px solid rgba(0,0,0,.15); }
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Chargement…</div></div>
+
+<script>
+/* ===================== Pointage CSB — logique applicative ===================== */
+
+const DEFAULT_PB_URL = 'http://192.168.1.142:8090';
+const LS_PB_URL = 'pointage_pb_url';
+const LS_EMPLOYEE = 'pointage_current_employee';
+const LS_ADMIN = 'pointage_admin_mode';
+
+const MOIS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const JOURS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+const JOURS_FR_ABR = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+const DEFAULT_WORKING_DAYS = [1,2,3,4,5]; // Lundi -> Vendredi
+const DEFAULT_HOURS_PER_DAY = 7;
+
+/* Statuts d'une JOURNÉE de pointage (travail / absence du jour) */
+const STATUTS = [
+  { value:'travail',              label:'Travail',              code:'',        color:'#eef2f7', text:'#1f2937' },
+  { value:'repos',                label:'Repos',                code:'REPOS',   color:'#d1d5db', text:'#374151' },
+  { value:'ferie',                label:'Férié',                code:'FÉRIÉ',   color:'#c4b5fd', text:'#3730a3' },
+  { value:'conges_payes',         label:'Congé payé',           code:'CP',      color:'#86efac', text:'#14532d' },
+  { value:'rtt',                  label:'RTT',                  code:'RTT',     color:'#5eead4', text:'#134e4a' },
+  { value:'arret_maladie',        label:'Arrêt maladie',        code:'ARRÊT',   color:'#fca5a5', text:'#7f1d1d' },
+  { value:'absence_injustifiee',  label:'Absence injustifiée',  code:'ABS',     color:'#f87171', text:'#7f1d1d' },
+  { value:'autre',                label:'Autre',                code:'AUTRE',   color:'#fde68a', text:'#78350f' },
+];
+const ABSENCE_GROUPABLE = ['arret_maladie','absence_injustifiee','autre'];
+
+/* Rôle (droit) et statut de COMPTE d'un profil utilisateur */
+const ROLES = [
+  { value:'utilisateur',     label:'Utilisateur' },
+  { value:'administrateur',  label:'Administrateur' },
+];
+const PROFILE_STATUTS = [
+  { value:'actif',   label:'Actif' },
+  { value:'inactif', label:'Inactif' },
+];
+
+function statutInfo(v){ return STATUTS.find(s=>s.value===v) || STATUTS[0]; }
+/* Tolérant aux variantes de nommage rencontrées côté PocketBase (statut/status,
+   solde_conges/sole_conges) pour éviter les allers-retours de configuration. */
+function isProfileActive(e){
+  const raw = (e.statut !== undefined && e.statut !== '') ? e.statut
+            : (e.status !== undefined && e.status !== '') ? e.status
+            : null;
+  if(raw !== null) return raw === 'actif';
+  return e.actif !== false;
+}
+function getSoldeConges(e){
+  if(e.solde_conges !== undefined && e.solde_conges !== null && e.solde_conges !== '') return e.solde_conges;
+  if(e.sole_conges !== undefined && e.sole_conges !== null && e.sole_conges !== '') return e.sole_conges;
+  return 0;
+}
+function isAdminRole(e){ return e.role==='administrateur'; }
+function roleLabel(e){ return isAdminRole(e) ? 'Administrateur' : 'Utilisateur'; }
+
+/* ---------- Jours travaillés / heures par défaut (paramétrables) ---------- */
+function getWorkingDays(settings){
+  if(!settings || !settings.jours_travailles) return DEFAULT_WORKING_DAYS;
+  const arr = String(settings.jours_travailles).split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n));
+  return arr.length ? arr : DEFAULT_WORKING_DAYS;
+}
+function getDefaultHoursPerDay(settings){
+  if(!settings || !settings.heures_jour_defaut) return DEFAULT_HOURS_PER_DAY;
+  const n = parseFloat(settings.heures_jour_defaut);
+  return isNaN(n) ? DEFAULT_HOURS_PER_DAY : n;
+}
+
+/* ---------- Dates ---------- */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function isoDate(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+function daysInMonth(year, monthIdx){ return new Date(year, monthIdx+1, 0).getDate(); }
+function easterDate(year){
+  const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4;
+  const f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31), day=((h+l-7*m+114)%31)+1;
+  return new Date(year, month-1, day);
+}
+function frenchHolidays(year){
+  const easter = easterDate(year);
+  const addDays=(d,n)=>{ const r=new Date(d); r.setDate(r.getDate()+n); return r; };
+  const list=[
+    new Date(year,0,1), addDays(easter,1), new Date(year,4,1), new Date(year,4,8),
+    addDays(easter,39), addDays(easter,50), new Date(year,6,14), new Date(year,7,15),
+    new Date(year,10,1), new Date(year,10,11), new Date(year,11,25)
+  ];
+  return new Set(list.map(isoDate));
+}
+function monthLabel(monthStr){
+  const [y,m]=monthStr.split('-').map(Number);
+  return `${MOIS_FR[m-1]} ${y}`;
+}
+function currentMonthStr(){
+  const d=new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+}
+function shiftMonth(monthStr, delta){
+  let [y,m]=monthStr.split('-').map(Number);
+  m += delta;
+  while(m>12){ m-=12; y++; }
+  while(m<1){ m+=12; y--; }
+  return `${y}-${pad2(m)}`;
+}
+function fmtDateFR(iso){
+  const [y,m,d]=iso.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+function fmtDateShort(iso){
+  const [,m,d]=iso.split('-');
+  return `${d}/${m}`;
+}
+function addDaysIso(iso, n){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  dt.setDate(dt.getDate()+n);
+  return isoDate(dt);
+}
+/* Numéro de semaine ISO 8601 */
+function isoWeekNumber(date){
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+}
+/* Regroupe les jours d'un mois par semaine ISO (pour affichage + boutons de remplissage) */
+function buildWeekGroups(year, monthIdx, nbDays){
+  const groups = [];
+  let cur = null;
+  for(let d=1; d<=nbDays; d++){
+    const wn = isoWeekNumber(new Date(year, monthIdx, d));
+    if(!cur || cur.weekNum!==wn){
+      if(cur) groups.push(cur);
+      cur = { weekNum:wn, startDay:d, endDay:d };
+    } else {
+      cur.endDay = d;
+    }
+  }
+  if(cur) groups.push(cur);
+  return groups;
+}
+
+/* ---------- Debounce ---------- */
+function debounce(fn, ms){
+  let t=null;
+  return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
+}
+
+/* ---------- PocketBase REST ---------- */
+function pbUrl(){ return localStorage.getItem('csb_pb_url') || localStorage.getItem(LS_PB_URL) || DEFAULT_PB_URL; }
+
+async function pbFetch(path, opts={}){
+  const res = await fetch(pbUrl()+path, {
+    headers: { 'Content-Type':'application/json' },
+    cache: 'no-store',
+    ...opts
+  });
+  if(!res.ok){
+    let msg = 'Erreur PocketBase ('+res.status+')';
+    try{ const j = await res.json(); if(j && j.message) msg += ' : '+j.message; }catch(e){}
+    throw new Error(msg);
+  }
+  if(res.status===204) return null;
+  return res.json();
+}
+
+async function pbList(collection, filter, sort){
+  let path = `/api/collections/${collection}/records?perPage=500`;
+  if(sort) path += `&sort=${encodeURIComponent(sort)}`;
+  if(filter) path += `&filter=${encodeURIComponent(filter)}`;
+  const data = await pbFetch(path);
+  return data.items || [];
+}
+async function pbCreate(collection, body){
+  return pbFetch(`/api/collections/${collection}/records`, { method:'POST', body: JSON.stringify(body) });
+}
+async function pbUpdate(collection, id, body){
+  return pbFetch(`/api/collections/${collection}/records/${id}`, { method:'PATCH', body: JSON.stringify(body) });
+}
+async function pbDelete(collection, id){
+  return pbFetch(`/api/collections/${collection}/records/${id}`, { method:'DELETE' });
+}
+
+/* Upsert d'un jour de pointage (employee + date). Utilise une recherche par plage
+   (date>=jour && date<jour+1) plutôt qu'une égalité stricte, car une égalité exacte
+   peut échouer si le champ "date" est de type Date PocketBase (valeur stockée avec
+   une heure, ex. "2026-08-31 00:00:00.000Z") — l'égalité stricte ratait alors le
+   jour déjà existant et créait un doublon au lieu de le mettre à jour. */
+async function upsertJour(employeeId, dateIso, patch){
+  const nextIso = addDaysIso(dateIso, 1);
+  const filter = `employee='${employeeId}' && date>='${dateIso}' && date<'${nextIso}'`;
+  const existing = await pbList('pointage_jours', filter);
+  console.log('[Pointage][upsertJour] recherche', { employeeId, dateIso, filter, existingCount: existing.length, existingIds: existing.map(x=>x.id), patch });
+  if(existing.length){
+    if(existing.length>1){
+      // Nettoyage de doublons éventuellement créés par le bug précédent
+      for(let i=1;i<existing.length;i++){ await pbDelete('pointage_jours', existing[i].id).catch(()=>{}); }
+      console.log('[Pointage][upsertJour] doublons supprimés', existing.slice(1).map(x=>x.id));
+    }
+    const updated = await pbUpdate('pointage_jours', existing[0].id, patch);
+    console.log('[Pointage][upsertJour] → UPDATE', existing[0].id, '→', updated);
+    return updated;
+  }
+  const created = await pbCreate('pointage_jours', { employee: employeeId, date: dateIso, heures:0, heures_majorees:0, heures_absence:0, heures_retard:0, statut:'travail', motif:'', ...patch });
+  console.log('[Pointage][upsertJour] → CREATE', '→', created);
+  return created;
+}
+
+/* Upsert mensuel (employee + mois) */
+async function upsertMensuel(employeeId, mois, patch){
+  const filter = `employee='${employeeId}' && mois='${mois}'`;
+  const existing = await pbList('pointage_mensuel', filter);
+  if(existing.length){
+    return pbUpdate('pointage_mensuel', existing[0].id, patch);
+  }
+  return pbCreate('pointage_mensuel', { employee: employeeId, mois, heures_base:0, heures_majorees:0, heures_absence:0, heures_retard:0, periode_absence:'', motif_absence:'', primes:0, acomptes:0, frais_atelier:0, conges_payes:0, ...patch });
+}
+
+async function getSettings(){
+  const items = await pbList('pointage_settings');
+  if(items.length) return items[0];
+  return pbCreate('pointage_settings', { pb_admin_pin:'', jours_travailles:'1,2,3,4,5', heures_jour_defaut:7 });
+}
+
+/* ---------- Agrégation pour l'export mensuel ---------- */
+function computeMonthSummary(jours, year, monthIdx){
+  const nbDays = daysInMonth(year, monthIdx);
+  const byDate = {};
+  jours.forEach(j=>{ byDate[j.date]=j; });
+
+  let heures=0, heuresMaj=0, heuresAbsence=0, heuresRetard=0, cpCount=0;
+  const motifs = new Set();
+  const periods = [];
+  let current = null;
+
+  for(let d=1; d<=nbDays; d++){
+    const iso = `${year}-${pad2(monthIdx+1)}-${pad2(d)}`;
+    const j = byDate[iso];
+    const statut = j ? j.statut : 'travail';
+
+    if(statut==='travail'){
+      if(j){ heures += Number(j.heures)||0; heuresMaj += Number(j.heures_majorees)||0; }
+    }
+    if(j){
+      heuresAbsence += Number(j.heures_absence)||0;
+      heuresRetard += Number(j.heures_retard)||0;
+    }
+    if(statut==='conges_payes') cpCount++;
+    if(j && j.motif) motifs.add(j.motif);
+
+    if(ABSENCE_GROUPABLE.includes(statut)){
+      if(current && current.statut===statut && current.lastDay===d-1){
+        current.end = iso; current.lastDay = d;
+      } else {
+        if(current) periods.push(current);
+        current = { statut, start: iso, end: iso, lastDay: d };
+      }
+    } else if(current){
+      periods.push(current); current=null;
+    }
+  }
+  if(current) periods.push(current);
+
+  const periodeAbsenceTxt = periods.map(p=>{
+    const label = statutInfo(p.statut).label;
+    return p.start===p.end ? `${fmtDateFR(p.start)} (${label})` : `${fmtDateFR(p.start)} au ${fmtDateFR(p.end)} (${label})`;
+  }).join(' ; ');
+
+  const motifAbsenceTxt = Array.from(motifs).join(' ; ');
+
+  return {
+    heures_base: heures, heures_majorees: heuresMaj,
+    heures_absence: heuresAbsence, heures_retard: heuresRetard,
+    periode_absence: periodeAbsenceTxt, motif_absence: motifAbsenceTxt, conges_payes: cpCount
+  };
+}
+
+window.PointageCore = {
+  DEFAULT_PB_URL, LS_PB_URL, LS_EMPLOYEE, LS_ADMIN,
+  MOIS_FR, JOURS_FR, JOURS_FR_ABR, STATUTS, ABSENCE_GROUPABLE, ROLES, PROFILE_STATUTS,
+  DEFAULT_WORKING_DAYS, DEFAULT_HOURS_PER_DAY,
+  statutInfo, isProfileActive, isAdminRole, roleLabel, getSoldeConges, getWorkingDays, getDefaultHoursPerDay,
+  pad2, isoDate, daysInMonth, frenchHolidays, monthLabel, currentMonthStr, shiftMonth, fmtDateFR, fmtDateShort,
+  isoWeekNumber, buildWeekGroups,
+  debounce, pbUrl, pbFetch, pbList, pbCreate, pbUpdate, pbDelete, upsertJour, upsertMensuel, getSettings,
+  computeMonthSummary
+};
+</script>
+
+<script>
+/* ===================== Pointage CSB — interface ===================== */
+const C = window.PointageCore;
+
+const state = {
+  view: 'login',            // login | employee | admin
+  employees: [],
+  currentEmployee: null,    // profil connecté (peut être un administrateur)
+  isMaster: false,          // connecté via le code maître, sans profil
+  month: C.currentMonthStr(),
+  adminTab: 'grid',         // grid | employees | export | settings
+  settings: null,
+  connErr: null,
+  selectionMode: false,     // Vue d'ensemble : mode sélection multi-jours
+  selectedEmployeeId: null,
+  selectedDates: new Set(),
+};
+
+const app = document.getElementById('app');
+
+function toast(msg, isErr){
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr?' toast-err':'');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=> t.classList.add('show'));
+  setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, 2600);
+}
+
+/* ---------------------------------------------------------------- BOOT */
+async function boot(){
+  try{
+    state.employees = await C.pbList('pointage_employees', '', 'ordre');
+    state.settings = await C.getSettings();
+    state.connErr = null;
+  }catch(e){
+    state.connErr = e.message;
+  }
+  const savedEmp = localStorage.getItem(C.LS_EMPLOYEE);
+  const savedAdmin = localStorage.getItem(C.LS_ADMIN)==='1';
+  if(savedEmp && state.employees.find(e=>e.id===savedEmp)){
+    state.currentEmployee = state.employees.find(e=>e.id===savedEmp);
+    state.view = savedAdmin ? 'admin' : 'employee';
+  } else if(savedAdmin){
+    state.isMaster = true;
+    state.view='admin';
+  }
+  render();
+}
+
+function render(){
+  if(state.view==='login') return renderLogin();
+  if(state.view==='employee') return renderEmployeeView();
+  if(state.view==='admin') return renderAdmin();
+}
+
+/* ---------------------------------------------------------------- LOGIN */
+function renderLogin(){
+  const actifs = state.employees.filter(C.isProfileActive).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  app.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="brand">
+          <div class="brand-mark">CSB</div>
+          <div>
+            <h1>Pointage</h1>
+            <p class="muted">Atelier CSB — heures &amp; absences</p>
+          </div>
+        </div>
+
+        ${state.connErr ? `<div class="alert">⚠ Connexion PocketBase impossible : ${state.connErr}. <button class="link" onclick="openConnSettings()">Configurer</button></div>` : ''}
+
+        <p class="section-label">Choisissez votre profil</p>
+        <div class="emp-grid">
+          ${actifs.map(e=>`
+            <button class="emp-tile" style="--c:${e.couleur||'#4f46e5'}" onclick="loginProfile('${e.id}')">
+              ${C.isAdminRole(e) ? '<span class="role-chip">Admin</span>' : ''}
+              ${e.pin ? '<span class="lock-chip">🔒</span>' : ''}
+              <span class="avatar">${(e.prenom||'?')[0]}${(e.nom||'?')[0]}</span>
+              <span>${e.prenom} ${e.nom}</span>
+            </button>
+          `).join('') || '<p class="muted">Aucun profil actif. Utilisez le code maître pour créer le premier profil administrateur.</p>'}
+        </div>
+
+        <div class="login-footer">
+          <button class="master-link" onclick="askMasterLogin()">Accès code maître (dépannage)</button>
+          <button class="icon-btn" title="Connexion serveur" onclick="openConnSettings()">⚙</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function loginProfile(id){
+  const e = state.employees.find(x=>x.id===id);
+  if(!e) return;
+  if(e.pin){
+    const entered = await customPrompt('Code personnel de '+e.prenom+' :');
+    if(entered===null) return;
+    if(entered.trim() !== String(e.pin).trim()){ toast('Code incorrect', true); return; }
+  }
+  state.currentEmployee = e;
+  state.isMaster = false;
+  localStorage.setItem(C.LS_EMPLOYEE, id);
+  if(C.isAdminRole(e)){
+    state.view='admin';
+    localStorage.setItem(C.LS_ADMIN,'1');
+  } else {
+    state.view='employee';
+    localStorage.removeItem(C.LS_ADMIN);
+  }
+  render();
+}
+
+async function askMasterLogin(){
+  const pin = state.settings && state.settings.pb_admin_pin;
+  if(pin){
+    const entered = await customPrompt('Code maître :');
+    if(entered===null) return;
+    if(entered !== pin){ toast('Code incorrect', true); return; }
+  }
+  state.currentEmployee = null;
+  state.isMaster = true;
+  state.view='admin';
+  localStorage.setItem(C.LS_ADMIN,'1');
+  localStorage.removeItem(C.LS_EMPLOYEE);
+  render();
+}
+
+async function openConnSettings(){
+  const url = await customPrompt('Adresse du serveur PocketBase :', C.pbUrl());
+  if(url){
+    localStorage.setItem(C.LS_PB_URL, url.trim());
+    boot();
+  }
+}
+
+function logout(){
+  localStorage.removeItem(C.LS_EMPLOYEE);
+  localStorage.removeItem(C.LS_ADMIN);
+  state.view='login';
+  state.currentEmployee=null;
+  state.isMaster=false;
+  render();
+}
+
+function goToMyTimesheet(){
+  if(!state.currentEmployee) return;
+  state.view='employee';
+  render();
+}
+function goToAdmin(){
+  state.view='admin';
+  render();
+}
+
+/* ---------------------------------------------------------------- EMPLOYEE VIEW */
+let joursCache = {}; // key employeeId|month -> array
+let gridPrintData = null; // dernière grille calculée, pour l'impression
+
+async function loadJours(employeeId, month){
+  const [y,m] = month.split('-').map(Number);
+  const start = `${y}-${C.pad2(m)}-01`;
+  /* Borne supérieure EXCLUSIVE (premier jour du mois suivant) plutôt que "<= dernier
+     jour du mois" : si le champ "date" stocke une date-heure (type Date PocketBase),
+     une comparaison "<=" avec une date sans heure exclut à tort le dernier jour du
+     mois (sa valeur avec heure est lexicalement "après" la date seule). */
+  const nextMonthFirst = C.shiftMonth(month, 1) + '-01';
+  const filter = `employee='${employeeId}' && date>='${start}' && date<'${nextMonthFirst}'`;
+  const items = await C.pbList('pointage_jours', filter, 'date');
+  /* Le champ "date" peut être un type Date PocketBase, qui renvoie une date-heure
+     complète (ex. "2026-08-03 00:00:00.000Z") au lieu d'une simple date. On normalise
+     ici à "YYYY-MM-DD" pour que les comparaisons avec les clés générées côté app
+     (basées sur le jour du mois) fonctionnent quel que soit le type de champ. */
+  const normalized = items.map(j => ({ ...j, date: String(j.date||'').slice(0,10) }));
+  joursCache[employeeId+'|'+month] = normalized;
+  return normalized;
+}
+
+async function renderEmployeeView(){
+  app.innerHTML = `<div class="loading">Chargement…</div>`;
+  const emp = state.currentEmployee;
+  const [y,m] = state.month.split('-').map(Number);
+  const jours = await loadJours(emp.id, state.month);
+  const byDate = {}; jours.forEach(j=>byDate[j.date]=j);
+  const holidays = C.frenchHolidays(y);
+  const workDays = C.getWorkingDays(state.settings);
+  const nbDays = C.daysInMonth(y, m-1);
+
+  let totalHeures=0, totalMaj=0, cpUsed=0;
+  for(let d=1; d<=nbDays; d++){
+    const iso = `${y}-${C.pad2(m)}-${C.pad2(d)}`;
+    const j = byDate[iso];
+    if(j){
+      totalHeures += Number(j.heures)||0;
+      totalMaj += Number(j.heures_majorees)||0;
+      if(j.statut==='conges_payes') cpUsed++;
+    }
+  }
+
+  const rows = [];
+  for(let d=1; d<=nbDays; d++){
+    const iso = `${y}-${C.pad2(m)}-${C.pad2(d)}`;
+    const dow = new Date(y, m-1, d).getDay();
+    const j = byDate[iso] || { statut: holidays.has(iso) ? 'ferie' : (workDays.includes(dow) ? 'travail' : 'repos'), heures:0, heures_majorees:0, motif:'' };
+    const weekend = !workDays.includes(dow);
+    rows.push(`
+      <div class="day-row ${weekend?'weekend':''}" data-date="${iso}">
+        <div class="day-label">
+          <span class="dow">${C.JOURS_FR_ABR[dow]}</span>
+          <span class="dnum">${d}</span>
+        </div>
+        <select class="statut-sel" onchange="onDayChange('${iso}', this)">
+          ${C.STATUTS.map(s=>`<option value="${s.value}" ${s.value===j.statut?'selected':''}>${s.label}</option>`).join('')}
+        </select>
+        <input type="number" step="0.25" min="0" class="hrs-input" placeholder="h. normales" value="${j.heures||''}"
+          ${j.statut!=='travail'?'disabled':''} onchange="onDayFieldChange('${iso}', 'heures', this.value)">
+        <input type="number" step="0.25" min="0" class="hrs-input" placeholder="h. majorées" value="${j.heures_majorees||''}"
+          ${j.statut!=='travail'?'disabled':''} onchange="onDayFieldChange('${iso}', 'heures_majorees', this.value)">
+        <input type="text" class="motif-input" placeholder="motif / précision" value="${j.motif||''}"
+          ${j.statut==='travail'?'disabled':''} onchange="onDayFieldChange('${iso}', 'motif', this.value)">
+        <span class="save-flag" id="flag-${iso}"></span>
+      </div>
+    `);
+  }
+
+  const soldeRestant = C.getSoldeConges(emp);
+  const isAdmin = C.isAdminRole(emp);
+
+  app.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="avatar sm" style="--c:${emp.couleur||'#4f46e5'}">${(emp.prenom||'?')[0]}${(emp.nom||'?')[0]}</span>
+        <div>
+          <div class="tb-title">${emp.prenom} ${emp.nom}</div>
+          <div class="tb-sub muted">Feuille de pointage</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        ${isAdmin ? '<button class="btn btn-ghost" onclick="goToAdmin()">⚙ Administration</button>' : ''}
+        <button class="btn btn-ghost" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="month-nav">
+        <button class="icon-btn" onclick="changeMonth(-1)">◀</button>
+        <h2>${C.monthLabel(state.month)}</h2>
+        <button class="icon-btn" onclick="changeMonth(1)">▶</button>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-val">${totalHeures.toFixed(2)}</div><div class="stat-lbl">Heures normales</div></div>
+        <div class="stat-card"><div class="stat-val">${totalMaj.toFixed(2)}</div><div class="stat-lbl">Heures majorées</div></div>
+        <div class="stat-card"><div class="stat-val">${cpUsed}</div><div class="stat-lbl">Jours CP ce mois</div></div>
+        <div class="stat-card"><div class="stat-val">${soldeRestant}</div><div class="stat-lbl">Solde CP (déclaré)</div></div>
+      </div>
+
+      <div class="day-table">
+        <div class="day-row day-head">
+          <div class="day-label">Jour</div>
+          <div>Statut</div>
+          <div>H. normales</div>
+          <div>H. majorées</div>
+          <div>Motif</div>
+          <div></div>
+        </div>
+        ${rows.join('')}
+      </div>
+    </div>
+  `;
+}
+
+function changeMonth(delta){
+  state.month = C.shiftMonth(state.month, delta);
+  render();
+}
+
+const saveDayDebounced = C.debounce(async (empId, iso, patch)=>{
+  const flag = document.getElementById('flag-'+iso);
+  try{
+    if(flag) flag.textContent='…';
+    await C.upsertJour(empId, iso, patch);
+    if(flag){ flag.textContent='✓'; setTimeout(()=>{ if(flag) flag.textContent='';},1200); }
+  }catch(e){
+    if(flag) flag.textContent='⚠';
+    toast('Erreur enregistrement : '+e.message, true);
+  }
+}, 400);
+
+function currentEmployeeIdForView(){
+  return state.view==='employee' ? state.currentEmployee.id : window.__adminEditEmployeeId;
+}
+
+function onDayChange(iso, selectEl){
+  const statut = selectEl.value;
+  const row = selectEl.closest('.day-row');
+  const isTravail = statut==='travail';
+  row.querySelectorAll('.hrs-input').forEach(inp=> inp.disabled = !isTravail);
+  const motifEl = row.querySelector('.motif-input');
+  if(motifEl) motifEl.disabled = isTravail;
+  const empId = currentEmployeeIdForView();
+  saveDayDebounced(empId, iso, { statut, ...(isTravail? {motif:''} : {heures:0, heures_majorees:0}) });
+}
+
+function onDayFieldChange(iso, field, value){
+  const empId = currentEmployeeIdForView();
+  const patch = {};
+  patch[field] = (field==='motif') ? value : (parseFloat(value)||0);
+  saveDayDebounced(empId, iso, patch);
+}
+
+/* ---------------------------------------------------------------- ADMIN */
+function renderAdmin(){
+  const tabs = [
+    {id:'grid', label:"Vue d'ensemble"},
+    {id:'employees', label:'Employés'},
+    {id:'export', label:'Export mensuel'},
+    {id:'settings', label:'Paramètres'},
+  ];
+  app.innerHTML = `
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand brand-side">
+          <div class="brand-mark">CSB</div>
+          <div><h1>Pointage</h1><p class="muted">${state.isMaster ? 'Code maître' : (state.currentEmployee ? state.currentEmployee.prenom+' '+state.currentEmployee.nom : 'Administration')}</p></div>
+        </div>
+        <nav>
+          ${tabs.map(t=>`<button class="nav-item ${state.adminTab===t.id?'active':''}" data-tab="${t.id}" onclick="setAdminTab('${t.id}')">${t.label}</button>`).join('')}
+        </nav>
+        ${state.currentEmployee ? '<button class="btn side-switch" onclick="goToMyTimesheet()">🧑 Mon pointage</button>' : ''}
+        <button class="btn btn-ghost side-logout" onclick="logout()">← Déconnexion</button>
+      </aside>
+      <main class="admin-main" id="adminMain"><div class="loading">Chargement…</div></main>
+    </div>
+  `;
+  renderAdminTab();
+}
+
+function setAdminTab(id){
+  state.adminTab = id;
+  document.querySelectorAll('.sidebar .nav-item').forEach(btn=> btn.classList.toggle('active', btn.dataset.tab===id));
+  renderAdminTab();
+}
+
+async function renderAdminTab(){
+  const main = document.getElementById('adminMain');
+  if(state.adminTab==='grid') return renderAdminGrid(main);
+  if(state.adminTab==='employees') return renderAdminEmployees(main);
+  if(state.adminTab==='export') return renderAdminExport(main);
+  if(state.adminTab==='settings') return renderAdminSettings(main);
+}
+
+/* ---- Vue d'ensemble (grille type PointageInterne) ---- */
+async function renderAdminGrid(main){
+  const actifs = state.employees.filter(C.isProfileActive).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  const [y,m] = state.month.split('-').map(Number);
+  const nbDays = C.daysInMonth(y, m-1);
+  const holidays = C.frenchHolidays(y);
+  const workDays = C.getWorkingDays(state.settings);
+  const weekGroups = C.buildWeekGroups(y, m-1, nbDays);
+
+  main.innerHTML = `<div class="loading">Chargement de la grille…</div>`;
+  const allJours = {};
+  for(const e of actifs){ allJours[e.id] = await loadJours(e.id, state.month); }
+
+  const byEmpDate = {};
+  actifs.forEach(e=>{
+    byEmpDate[e.id] = {};
+    (allJours[e.id]||[]).forEach(j=> byEmpDate[e.id][j.date]=j);
+  });
+  gridPrintData = { actifs, byEmpDate, y, m, nbDays, holidays, workDays };
+
+  const colCount = actifs.length + 1;
+  let rows = '';
+  for(let d=1; d<=nbDays; d++){
+    const group = weekGroups.find(g=> d>=g.startDay && d<=g.endDay);
+    if(group && group.startDay===d){
+      const startIso = `${y}-${C.pad2(m)}-${C.pad2(group.startDay)}`;
+      const endIso = `${y}-${C.pad2(m)}-${C.pad2(group.endDay)}`;
+      rows += `
+        <tr class="week-sep">
+          <td colspan="${colCount}">
+            <div class="week-sep-inner">
+              <span class="week-sep-label">Semaine ${group.weekNum}<span class="week-sep-range"> — ${C.fmtDateShort(startIso)} au ${C.fmtDateShort(endIso)}</span></span>
+              <button class="btn btn-sm btn-ghost" onclick="fillWeek(${group.startDay},${group.endDay})">🪄 Remplir cette semaine</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+    const iso = `${y}-${C.pad2(m)}-${C.pad2(d)}`;
+    const dow = new Date(y,m-1,d).getDay();
+    const weekend = !workDays.includes(dow);
+    rows += `<tr class="${weekend?'weekend':''}"><td class="sticky-col">${C.JOURS_FR_ABR[dow]} ${d}</td>`;
+    actifs.forEach(e=>{
+      const j = byEmpDate[e.id][iso] || { statut: holidays.has(iso)?'ferie':(workDays.includes(dow)?'travail':'repos'), heures:0, heures_majorees:0 };
+      let cellTxt = '';
+      let style = '';
+      if(j.statut==='travail'){
+        if(j.heures || j.heures_majorees){
+          cellTxt = `${j.heures||0}h${j.heures_majorees?(' +'+j.heures_majorees):''}`;
+        }
+      } else {
+        const s = C.statutInfo(j.statut);
+        cellTxt = s.code;
+        style = `background:${s.color};color:${s.text}`;
+      }
+      let extra = '';
+      if(Number(j.heures_absence)>0) extra += `<br><span style="font-size:10px;color:#b45309">Abs. ${j.heures_absence}h</span>`;
+      if(Number(j.heures_retard)>0) extra += `<br><span style="font-size:10px;color:#b45309">Ret. ${j.heures_retard}h</span>`;
+      const isSelected = state.selectionMode && state.selectedEmployeeId===e.id && state.selectedDates.has(iso);
+      rows += `<td class="grid-cell${isSelected?' selected':''}" data-emp="${e.id}" data-date="${iso}" style="${style}" onclick="onGridCellClick('${e.id}','${iso}')">${cellTxt}${extra}</td>`;
+    });
+    rows += `</tr>`;
+  }
+
+  main.innerHTML = `
+    <div class="admin-header">
+      <div class="month-nav">
+        <button class="icon-btn" onclick="changeMonth(-1); renderAdminTab();">◀</button>
+        <h2>${C.monthLabel(state.month)}</h2>
+        <button class="icon-btn" onclick="changeMonth(1); renderAdminTab();">▶</button>
+      </div>
+      <div class="admin-header-right">
+        <div class="legend">
+          ${C.STATUTS.filter(s=>s.value!=='travail').map(s=>`<span class="legend-item"><span class="dot" style="background:${s.color}"></span>${s.label}</span>`).join('')}
+        </div>
+        <button class="btn ${state.selectionMode?'btn-dark':'btn-ghost'}" onclick="toggleSelectionMode()">${state.selectionMode ? '✕ Quitter la sélection' : '🖱 Sélection multi-jours'}</button>
+        <button class="btn btn-ghost" onclick="printGrid()">🖨 Imprimer / PDF</button>
+        <button class="btn btn-primary" onclick="fillMonth()">🪄 Remplir le mois</button>
+      </div>
+    </div>
+    <div class="grid-scroll">
+      <table class="pointage-grid">
+        <thead><tr><th class="sticky-col">Jour</th>${actifs.map(e=>`<th>${e.prenom}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div id="dayModalRoot"></div>
+    <div id="selectionBarRoot"></div>
+    <div id="printArea" class="print-only"></div>
+  `;
+  renderSelectionBar();
+}
+
+/* Pré-remplissage : mode "auto" respecte les jours travaillés définis dans les
+   paramètres et ne touche jamais un jour déjà saisi valide. Un "forceChoice"
+   {statut, heures, heures_majorees} force ce statut sur toute la période, pour
+   tous les employés actifs, y compris sur des jours déjà saisis. */
+async function bulkFillRange(startDay, endDay, forceChoice, employeeIds){
+  const actifs = state.employees.filter(C.isProfileActive).filter(e => !employeeIds || employeeIds.includes(e.id));
+  const [y,m] = state.month.split('-').map(Number);
+  const holidays = C.frenchHolidays(y);
+  const workDays = C.getWorkingDays(state.settings);
+  const defHours = C.getDefaultHoursPerDay(state.settings);
+  const validStatuts = C.STATUTS.map(s=>s.value);
+
+  let updated = 0, skipped = 0;
+  const errors = [];
+
+  for(const e of actifs){
+    const jours = await loadJours(e.id, state.month);
+    const byDate = {}; jours.forEach(j=>byDate[j.date]=j);
+    for(let d=startDay; d<=endDay; d++){
+      const iso = `${y}-${C.pad2(m)}-${C.pad2(d)}`;
+      let patch;
+
+      if(forceChoice){
+        patch = { statut: forceChoice.statut, heures: forceChoice.heures||0, heures_majorees: forceChoice.heures_majorees||0, motif:'' };
+      } else {
+        const existing = byDate[iso];
+        /* Une ligne n'est considérée "déjà remplie" que si son statut est valide.
+           Une ligne avec un statut vide/invalide (ex. ancien bug de nommage de champ)
+           est traitée comme vide et corrigée automatiquement. */
+        const hasValidStatut = existing && validStatuts.includes(existing.statut);
+        if(hasValidStatut && (existing.statut!=='travail' || (Number(existing.heures)||0)>0)){ skipped++; continue; }
+        const dow = new Date(y,m-1,d).getDay();
+        if(holidays.has(iso)){
+          patch = { statut:'ferie', heures:0, heures_majorees:0 };
+        } else if(workDays.includes(dow)){
+          patch = { statut:'travail', heures:defHours, heures_majorees:0 };
+        } else {
+          // Jour non travaillé (ex. samedi/dimanche selon les paramètres) : on ne le touche pas
+          skipped++; continue;
+        }
+      }
+
+      try{
+        const result = await C.upsertJour(e.id, iso, patch);
+        console.log('[Pointage] upsertJour OK', e.prenom, iso, patch, '→', result);
+        updated++;
+      }catch(err){
+        console.error('[Pointage] upsertJour ÉCHEC', e.prenom, iso, patch, err);
+        errors.push(`${e.prenom} ${iso} : ${err.message}`);
+      }
+    }
+  }
+  return { updated, skipped, errors };
+}
+
+function fillMonth(){
+  const [y,m] = state.month.split('-').map(Number);
+  const nbDays = C.daysInMonth(y, m-1);
+  openFillModal(1, nbDays, `le mois de ${C.monthLabel(state.month)}`);
+}
+
+function fillWeek(startDay, endDay){
+  openFillModal(startDay, endDay, 'cette semaine');
+}
+
+function openFillModal(startDay, endDay, label){
+  const defHours = C.getDefaultHoursPerDay(state.settings);
+  const actifs = state.employees.filter(C.isProfileActive).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  const root = document.getElementById('dayModalRoot');
+  if(!root) return;
+  root.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <h3>Remplir ${label}</h3>
+        <label>Employés concernés</label>
+        <div class="emp-checklist">
+          ${actifs.map(e=>`<label><input type="checkbox" class="f-emp" value="${e.id}" checked> ${e.prenom} ${e.nom}</label>`).join('') || '<span class="muted">Aucun employé actif</span>'}
+        </div>
+        <div class="emp-checklist-actions">
+          <button type="button" onclick="setAllFillEmployees(true)">Tout cocher</button>
+          <button type="button" onclick="setAllFillEmployees(false)">Tout décocher</button>
+        </div>
+        <label>Statut à appliquer</label>
+        <select id="f-statut" onchange="onFillStatutChange()">
+          <option value="auto">Automatique (selon les jours travaillés)</option>
+          ${C.STATUTS.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}
+        </select>
+        <div id="f-hours-fields" style="display:none">
+          <label>Heures normales</label>
+          <input type="number" step="0.25" id="f-heures" value="${defHours}">
+          <label>Heures majorées</label>
+          <input type="number" step="0.25" id="f-majorees" value="0">
+        </div>
+        <div class="hint" id="f-hint">Ne remplit que les jours travaillés définis dans les paramètres (les jours non travaillés, ex. week-end, ne sont pas modifiés). N'écrase pas les jours déjà saisis.</div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="confirmFill(${startDay},${endDay})">Remplir</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setAllFillEmployees(checked){
+  document.querySelectorAll('.f-emp').forEach(cb=> cb.checked = checked);
+}
+
+function onFillStatutChange(){
+  const v = document.getElementById('f-statut').value;
+  const hoursFields = document.getElementById('f-hours-fields');
+  const hint = document.getElementById('f-hint');
+  if(v==='auto'){
+    hoursFields.style.display='none';
+    hint.textContent = "Ne remplit que les jours travaillés définis dans les paramètres (les jours non travaillés, ex. week-end, ne sont pas modifiés). N'écrase pas les jours déjà saisis.";
+  } else {
+    hoursFields.style.display = (v==='travail') ? 'block' : 'none';
+    hint.textContent = 'Force ce statut sur tous les jours de la période, pour tous les employés actifs (écrase les jours déjà saisis).';
+  }
+}
+
+async function confirmFill(startDay, endDay){
+  const statutChoice = document.getElementById('f-statut').value;
+  const heures = statutChoice==='travail' ? (parseFloat(document.getElementById('f-heures').value)||0) : 0;
+  const heures_majorees = statutChoice==='travail' ? (parseFloat(document.getElementById('f-majorees').value)||0) : 0;
+  const employeeIds = Array.from(document.querySelectorAll('.f-emp:checked')).map(cb=>cb.value);
+  if(!employeeIds.length){ toast('Sélectionnez au moins un employé', true); return; }
+  const confirmMsg = statutChoice==='auto'
+    ? `Pré-remplir automatiquement cette période pour ${employeeIds.length} employé(s) ?\nLes jours déjà saisis ne seront pas modifiés.`
+    : `Appliquer le statut "${C.statutInfo(statutChoice).label}" à tous les jours de cette période, pour ${employeeIds.length} employé(s) ?\nCela écrasera les jours déjà saisis.`;
+  closeModal();
+  if(!confirm(confirmMsg)) return;
+  toast('Remplissage en cours…');
+  try{
+    const r = await bulkFillRange(startDay, endDay, statutChoice==='auto' ? null : { statut: statutChoice, heures, heures_majorees }, employeeIds);
+    console.log('[Pointage] Résultat remplissage', r);
+    if(r.errors.length){
+      toast(`${r.updated} jour(s) mis à jour, ${r.errors.length} erreur(s) — voir la console (F12)`, true);
+    } else {
+      toast(`${r.updated} jour(s) mis à jour${r.skipped?` (${r.skipped} déjà remplis)`:''}`);
+    }
+    renderAdminTab();
+  }catch(e){ toast('Erreur : '+e.message, true); }
+}
+
+function toggleSelectionMode(){
+  state.selectionMode = !state.selectionMode;
+  if(!state.selectionMode){ state.selectedEmployeeId=null; state.selectedDates=new Set(); }
+  renderAdminTab();
+}
+
+function onGridCellClick(employeeId, iso){
+  console.log('[Pointage] onGridCellClick', {employeeId, iso, selectionMode: state.selectionMode});
+  if(state.selectionMode){ toggleCellSelection(employeeId, iso); }
+  else { openDayModal(employeeId, iso); }
+}
+
+function toggleCellSelection(employeeId, iso){
+  if(state.selectedEmployeeId && state.selectedEmployeeId!==employeeId){
+    // On ne peut sélectionner qu'un seul employé à la fois : on repart de zéro
+    document.querySelectorAll('.grid-cell.selected').forEach(el=>el.classList.remove('selected'));
+    state.selectedDates = new Set();
+  }
+  state.selectedEmployeeId = employeeId;
+  const cell = document.querySelector(`.grid-cell[data-emp="${employeeId}"][data-date="${iso}"]`);
+  console.log('[Pointage] toggleCellSelection', {employeeId, iso, cellFound: !!cell, hadSelection: state.selectedDates.has(iso)});
+  if(state.selectedDates.has(iso)){
+    state.selectedDates.delete(iso);
+    if(cell) cell.classList.remove('selected');
+  } else {
+    state.selectedDates.add(iso);
+    if(cell) cell.classList.add('selected');
+  }
+  if(state.selectedDates.size===0) state.selectedEmployeeId = null;
+  console.log('[Pointage] selection actuelle', {selectedEmployeeId: state.selectedEmployeeId, selectedDates: Array.from(state.selectedDates)});
+  renderSelectionBar();
+}
+
+function renderSelectionBar(){
+  const root = document.getElementById('selectionBarRoot');
+  if(!root) return;
+  if(!state.selectionMode || state.selectedDates.size===0){ root.innerHTML=''; return; }
+  const emp = state.employees.find(e=>e.id===state.selectedEmployeeId);
+  root.innerHTML = `
+    <div class="selection-bar">
+      <span>${state.selectedDates.size} jour(s) sélectionné(s) — ${emp ? emp.prenom+' '+emp.nom : ''}</span>
+      <button class="btn btn-primary" onclick="openBulkEditModal()">Modifier</button>
+      <button class="btn btn-ghost" onclick="clearSelection()">Annuler</button>
+    </div>
+  `;
+}
+
+function clearSelection(){
+  document.querySelectorAll('.grid-cell.selected').forEach(el=>el.classList.remove('selected'));
+  state.selectedEmployeeId = null;
+  state.selectedDates = new Set();
+  renderSelectionBar();
+}
+
+function openBulkEditModal(){
+  const emp = state.employees.find(e=>e.id===state.selectedEmployeeId);
+  const root = document.getElementById('dayModalRoot');
+  console.log('[Pointage] openBulkEditModal', {selectedEmployeeId: state.selectedEmployeeId, empFound: !!emp, rootFound: !!root, dates: Array.from(state.selectedDates)});
+  if(!emp || !root) return;
+  const dates = Array.from(state.selectedDates).sort();
+  root.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <h3>${emp.prenom} ${emp.nom} — ${dates.length} jour(s)</h3>
+        <div class="hint">${dates.map(C.fmtDateFR).join(', ')}</div>
+        <label>Statut</label>
+        <select id="bm-statut" onchange="onBulkStatutChange()">
+          ${C.STATUTS.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}
+        </select>
+        <div id="bm-hours-fields">
+          <label>Heures normales</label>
+          <input type="number" step="0.25" id="bm-heures" value="${C.getDefaultHoursPerDay(state.settings)}">
+          <label>Heures majorées</label>
+          <input type="number" step="0.25" id="bm-majorees" value="0">
+        </div>
+        <label>Heures d'absence</label>
+        <input type="number" step="0.25" id="bm-absence" value="0">
+        <label>Heures de retard</label>
+        <input type="number" step="0.25" id="bm-retard" value="0">
+        <label>Motif</label>
+        <input type="text" id="bm-motif" value="">
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="confirmBulkEdit()">Appliquer aux ${dates.length} jour(s)</button>
+        </div>
+      </div>
+    </div>
+  `;
+  onBulkStatutChange();
+}
+
+function onBulkStatutChange(){
+  const v = document.getElementById('bm-statut').value;
+  const hoursFields = document.getElementById('bm-hours-fields');
+  if(hoursFields) hoursFields.style.display = (v==='travail') ? 'block' : 'none';
+}
+
+async function confirmBulkEdit(){
+  const statut = document.getElementById('bm-statut').value;
+  const isTravail = statut==='travail';
+  const heures = isTravail ? (parseFloat(document.getElementById('bm-heures').value)||0) : 0;
+  const heures_majorees = isTravail ? (parseFloat(document.getElementById('bm-majorees').value)||0) : 0;
+  const heures_absence = parseFloat(document.getElementById('bm-absence').value)||0;
+  const heures_retard = parseFloat(document.getElementById('bm-retard').value)||0;
+  const motif = document.getElementById('bm-motif').value;
+  const empId = state.selectedEmployeeId;
+  const dates = Array.from(state.selectedDates);
+  console.log('[Pointage] confirmBulkEdit — début', {empId, dates, statut, heures, heures_majorees, heures_absence, heures_retard, motif});
+  closeModal();
+  toast('Mise à jour en cours…');
+  let ok=0, fail=0;
+  for(const iso of dates){
+    try{
+      const result = await C.upsertJour(empId, iso, { statut, heures, heures_majorees, heures_absence, heures_retard, motif });
+      console.log('[Pointage] confirmBulkEdit — upsert OK', iso, '→', result);
+      ok++;
+    }catch(e){
+      fail++;
+      console.error('[Pointage] confirmBulkEdit — Échec', iso, e);
+    }
+  }
+  console.log('[Pointage] confirmBulkEdit — terminé', {ok, fail});
+  toast(fail ? `${ok} jour(s) modifié(s), ${fail} erreur(s)` : `${ok} jour(s) modifié(s)`, fail>0);
+  clearSelection();
+  renderAdminTab();
+}
+
+function printGrid(){
+  if(!gridPrintData){ toast('Grille non chargée', true); return; }
+  const {actifs, byEmpDate, y, m, nbDays, holidays, workDays} = gridPrintData;
+  let rowsHtml = '';
+  for(let d=1; d<=nbDays; d++){
+    const iso = `${y}-${C.pad2(m)}-${C.pad2(d)}`;
+    const dow = new Date(y,m-1,d).getDay();
+    const weekend = !workDays.includes(dow);
+    rowsHtml += `<tr class="${weekend?'print-weekend':''}"><td>${C.JOURS_FR_ABR[dow]} ${d}</td>`;
+    actifs.forEach(e=>{
+      const j = byEmpDate[e.id][iso] || { statut: holidays.has(iso)?'ferie':(workDays.includes(dow)?'travail':'repos'), heures:0, heures_majorees:0 };
+      let txt = '';
+      let style = '';
+      if(j.statut==='travail'){
+        txt = (j.heures || j.heures_majorees) ? `${j.heures||0}h${j.heures_majorees?('+'+j.heures_majorees):''}` : '';
+      } else {
+        const s = C.statutInfo(j.statut);
+        txt = s.code;
+        style = `background:${s.color};color:${s.text};`;
+      }
+      let extra = '';
+      if(Number(j.heures_absence)>0) extra += `<br><span style="font-size:9px;color:#b45309">Abs.${j.heures_absence}h</span>`;
+      if(Number(j.heures_retard)>0) extra += `<br><span style="font-size:9px;color:#b45309">Ret.${j.heures_retard}h</span>`;
+      rowsHtml += `<td style="${style}">${txt}${extra}</td>`;
+    });
+    rowsHtml += '</tr>';
+  }
+  const legendHtml = C.STATUTS.filter(s=>s.value!=='travail')
+    .map(s=>`<span class="item"><span class="sw" style="background:${s.color}"></span>${s.label}</span>`).join('');
+  const root = document.getElementById('printArea');
+  if(!root) return;
+  root.innerHTML = `
+    <div class="print-header">
+      <div><strong>SARL C.S.B.</strong><br>4 Rue Parmentier<br>59282 DOUCHY-LES-MINES</div>
+      <h2>GRILLE DE POINTAGE — ${C.monthLabel(state.month).toUpperCase()}</h2>
+    </div>
+    <table class="print-table">
+      <thead><tr><th>Jour</th>${actifs.map(e=>`<th>${e.prenom}</th>`).join('')}</tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div class="print-legend">${legendHtml}</div>
+  `;
+  window.print();
+}
+
+function openDayModal(employeeId, iso){
+  const emp = state.employees.find(e=>e.id===employeeId);
+  const list = joursCache[employeeId+'|'+state.month] || [];
+  const j = list.find(x=>x.date===iso) || { statut:'travail', heures:0, heures_majorees:0, motif:'' };
+  window.__adminEditEmployeeId = employeeId;
+
+  const root = document.getElementById('dayModalRoot');
+  root.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <h3>${emp.prenom} ${emp.nom} — ${C.fmtDateFR(iso)}</h3>
+        <label>Statut</label>
+        <select id="m-statut">
+          ${C.STATUTS.map(s=>`<option value="${s.value}" ${s.value===j.statut?'selected':''}>${s.label}</option>`).join('')}
+        </select>
+        <label>Heures normales</label>
+        <input type="number" step="0.25" id="m-heures" value="${j.heures||0}">
+        <label>Heures majorées</label>
+        <input type="number" step="0.25" id="m-majorees" value="${j.heures_majorees||0}">
+        <label>Heures d'absence</label>
+        <input type="number" step="0.25" id="m-absence" value="${j.heures_absence||0}">
+        <label>Heures de retard</label>
+        <input type="number" step="0.25" id="m-retard" value="${j.heures_retard||0}">
+        <label>Motif</label>
+        <input type="text" id="m-motif" value="${j.motif||''}">
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="saveDayModal('${employeeId}','${iso}')">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function closeModal(){ const r=document.getElementById('dayModalRoot'); if(r) r.innerHTML=''; const r2=document.getElementById('empModalRoot'); if(r2) r2.innerHTML=''; }
+
+async function saveDayModal(employeeId, iso){
+  const statut = document.getElementById('m-statut').value;
+  const heures = parseFloat(document.getElementById('m-heures').value)||0;
+  const heures_majorees = parseFloat(document.getElementById('m-majorees').value)||0;
+  const heures_absence = parseFloat(document.getElementById('m-absence').value)||0;
+  const heures_retard = parseFloat(document.getElementById('m-retard').value)||0;
+  const motif = document.getElementById('m-motif').value;
+  console.log('[Pointage] saveDayModal — envoi', {employeeId, iso, statut, heures, heures_majorees, heures_absence, heures_retard, motif});
+  try{
+    const result = await C.upsertJour(employeeId, iso, { statut, heures, heures_majorees, heures_absence, heures_retard, motif });
+    console.log('[Pointage] saveDayModal — résultat final', result);
+    toast('Enregistré');
+    closeModal();
+    renderAdminTab();
+  }catch(e){
+    console.error('[Pointage] saveDayModal — ERREUR', e);
+    toast('Erreur : '+e.message, true);
+  }
+}
+
+/* ---- Employés (profils, rôles, droits) ---- */
+function renderAdminEmployees(main){
+  const list = [...state.employees].sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  main.innerHTML = `
+    <div class="admin-header"><h2>Employés</h2>
+      <button class="btn btn-primary" onclick="openEmployeeModal()">+ Ajouter un profil</button>
+    </div>
+    <div class="table-wrap">
+      <table class="simple-table">
+        <thead><tr><th>Nom</th><th>Prénom</th><th>Rôle</th><th>Statut</th><th>Code perso.</th><th>Base mensuelle</th><th>Solde CP</th><th>Couleur</th><th></th></tr></thead>
+        <tbody>
+          ${list.map(e=>`
+            <tr>
+              <td>${e.nom}</td><td>${e.prenom}</td>
+              <td><span class="role-badge ${C.isAdminRole(e)?'admin':'user'}">${C.roleLabel(e)}</span></td>
+              <td><span class="status-badge ${C.isProfileActive(e)?'on':'off'}">${C.isProfileActive(e)?'Actif':'Inactif'}</span></td>
+              <td>${e.pin ? '🔒 défini' : '—'}</td>
+              <td>${e.heures_base_mensuel ?? ''}</td>
+              <td>${C.getSoldeConges(e)}</td>
+              <td><span class="dot" style="background:${e.couleur||'#4f46e5'}"></span></td>
+              <td class="row-actions">
+                <button class="icon-btn" onclick="openEmployeeModal('${e.id}')">✎</button>
+                <button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div id="empModalRoot"></div>
+  `;
+}
+
+function openEmployeeModal(id){
+  const e = id ? state.employees.find(x=>x.id===id) : {
+    nom:'', prenom:'', role:'utilisateur', pin:'', statut:'actif',
+    heures_base_mensuel:151.67, solde_conges:25, couleur:'#4f46e5', ordre: state.employees.length
+  };
+  const root = document.getElementById('empModalRoot');
+  root.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <h3>${id?'Modifier':'Ajouter'} un profil</h3>
+        <label>Nom</label><input type="text" id="e-nom" value="${e.nom||''}">
+        <label>Prénom</label><input type="text" id="e-prenom" value="${e.prenom||''}">
+        <label>Rôle (droit)</label>
+        <select id="e-role">
+          ${C.ROLES.map(r=>`<option value="${r.value}" ${(e.role||'utilisateur')===r.value?'selected':''}>${r.label}</option>`).join('')}
+        </select>
+        <label>Statut</label>
+        <select id="e-statut">
+          ${C.PROFILE_STATUTS.map(s=>`<option value="${s.value}" ${(e.statut || e.status || (e.actif!==false?'actif':'inactif'))===s.value?'selected':''}>${s.label}</option>`).join('')}
+        </select>
+        <label>Code personnel (optionnel)</label>
+        <input type="text" id="e-pin" value="${e.pin||''}" placeholder="laisser vide = aucun code">
+        <div class="hint">Demandé à la connexion si renseigné. Aucun mot de passe n'est obligatoire.</div>
+        <label>Heures base mensuelle</label><input type="number" step="0.01" id="e-base" value="${e.heures_base_mensuel ?? 151.67}">
+        <label>Solde congés payés (jours)</label><input type="number" step="0.5" id="e-solde" value="${C.getSoldeConges(e) || 25}">
+        <label>Couleur</label><input type="color" id="e-couleur" value="${e.couleur||'#4f46e5'}">
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="saveEmployeeModal('${id||''}')">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function saveEmployeeModal(id){
+  const statutValue = document.getElementById('e-statut').value;
+  const soldeValue = parseFloat(document.getElementById('e-solde').value)||0;
+  const payload = {
+    nom: document.getElementById('e-nom').value.trim(),
+    prenom: document.getElementById('e-prenom').value.trim(),
+    role: document.getElementById('e-role').value,
+    /* Écrit sur les deux noms de champ possibles (statut/status) — PocketBase ignore
+       silencieusement celui qui n'existe pas dans le schéma, donc celui qui existe
+       réellement reçoit la valeur, quel que soit son nom exact. */
+    statut: statutValue,
+    status: statutValue,
+    pin: document.getElementById('e-pin').value.trim(),
+    heures_base_mensuel: parseFloat(document.getElementById('e-base').value)||0,
+    solde_conges: soldeValue,
+    sole_conges: soldeValue,
+    couleur: document.getElementById('e-couleur').value,
+  };
+  if(!payload.nom || !payload.prenom){ toast('Nom et prénom requis', true); return; }
+  try{
+    let saved;
+    if(id){ saved = await C.pbUpdate('pointage_employees', id, payload); }
+    else { payload.ordre = state.employees.length; saved = await C.pbCreate('pointage_employees', payload); }
+    console.log('[Pointage] Profil enregistré, réponse PocketBase :', saved);
+    state.employees = await C.pbList('pointage_employees','','ordre');
+    if(state.currentEmployee && state.currentEmployee.id===id){
+      state.currentEmployee = state.employees.find(x=>x.id===id);
+    }
+    toast('Profil enregistré');
+    closeModal();
+    renderAdminTab();
+  }catch(e){ toast('Erreur : '+e.message, true); }
+}
+
+async function deleteEmployee(id){
+  if(!confirm('Supprimer ce profil ? Ses pointages resteront en base. Continuer ?')) return;
+  try{
+    await C.pbDelete('pointage_employees', id);
+    state.employees = await C.pbList('pointage_employees','','ordre');
+    toast('Profil supprimé');
+    renderAdminTab();
+  }catch(e){ toast('Erreur : '+e.message, true); }
+}
+
+/* ---- Export mensuel ---- */
+let exportRows = {}; // employeeId -> summary object (editable)
+
+async function renderAdminExport(main){
+  main.innerHTML = `<div class="loading">Calcul du récapitulatif…</div>`;
+  const actifs = state.employees.filter(C.isProfileActive).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  const [y,m] = state.month.split('-').map(Number);
+
+  exportRows = {};
+  for(const e of actifs){
+    const jours = await loadJours(e.id, state.month);
+    const computed = C.computeMonthSummary(jours, y, m-1);
+    const savedList = await C.pbList('pointage_mensuel', `employee='${e.id}' && mois='${state.month}'`);
+    const saved = savedList[0];
+    exportRows[e.id] = {
+      heures_base: saved ? saved.heures_base : computed.heures_base,
+      heures_majorees: saved ? saved.heures_majorees : computed.heures_majorees,
+      heures_absence: saved ? saved.heures_absence : computed.heures_absence,
+      heures_retard: saved ? saved.heures_retard : computed.heures_retard,
+      periode_absence: saved ? saved.periode_absence : computed.periode_absence,
+      motif_absence: saved ? saved.motif_absence : computed.motif_absence,
+      primes: saved ? saved.primes : 0,
+      acomptes: saved ? saved.acomptes : 0,
+      frais_atelier: saved ? saved.frais_atelier : 0,
+      conges_payes: saved ? saved.conges_payes : computed.conges_payes,
+    };
+  }
+
+  main.innerHTML = `
+    <div class="admin-header">
+      <div class="month-nav">
+        <button class="icon-btn" onclick="changeMonth(-1); renderAdminTab();">◀</button>
+        <h2>Export — ${C.monthLabel(state.month)}</h2>
+        <button class="icon-btn" onclick="changeMonth(1); renderAdminTab();">▶</button>
+      </div>
+      <div>
+        <button class="btn btn-ghost" onclick="saveExportRows()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="exportExcel()">⬇ Excel (.xlsx)</button>
+        <button class="btn btn-primary" onclick="printExport()">🖨 Imprimer / PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="simple-table export-table">
+        <thead><tr>
+          <th>Nom Prénom</th><th>Heures Base</th><th>Heures Majorées</th><th>Heures Absence</th><th>Heures Retard</th><th>Période Absence</th><th>Motif Absence</th><th>Primes</th><th>Acomptes</th><th>Frais Atelier</th><th>Congés Payés</th>
+        </tr></thead>
+        <tbody>
+          ${actifs.map(e=>{
+            const r = exportRows[e.id];
+            return `<tr>
+              <td>${e.nom} ${e.prenom}</td>
+              <td><input type="number" step="0.01" value="${r.heures_base}" onchange="updateExportField('${e.id}','heures_base',this.value)"></td>
+              <td><input type="number" step="0.01" value="${r.heures_majorees}" onchange="updateExportField('${e.id}','heures_majorees',this.value)"></td>
+              <td><input type="number" step="0.01" value="${r.heures_absence}" onchange="updateExportField('${e.id}','heures_absence',this.value)"></td>
+              <td><input type="number" step="0.01" value="${r.heures_retard}" onchange="updateExportField('${e.id}','heures_retard',this.value)"></td>
+              <td><input type="text" value="${r.periode_absence}" onchange="updateExportField('${e.id}','periode_absence',this.value)"></td>
+              <td><input type="text" value="${r.motif_absence}" onchange="updateExportField('${e.id}','motif_absence',this.value)"></td>
+              <td><input type="number" step="0.01" value="${r.primes}" onchange="updateExportField('${e.id}','primes',this.value)"></td>
+              <td><input type="number" step="0.01" value="${r.acomptes}" onchange="updateExportField('${e.id}','acomptes',this.value)"></td>
+              <td><input type="number" step="0.01" value="${r.frais_atelier}" onchange="updateExportField('${e.id}','frais_atelier',this.value)"></td>
+              <td><input type="number" step="0.5" value="${r.conges_payes}" onchange="updateExportField('${e.id}','conges_payes',this.value)"></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">Valeurs pré-calculées à partir des pointages du mois, puis modifiables avant export.</p>
+    <div id="printArea" class="print-only"></div>
+  `;
+}
+
+function updateExportField(empId, field, value){
+  const isText = (field==='periode_absence' || field==='motif_absence');
+  exportRows[empId][field] = isText ? value : (parseFloat(value)||0);
+}
+
+async function saveExportRows(){
+  try{
+    for(const empId in exportRows){
+      await C.upsertMensuel(empId, state.month, exportRows[empId]);
+    }
+    toast('Récapitulatif enregistré');
+  }catch(e){ toast('Erreur : '+e.message, true); }
+}
+
+function exportExcel(){
+  const actifs = state.employees.filter(C.isProfileActive).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  const header = ['NOM Prénom','Heures Base','Heures Majorées','Heures Absence','Heures Retard','Période Absence','Motif Absence','Primes','Acomptes','Frais Atelier','Congés Payés'];
+  const aoa = [header];
+  actifs.forEach(e=>{
+    const r = exportRows[e.id];
+    aoa.push([`${e.nom} ${e.prenom}`, r.heures_base, r.heures_majorees, r.heures_absence, r.heures_retard, r.periode_absence, r.motif_absence, r.primes, r.acomptes, r.frais_atelier, r.conges_payes]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:22},{wch:12},{wch:14},{wch:13},{wch:12},{wch:28},{wch:22},{wch:10},{wch:10},{wch:12},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pointage');
+  XLSX.writeFile(wb, `Pointage_${state.month}.xlsx`);
+}
+
+function printExport(){
+  const actifs = state.employees.filter(C.isProfileActive).sort((a,b)=>(a.ordre||0)-(b.ordre||0));
+  const rowsHtml = actifs.map(e=>{
+    const r = exportRows[e.id];
+    return `<tr>
+      <td>${e.nom} ${e.prenom}</td><td>${r.heures_base||''}</td><td>${r.heures_majorees||''}</td>
+      <td>${r.heures_absence||''}</td><td>${r.heures_retard||''}</td>
+      <td>${r.periode_absence||''}</td><td>${r.motif_absence||''}</td>
+      <td>${r.primes||''}</td><td>${r.acomptes||''}</td><td>${r.frais_atelier||''}</td><td>${r.conges_payes||''}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('printArea').innerHTML = `
+    <div class="print-header">
+      <div><strong>SARL C.S.B.</strong><br>4 Rue Parmentier<br>59282 DOUCHY-LES-MINES</div>
+      <h2>POINTAGE DU MOIS DE ${C.monthLabel(state.month).toUpperCase()}</h2>
+    </div>
+    <table class="print-table">
+      <thead><tr><th>NOM Prénom</th><th>Heures Base</th><th>Heures Majorées</th><th>Heures Absence</th><th>Heures Retard</th><th>Période Absence</th><th>Motif Absence</th><th>Primes</th><th>Acomptes</th><th>Frais Atelier</th><th>Congés Payés</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+  window.print();
+}
+
+/* ---- Paramètres ---- */
+function renderAdminSettings(main){
+  const workDays = C.getWorkingDays(state.settings);
+  const defHours = C.getDefaultHoursPerDay(state.settings);
+  main.innerHTML = `
+    <div class="admin-header"><h2>Paramètres</h2></div>
+    <div class="settings-card">
+      <label>Adresse du serveur PocketBase</label>
+      <input type="text" id="s-url" value="${C.pbUrl()}">
+
+      <label>Code maître (accès admin de secours, sans profil — vide = désactivé)</label>
+      <input type="text" id="s-pin" value="${(state.settings && state.settings.pb_admin_pin) || ''}">
+
+      <label>Jours travaillés</label>
+      <div class="chk-days">
+        ${[1,2,3,4,5,6,0].map(dow=>`
+          <label><input type="checkbox" class="s-jour" value="${dow}" ${workDays.includes(dow)?'checked':''}> ${C.JOURS_FR[dow]}</label>
+        `).join('')}
+      </div>
+      <div class="hint">Utilisé pour l'affichage par défaut des jours et pour le remplissage automatique (mois / semaine).</div>
+
+      <label>Heures par jour travaillé (par défaut)</label>
+      <input type="number" step="0.25" id="s-heures-defaut" value="${defHours}">
+
+      <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+      <hr style="margin:22px 0;border:none;border-top:1px solid var(--border)">
+      <label>Diagnostic</label>
+      <button class="btn btn-ghost" onclick="diagnosticTest()">🩺 Tester l'écriture/lecture du statut (jours)</button>
+      <button class="btn btn-ghost" onclick="diagnosticEmployeeTest()">🩺 Tester rôle/statut/code (employés)</button>
+      <div class="hint">Crée une ligne de test, vérifie que les champs sont bien sauvegardés et relus, puis la supprime. Le résultat s'affiche dans une fenêtre.</div>
+    </div>
+  `;
+}
+
+async function saveSettings(){
+  const url = document.getElementById('s-url').value.trim();
+  const pin = document.getElementById('s-pin').value.trim();
+  const jours = Array.from(document.querySelectorAll('.s-jour:checked')).map(cb=>cb.value).join(',');
+  const heuresDefaut = parseFloat(document.getElementById('s-heures-defaut').value) || C.DEFAULT_HOURS_PER_DAY;
+  localStorage.setItem(C.LS_PB_URL, url);
+  try{
+    await C.pbUpdate('pointage_settings', state.settings.id, {
+      pb_admin_pin: pin,
+      jours_travailles: jours || C.DEFAULT_WORKING_DAYS.join(','),
+      heures_jour_defaut: heuresDefaut,
+    });
+    state.settings = await C.getSettings();
+    toast('Paramètres enregistrés');
+  }catch(e){ toast('Erreur : '+e.message, true); }
+}
+
+async function diagnosticTest(){
+  if(!state.employees.length){ alert('Aucun employé en base pour faire le test.'); return; }
+  const empId = state.employees[0].id;
+  const testDate = '2099-01-01';
+  try{
+    // Nettoyage préalable si un test précédent traîne
+    const prior = await C.pbList('pointage_jours', `employee='${empId}' && date='${testDate}'`);
+    for(const p of prior){ await C.pbDelete('pointage_jours', p.id); }
+
+    const created = await C.pbCreate('pointage_jours', { employee: empId, date: testDate, heures:1, heures_majorees:0, statut:'travail', motif:'test-diagnostic' });
+    const reread = await C.pbFetch(`/api/collections/pointage_jours/records/${created.id}`);
+    await C.pbDelete('pointage_jours', created.id);
+
+    const ok = reread.statut === 'travail';
+    alert(
+      (ok ? "✅ OK — le champ \"statut\" fonctionne correctement.\n\n" : "❌ PROBLÈME DÉTECTÉ — le champ \"statut\" n'est pas enregistré/relu correctement.\n\n") +
+      'Enregistrement créé avec : {statut:"travail", heures:1}\n\n' +
+      'Enregistrement relu depuis PocketBase :\n' + JSON.stringify(reread, null, 2) +
+      (ok ? '' : "\n\n→ Vérifiez dans PocketBase que la collection pointage_jours a bien un champ nommé exactement \"statut\" (select), et que le renommage a été enregistré (bouton Save en haut du formulaire de collection).")
+    );
+  }catch(e){
+    alert("❌ Erreur pendant le test : "+e.message+"\n\nVérifiez l'adresse du serveur PocketBase et les règles d'accès (API rules) de la collection pointage_jours.");
+  }
+}
+
+async function diagnosticEmployeeTest(){
+  const testPayload = { nom:'TEST-DIAG', prenom:'Zzz', role:'administrateur', statut:'inactif', status:'inactif', pin:'9999', heures_base_mensuel:1, solde_conges:1, sole_conges:1, couleur:'#000000', ordre:9999 };
+  try{
+    const created = await C.pbCreate('pointage_employees', testPayload);
+    const reread = await C.pbFetch(`/api/collections/pointage_employees/records/${created.id}`);
+    await C.pbDelete('pointage_employees', created.id);
+
+    const roleOk = reread.role === testPayload.role;
+    const pinOk = reread.pin === testPayload.pin;
+    const statutOk = reread.statut === 'inactif' || reread.status === 'inactif';
+    const soldeOk = C.getSoldeConges(reread) == 1;
+
+    const lines = [
+      `role : ${roleOk ? '✅' : '❌'} (obtenu "${reread.role}")`,
+      `statut/status : ${statutOk ? '✅' : '❌'} (statut="${reread.statut}", status="${reread.status}")`,
+      `pin : ${pinOk ? '✅' : '❌'} (obtenu "${reread.pin}")`,
+      `solde_conges/sole_conges : ${soldeOk ? '✅' : '❌'} (solde_conges="${reread.solde_conges}", sole_conges="${reread.sole_conges}")`,
+    ];
+    const allOk = roleOk && pinOk && statutOk && soldeOk;
+
+    alert(
+      (allOk ? "✅ OK — tous les champs sont lisibles (l'appli gère automatiquement les variantes de nommage).\n\n" : "❌ Au moins un champ reste introuvable même avec les deux variantes.\n\n") +
+      lines.join('\n') +
+      '\n\nEnregistrement complet relu depuis PocketBase :\n' + JSON.stringify(reread, null, 2)
+    );
+  }catch(e){
+    alert("❌ Erreur pendant le test : "+e.message+"\n\nVérifiez les règles d'accès (API rules) de la collection pointage_employees.");
+  }
+}
+
+/* Expose to global scope for inline handlers */
+Object.assign(window, {
+  loginProfile, askMasterLogin, openConnSettings, logout, goToMyTimesheet, goToAdmin, changeMonth,
+  onDayChange, onDayFieldChange, setAdminTab, openDayModal, closeModal, saveDayModal,
+  openEmployeeModal, saveEmployeeModal, deleteEmployee, updateExportField, saveExportRows,
+  exportExcel, printExport, saveSettings, diagnosticTest, diagnosticEmployeeTest,
+  fillMonth, fillWeek, openFillModal, setAllFillEmployees, onFillStatutChange, confirmFill,
+  toggleSelectionMode, onGridCellClick, clearSelection, openBulkEditModal, onBulkStatutChange, confirmBulkEdit, printGrid,
+  boot
+});
+
+boot();
+</script>
+</body>
+</html>

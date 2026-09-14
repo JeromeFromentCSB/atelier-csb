@@ -1,0 +1,70 @@
+{
+  "name": "atelier-csb",
+  "version": "0.1.0",
+  "description": "Application de gestion de l'Atelier CSB (broderie) — regroupe Envoi Axonaut, Gestion Casaque, Inventaire et Stock de Fil.",
+  "main": "main.js",
+  "author": "Atelier CSB",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist": "electron-builder --win --mac"
+  },
+  "devDependencies": {
+    "electron": "^32.3.3",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "fr.atelier-csb.app",
+    "productName": "Atelier CSB",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "modules/**/*",
+      "!**/*.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.business"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "http://192.168.1.142:8090/app-updates/"
+      }
+    ]
+  },
+  "dependencies": {
+    "@visioncortex/vtracer": "^1.0.0-alpha.4",
+    "electron-updater": "^6.8.9",
+    "imagetracerjs": "^1.2.6",
+    "imapflow": "^2.0.2",
+    "mailparser": "^3.9.26",
+    "pocketbase": "^0.28.1"
+  }
+}

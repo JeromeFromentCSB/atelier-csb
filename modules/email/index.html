@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email · L'Atelier CSB</title>
+<style>
+  :root{
+    --ink:#1c1a17;
+    --paper:#faf7f0;
+    --paper-2:#f0ebe0;
+    --line:#ddd4c2;
+    --poste-yellow:#f5c518;
+    --poste-yellow-dark:#c99a00;
+    --silk-red:#a13a2e;
+    --silk-red-bg:#fbe4e0;
+    --silk-green:#3d6b4f;
+    --muted:#7a7266;
+    --white:#fff;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(28,26,23,.06), 0 4px 14px rgba(28,26,23,.05);
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Iowan Old Style","Georgia",serif; -webkit-font-smoothing:antialiased;
+  }
+  header{
+    position:sticky; top:0; z-index:30; background:var(--paper);
+    border-bottom:2px solid var(--ink); padding:8px 22px;
+  }
+  .headrow{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .toolbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .btn{
+    font-family:sans-serif; font-size:.78rem; font-weight:600; letter-spacing:.02em;
+    border:1.5px solid var(--ink); background:var(--white); color:var(--ink);
+    padding:6px 12px; border-radius:999px; cursor:pointer; white-space:nowrap;
+    transition:transform .08s ease, box-shadow .15s ease;
+  }
+  .btn:hover{ box-shadow:var(--shadow); transform:translateY(-1px); }
+  .btn:disabled{ opacity:.5; cursor:default; transform:none; box-shadow:none; }
+  .btn.primary{ background:var(--ink); color:var(--paper); }
+  .btn.ghost{ border-color:var(--line); color:var(--muted); }
+  .btn.icon{ padding:6px 10px; }
+  .search{
+    font-family:sans-serif; font-size:.85rem; padding:7px 14px;
+    border:1.5px solid var(--line); border-radius:999px; min-width:240px;
+    background:var(--white); color:var(--ink);
+  }
+  .search:focus{ outline:none; border-color:var(--ink); }
+  .status-pill{
+    display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.72rem;
+    font-weight:600; color:var(--muted); padding:6px 12px; border:1.5px solid var(--line);
+    border-radius:999px; background:var(--white);
+  }
+  .status-dot{ width:8px; height:8px; border-radius:50%; background:#c9c2b3; flex-shrink:0; }
+  .status-dot.on{ background:var(--silk-green); }
+  .status-dot.off{ background:var(--silk-red); }
+
+  .settings-panel{
+    display:none; margin-top:14px; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
+    background:var(--white); font-family:sans-serif; font-size:.78rem;
+  }
+  .settings-panel.show{ display:block; }
+  .settings-panel .row{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .settings-panel label{ min-width:150px; color:var(--muted); font-weight:600; }
+  .settings-panel input[type=text], .settings-panel input[type=password]{
+    flex:1; min-width:260px; padding:7px 10px; border:1.5px solid var(--line); border-radius:6px;
+    font-family:"SF Mono",monospace; font-size:.76rem;
+  }
+  .settings-panel .hint{ font-size:.7rem; color:var(--muted); margin:-4px 0 10px 160px; line-height:1.5; }
+  .settings-panel ol{ margin:0 0 10px 160px; padding-left:18px; font-size:.72rem; color:var(--muted); line-height:1.7; }
+  .settings-panel a{ color:var(--poste-yellow-dark); }
+
+  #emailBody{ display:flex; height:calc(100vh - var(--header-h, 60px)); }
+  #foldersPane{ width:210px; flex-shrink:0; overflow-y:auto; background:var(--paper-2); border-right:2px solid var(--ink); padding:10px 0; }
+  .folder-item{
+    display:flex; align-items:center; gap:8px; padding:7px 16px; cursor:pointer; font-family:sans-serif;
+    font-size:.8rem; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    border-left:3px solid transparent;
+  }
+  .folder-item:hover{ background:#e8e0cc; }
+  .folder-item.active{ background:var(--white); border-left-color:var(--poste-yellow-dark); font-weight:700; }
+  .folder-item .ic{ flex-shrink:0; font-size:.9rem; }
+  .folder-item .nm{ overflow:hidden; text-overflow:ellipsis; }
+  #listPane{ width:340px; flex-shrink:0; overflow-y:auto; border-right:2px solid var(--ink); background:var(--white); }
+  .pane-resizer{
+    width:8px; margin:0 -4px; flex-shrink:0; cursor:col-resize; position:relative; z-index:6; background:transparent;
+  }
+  .pane-resizer::after{
+    content:''; position:absolute; left:50%; top:0; bottom:0; width:2px; transform:translateX(-50%);
+    background:var(--ink); pointer-events:none;
+  }
+  .pane-resizer:hover::after, .pane-resizer.dragging::after{ background:var(--poste-yellow-dark); width:3px; }
+  #detailPane{ flex:1; min-width:0; overflow-y:auto; background:var(--paper); }
+  #previewPane{ width:420px; flex-shrink:0; overflow:hidden; border-left:2px solid var(--ink); background:var(--paper-2); display:flex; flex-direction:column; }
+
+  .msg-row{
+    display:flex; flex-direction:column; gap:3px; padding:10px 16px; cursor:pointer;
+    border-bottom:1px solid var(--line); font-family:sans-serif;
+  }
+  .msg-row:hover{ background:#fbf9f3; }
+  .msg-row.selected{ background:#fdf3d0; box-shadow:inset 3px 0 0 var(--poste-yellow-dark); }
+  .msg-row.unread .msg-subject, .msg-row.unread .msg-from{ font-weight:800; }
+  .msg-top{ display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .msg-from{ font-size:.8rem; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .msg-date{ font-size:.65rem; color:var(--muted); flex-shrink:0; }
+  .msg-subject{ font-size:.8rem; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .msg-snippet{ font-size:.72rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .msg-snippet:empty{ display:none; }
+  .msg-attach-icon{ font-size:.68rem; }
+
+  .empty{ text-align:center; padding:80px 20px; color:var(--muted); font-family:sans-serif; }
+  .empty .flag-big{
+    display:inline-block; width:34px; height:34px; background:var(--poste-yellow);
+    border:2px solid var(--ink); transform:rotate(45deg); margin-bottom:22px;
+  }
+  .empty h2{ font-family:"Iowan Old Style",Georgia,serif; color:var(--ink); font-size:1.2rem; margin:0 0 8px; }
+  .empty p{ font-size:.85rem; max-width:380px; margin:0 auto; line-height:1.6; }
+
+  #detailContent{ padding:22px 26px; }
+  .detail-toolbar{ display:flex; gap:8px; margin-bottom:14px; }
+  .detail-subject{ font-family:"Iowan Old Style",Georgia,serif; font-size:1.25rem; margin:0 0 10px; }
+  .detail-meta{ font-family:sans-serif; font-size:.8rem; color:var(--muted); margin-bottom:4px; }
+  .detail-meta strong{ color:var(--ink); }
+  .detail-body{
+    margin-top:18px; padding-top:16px; border-top:1.5px solid var(--line);
+    font-family:sans-serif; font-size:.85rem; line-height:1.6;
+  }
+  .detail-body iframe{ width:100%; border:none; background:var(--white); }
+  .attach-list{ display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  .attach-chip{
+    display:flex; align-items:center; gap:8px; padding:8px 12px; border:1.5px solid var(--line);
+    border-radius:8px; background:var(--white); cursor:pointer; font-family:sans-serif; font-size:.75rem;
+    transition:.1s;
+  }
+  .attach-chip:hover{ border-color:var(--poste-yellow-dark); box-shadow:var(--shadow); }
+  .attach-chip.selected{ border-color:var(--ink); background:var(--paper-2); }
+  .attach-chip .ic{ font-size:1.1rem; }
+  .attach-chip .meta{ display:flex; flex-direction:column; }
+  .attach-chip .fn{ font-weight:600; max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .attach-chip .sz{ color:var(--muted); font-size:.68rem; }
+
+  #previewHead{
+    padding:12px 16px; border-bottom:1.5px solid var(--ink); font-family:sans-serif; font-size:.78rem;
+    font-weight:700; display:flex; justify-content:space-between; align-items:center; gap:8px; background:var(--white);
+  }
+  #previewHead .fn{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #previewBody{ flex:1; overflow:auto; display:flex; align-items:center; justify-content:center; padding:14px; }
+  #previewBody img{ max-width:100%; max-height:100%; box-shadow:var(--shadow); background:var(--white); }
+  #previewBody embed{ width:100%; height:100%; border:none; }
+  #previewBody pre{ width:100%; height:100%; margin:0; padding:14px; background:var(--white); overflow:auto; font-size:.78rem; white-space:pre-wrap; }
+  #previewEmpty{ color:var(--muted); font-family:sans-serif; font-size:.8rem; text-align:center; padding:30px; }
+
+  ::-webkit-scrollbar{ height:10px; width:10px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
+</style>
+</head>
+<body>
+
+<header id="pageHeader">
+  <div class="headrow">
+    <div class="toolbar">
+      <input type="text" class="search" id="searchInput" placeholder="Rechercher (objet, expéditeur…)">
+      <button class="btn primary" id="refreshBtn">↻ Actualiser</button>
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusLabel">Non connecté</span>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn ghost icon" id="settingsBtn" title="Réglages">⚙︎</button>
+    </div>
+  </div>
+
+  <div class="settings-panel" id="settingsPanel">
+    <div class="row" style="margin-top:0;">
+      <label style="min-width:100%; font-weight:700; color:var(--ink);">Connexion Gmail (IMAP)</label>
+    </div>
+    <div class="hint" style="margin-left:0;">
+      Connexion directe et simple, sans inscription développeur. Il faut juste un « mot de passe
+      d'application » Google (nécessite la validation en 2 étapes activée sur le compte) :
+    </div>
+    <ol style="margin-left:0;">
+      <li>Va sur <a href="#" data-open="https://myaccount.google.com/security">myaccount.google.com/security</a>, active la <strong>validation en 2 étapes</strong> si ce n'est pas déjà fait</li>
+      <li>Puis va sur <a href="#" data-open="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a></li>
+      <li>Donne un nom (ex. « Atelier CSB ») et clique sur « Créer »</li>
+      <li>Copie le mot de passe généré (16 caractères) ci-dessous — ce n'est pas ton mot de passe Google habituel</li>
+    </ol>
+    <div class="row">
+      <label>Adresse Gmail</label>
+      <input type="text" id="emailInput" placeholder="atelier.csb@gmail.com">
+    </div>
+    <div class="row">
+      <label>Mot de passe d'application</label>
+      <input type="password" id="appPasswordInput" placeholder="xxxx xxxx xxxx xxxx">
+    </div>
+    <div class="row">
+      <button class="btn primary" id="saveCredsBtn">Enregistrer et se connecter</button>
+      <button class="btn danger" id="disconnectBtn" style="display:none; border-color:var(--silk-red); color:var(--silk-red); background:#fff;">Se déconnecter</button>
+      <span id="credsMsg" style="color:var(--silk-green);"></span>
+    </div>
+  </div>
+</header>
+
+<div id="emailBody">
+  <div id="foldersPane">
+    <div id="folderList"></div>
+  </div>
+  <div class="pane-resizer" id="foldersResizer" title="Glisser pour redimensionner"></div>
+  <div id="listPane">
+    <div class="empty" id="listEmpty">
+      <span class="flag-big"></span>
+      <h2>Connecte ta boîte Gmail</h2>
+      <p>Ouvre les réglages (⚙︎) pour renseigner ton adresse et ton mot de passe d'application, puis clique sur « Actualiser ».</p>
+    </div>
+    <div id="msgList" style="display:none;"></div>
+  </div>
+  <div class="pane-resizer" id="listResizer" title="Glisser pour redimensionner"></div>
+  <div id="detailPane">
+    <div id="detailContent">
+      <div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l'afficher ici.</div>
+    </div>
+  </div>
+  <div class="pane-resizer" id="previewResizer" title="Glisser pour redimensionner"></div>
+  <div id="previewPane">
+    <div id="previewHead" style="display:none;">
+      <span class="fn" id="previewFilename"></span>
+      <button class="btn ghost icon" id="previewCloseBtn">✕</button>
+    </div>
+    <div id="previewBody">
+      <div id="previewEmpty">Clique sur une pièce jointe pour l'afficher ici.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function escapeHtml(s){
+  return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function b64ToBytes(b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function formatDate(d){
+  if(!d) return '';
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if(sameDay) return d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+function formatSize(bytes){
+  if(bytes == null) return '';
+  if(bytes < 1024) return bytes + ' o';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' Ko';
+  return (bytes/1024/1024).toFixed(1) + ' Mo';
+}
+// ---------- Connexion / réglages ----------
+function requireCsbHost(){
+  if(typeof window.csbHost === 'undefined'){
+    throw new Error("Cette page doit être ouverte depuis l'application Atelier CSB (onglet Email), pas directement dans un navigateur.");
+  }
+  return window.csbHost;
+}
+async function refreshStatus(){
+  if(typeof window.csbHost === 'undefined'){
+    document.getElementById('statusLabel').textContent = "Ouvre cette page depuis l'app Atelier CSB";
+    return { connected:false, email:'' };
+  }
+  const status = await window.csbHost.emailStatus();
+  document.getElementById('statusDot').className = 'status-dot ' + (status.connected ? 'on' : 'off');
+  document.getElementById('statusLabel').textContent = status.connected ? (status.email || 'Connecté') : 'Non connecté';
+  document.getElementById('disconnectBtn').style.display = status.connected ? 'inline-flex' : 'none';
+  if(status.email) document.getElementById('emailInput').value = status.email;
+  return status;
+}
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.querySelectorAll('[data-open]').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    try{ requireCsbHost().openExternal(a.dataset.open); }catch(err){ alert(err.message); }
+  });
+});
+document.getElementById('saveCredsBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('saveCredsBtn');
+  const msg = document.getElementById('credsMsg');
+  const email = document.getElementById('emailInput').value.trim();
+  const appPassword = document.getElementById('appPasswordInput').value.trim().replace(/\s+/g, '');
+  if(!email || !appPassword){
+    msg.style.color = 'var(--silk-red)';
+    msg.textContent = "Renseigne l'adresse et le mot de passe d'application.";
+    return;
+  }
+  btn.disabled = true;
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Connexion en cours…';
+  try{
+    const host = requireCsbHost();
+    await host.emailSetCredentials(email, appPassword);
+    await host.emailTestConnection();
+    msg.style.color = 'var(--silk-green)';
+    msg.textContent = '✔ Connecté';
+    await refreshStatus();
+    loadFolders();
+    loadMessages();
+  }catch(e){
+    msg.style.color = 'var(--silk-red)';
+    msg.textContent = 'Erreur : ' + e.message;
+  }
+  btn.disabled = false;
+});
+document.getElementById('disconnectBtn').addEventListener('click', async () => {
+  try{
+    await requireCsbHost().emailDisconnect();
+    document.getElementById('appPasswordInput').value = '';
+    messages = [];
+    folders = [];
+    document.getElementById('folderList').innerHTML = '';
+    renderList();
+    await refreshStatus();
+  }catch(e){ alert(e.message); }
+});
+
+let messages = [];
+let selectedMessageId = null;
+let currentAttachments = [];
+let currentPreviewUrl = null;
+let currentMailbox = 'INBOX';
+let folders = [];
+
+const FOLDER_ICONS = {
+  '\\Inbox': '📥', '\\Sent': '📤', '\\Drafts': '📝', '\\Trash': '🗑️',
+  '\\Junk': '🚫', '\\All': '🗄️', '\\Archive': '🗄️', '\\Flagged': '⭐', '\\Important': '❗'
+};
+function folderIcon(f){
+  return FOLDER_ICONS[f.specialUse] || (f.path === 'INBOX' ? '📥' : '📁');
+}
+function folderLabel(f){
+  if(f.path === 'INBOX') return 'Boîte de réception';
+  // Le nom court (dernier segment) suffit à l'affichage ; le chemin complet reste dans data-path.
+  return f.name || f.path;
+}
+async function loadFolders(){
+  try{
+    folders = await requireCsbHost().emailListFolders();
+  }catch(e){
+    folders = [{ path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox' }];
+  }
+  renderFolders();
+}
+function renderFolders(){
+  const el = document.getElementById('folderList');
+  el.innerHTML = folders.map(f => `
+    <div class="folder-item ${f.path === currentMailbox ? 'active' : ''}" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}">
+      <span class="ic">${folderIcon(f)}</span>
+      <span class="nm">${escapeHtml(folderLabel(f))}</span>
+    </div>
+  `).join('');
+  el.querySelectorAll('.folder-item').forEach(item => {
+    item.addEventListener('click', () => {
+      currentMailbox = item.dataset.path;
+      renderFolders();
+      selectedMessageId = null;
+      closePreview();
+      document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l\'afficher ici.</div>';
+      loadMessages();
+    });
+  });
+}
+
+async function loadMessages(){
+  const q = document.getElementById('searchInput').value.trim();
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '↻ Chargement…';
+  try{
+    const list = await requireCsbHost().emailList(q, 40, currentMailbox);
+    messages = list.map(m => ({
+      id: m.uid,
+      snippet: '',
+      unread: m.unread,
+      from: m.from,
+      subject: m.subject,
+      date: m.date ? new Date(m.date) : null,
+      hasAttachment: m.hasAttachment
+    }));
+  }catch(e){
+    document.getElementById('msgList').innerHTML = `<div class="hint" style="padding:16px; color:var(--silk-red); font-family:sans-serif;">Erreur : ${escapeHtml(e.message)}</div>`;
+    document.getElementById('listEmpty').style.display = 'none';
+    document.getElementById('msgList').style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '↻ Actualiser';
+    return;
+  }
+  renderList();
+  btn.disabled = false;
+  btn.textContent = '↻ Actualiser';
+}
+document.getElementById('refreshBtn').addEventListener('click', loadMessages);
+document.getElementById('searchInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') loadMessages(); });
+
+function renderList(){
+  const listEl = document.getElementById('msgList');
+  const emptyEl = document.getElementById('listEmpty');
+  if(!messages.length){
+    listEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  listEl.style.display = 'block';
+  listEl.innerHTML = messages.map(m => `
+    <div class="msg-row ${m.unread ? 'unread' : ''} ${m.id === selectedMessageId ? 'selected' : ''}" data-id="${m.id}">
+      <div class="msg-top">
+        <span class="msg-from">${escapeHtml(m.from.name)}</span>
+        <span class="msg-date">${m.hasAttachment ? '<span class="msg-attach-icon" title="Contient une pièce jointe">📎</span> ' : ''}${formatDate(m.date)}</span>
+      </div>
+      <div class="msg-subject">${escapeHtml(m.subject)}</div>
+      <div class="msg-snippet">${escapeHtml(m.snippet)}</div>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.msg-row').forEach(row => {
+    row.addEventListener('click', () => openMessage(parseInt(row.dataset.id, 10)));
+  });
+}
+
+let bodyResizeObserver = null;
+let currentBodyResizeFn = null;
+// Un seul écouteur global (pas un par mail ouvert) : il rappelle simplement la fonction de
+// redimensionnement du mail actuellement affiché, mise à jour par wireBodyIframe().
+window.addEventListener('resize', () => { if(currentBodyResizeFn) currentBodyResizeFn(); });
+
+function wireBodyIframe(){
+  if(bodyResizeObserver){ bodyResizeObserver.disconnect(); bodyResizeObserver = null; }
+  currentBodyResizeFn = null;
+  const iframe = document.querySelector('.body-iframe');
+  if(!iframe) return;
+  function resizeToContent(){
+    try{
+      const doc = iframe.contentWindow.document;
+      const contentHeight = doc.documentElement.scrollHeight + 20;
+      // Même si le mail est court, le cadre doit descendre jusqu'en bas de la fenêtre —
+      // on prend donc le plus grand des deux : la hauteur du contenu, ou l'espace restant
+      // entre le haut du cadre et le bas de la fenêtre.
+      const top = iframe.getBoundingClientRect().top;
+      const availableHeight = window.innerHeight - top - 26;
+      iframe.style.height = Math.max(contentHeight, availableHeight) + 'px';
+    }catch(e){}
+  }
+  currentBodyResizeFn = resizeToContent;
+  iframe.addEventListener('load', () => {
+    resizeToContent();
+    // Le contenu peut encore changer de hauteur après le chargement (images qui finissent
+    // d'arriver, polices, etc.) — on observe le corps de l'iframe pour continuer à l'ajuster.
+    try{
+      const obs = new ResizeObserver(resizeToContent);
+      obs.observe(iframe.contentWindow.document.documentElement);
+      bodyResizeObserver = obs;
+    }catch(e){}
+  });
+}
+
+async function openMessage(id){
+  selectedMessageId = id;
+  renderList();
+  closePreview();
+  const pane = document.getElementById('detailContent');
+  pane.innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Chargement…</div>';
+  try{
+    const m = await requireCsbHost().emailGetMessage(id, currentMailbox);
+    currentAttachments = m.attachments || [];
+    // L'ouverture marque le mail comme lu côté serveur — on reflète ça tout de suite dans la
+    // liste locale sans attendre un rechargement complet.
+    const localMsg = messages.find(x => x.id === id);
+    if(localMsg) localMsg.unread = false;
+    renderList();
+    const wrappedHtml = m.html ? `<style>
+      html,body{ margin:0; padding:0; font-family:sans-serif; font-size:14px; }
+      img{ max-width:100% !important; height:auto !important; }
+      table{ max-width:100% !important; }
+      pre{ white-space:pre-wrap; word-break:break-word; }
+      *{ max-width:100%; box-sizing:border-box; }
+    </style>${m.html}` : '';
+    const bodyHtml = m.html
+      ? `<iframe class="body-iframe" sandbox="allow-same-origin" srcdoc="${escapeHtml(wrappedHtml)}"></iframe>`
+      : `<div style="white-space:pre-wrap;">${escapeHtml(m.text || '')}</div>`;
+    const isTrash = folders.some(f => f.path === currentMailbox && f.specialUse === '\\Trash');
+    pane.innerHTML = `
+      <div class="detail-toolbar">
+        ${isTrash ? '' : '<button class="btn ghost icon" id="deleteMsgBtn" title="Supprimer (déplace vers la Corbeille)">🗑️</button>'}
+        <button class="btn ghost icon" id="toggleReadBtn" title="Marquer comme non lu">✉️</button>
+      </div>
+      <h2 class="detail-subject">${escapeHtml(m.subject)}</h2>
+      <div class="detail-meta"><strong>${escapeHtml(m.from.name)}</strong> ${m.from.email !== m.from.name ? '&lt;' + escapeHtml(m.from.email) + '&gt;' : ''}</div>
+      <div class="detail-meta">À : ${escapeHtml(m.to || '')}</div>
+      <div class="detail-meta">${m.date ? new Date(m.date).toLocaleString('fr-FR') : ''}</div>
+      ${currentAttachments.length ? `<div class="attach-list" id="attachList"></div>` : ''}
+      <div class="detail-body">${bodyHtml}</div>
+    `;
+    wireBodyIframe();
+    const deleteBtn = document.getElementById('deleteMsgBtn');
+    if(deleteBtn) deleteBtn.addEventListener('click', () => deleteMessage(id));
+    document.getElementById('toggleReadBtn').addEventListener('click', () => toggleReadStatus(id));
+    if(currentAttachments.length){
+      const attachListEl = document.getElementById('attachList');
+      attachListEl.innerHTML = currentAttachments.map((a, i) => `
+        <div class="attach-chip" data-idx="${i}">
+          <span class="ic">${attachIcon(a.contentType)}</span>
+          <span class="meta"><span class="fn">${escapeHtml(a.filename)}</span><span class="sz">${formatSize(a.size)}</span></span>
+        </div>
+      `).join('');
+      attachListEl.querySelectorAll('.attach-chip').forEach(chip => {
+        chip.addEventListener('click', () => previewAttachment(parseInt(chip.dataset.idx, 10)));
+      });
+    }
+  }catch(e){
+    pane.innerHTML = `<div class="hint" style="color:var(--silk-red); font-family:sans-serif;">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function deleteMessage(id){
+  if(!confirm('Déplacer ce mail vers la Corbeille ?')) return;
+  try{
+    await requireCsbHost().emailMoveToTrash(id, currentMailbox);
+    messages = messages.filter(m => m.id !== id);
+    selectedMessageId = null;
+    renderList();
+    closePreview();
+    document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l\'afficher ici.</div>';
+  }catch(e){ alert('Erreur : ' + e.message); }
+}
+
+async function toggleReadStatus(id){
+  const localMsg = messages.find(m => m.id === id);
+  const makeUnread = localMsg ? !localMsg.unread : false;
+  try{
+    const host = requireCsbHost();
+    if(makeUnread) await host.emailSetFlags(id, currentMailbox, [], ['\\Seen']);
+    else await host.emailSetFlags(id, currentMailbox, ['\\Seen'], []);
+    if(localMsg) localMsg.unread = makeUnread;
+    renderList();
+    const btn = document.getElementById('toggleReadBtn');
+    if(btn) btn.title = makeUnread ? 'Marquer comme lu' : 'Marquer comme non lu';
+  }catch(e){ alert('Erreur : ' + e.message); }
+}
+
+function attachIcon(contentType){
+  contentType = contentType || '';
+  if(contentType.startsWith('image/')) return '🖼️';
+  if(contentType === 'application/pdf') return '📄';
+  if(contentType.startsWith('text/')) return '📝';
+  if(contentType.includes('spreadsheet') || contentType.includes('excel')) return '📊';
+  return '📎';
+}
+
+function closePreview(){
+  if(currentPreviewUrl){ URL.revokeObjectURL(currentPreviewUrl); currentPreviewUrl = null; }
+  document.getElementById('previewHead').style.display = 'none';
+  document.getElementById('previewBody').innerHTML = '<div id="previewEmpty">Clique sur une pièce jointe pour l\'afficher ici.</div>';
+  document.querySelectorAll('.attach-chip.selected').forEach(c => c.classList.remove('selected'));
+}
+document.getElementById('previewCloseBtn').addEventListener('click', closePreview);
+
+function previewAttachment(idx){
+  const a = currentAttachments[idx];
+  if(!a) return;
+  document.querySelectorAll('.attach-chip').forEach(c => c.classList.remove('selected'));
+  const chip = document.querySelector(`.attach-chip[data-idx="${idx}"]`);
+  if(chip) chip.classList.add('selected');
+
+  document.getElementById('previewHead').style.display = 'flex';
+  document.getElementById('previewFilename').textContent = a.filename;
+  const bodyEl = document.getElementById('previewBody');
+
+  try{
+    if(!a.contentBase64) throw new Error('Contenu de la pièce jointe introuvable.');
+    const bytes = b64ToBytes(a.contentBase64);
+    if(currentPreviewUrl){ URL.revokeObjectURL(currentPreviewUrl); }
+    const blob = new Blob([bytes], { type: a.contentType });
+    currentPreviewUrl = URL.createObjectURL(blob);
+
+    if(a.contentType.startsWith('image/')){
+      bodyEl.innerHTML = `<img src="${currentPreviewUrl}" alt="${escapeHtml(a.filename)}">`;
+    } else if(a.contentType === 'application/pdf'){
+      bodyEl.innerHTML = `<embed src="${currentPreviewUrl}" type="application/pdf">`;
+    } else if(a.contentType.startsWith('text/')){
+      const text = new TextDecoder('utf-8').decode(bytes);
+      bodyEl.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+    } else {
+      bodyEl.innerHTML = `
+        <div id="previewEmpty">
+          <div style="font-size:2.4rem; margin-bottom:10px;">${attachIcon(a.contentType)}</div>
+          Aperçu non disponible pour ce type de fichier.<br>
+          <a href="${currentPreviewUrl}" download="${escapeHtml(a.filename)}" class="btn primary" style="display:inline-block; margin-top:14px; text-decoration:none;">⭳ Enregistrer le fichier</a>
+        </div>`;
+    }
+  }catch(e){
+    bodyEl.innerHTML = `<div id="previewEmpty" style="color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ---------- Redimensionnement des colonnes ----------
+function initPaneResizer(resizerId, paneId, side, storageKey, defaultPercent, minWidth, maxWidth){
+  const resizer = document.getElementById(resizerId);
+  const pane = document.getElementById(paneId);
+  if(!resizer || !pane) return;
+  function applyWidth(px){ pane.style.width = Math.round(px) + 'px'; }
+  let saved = null;
+  try{ const v = parseFloat(localStorage.getItem(storageKey)); if(v > 0) saved = v; }catch(e){}
+  applyWidth(saved || window.innerWidth * defaultPercent);
+  let dragging = false, startX = 0, startWidth = 0;
+  resizer.addEventListener('mousedown', (e) => {
+    dragging = true; startX = e.clientX; startWidth = pane.getBoundingClientRect().width;
+    resizer.classList.add('dragging');
+    document.body.style.userSelect = 'none'; document.body.style.cursor = 'col-resize';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if(!dragging) return;
+    const delta = e.clientX - startX;
+    let newWidth = side === 'left' ? startWidth + delta : startWidth - delta;
+    newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+    applyWidth(newWidth);
+    if(currentBodyResizeFn) currentBodyResizeFn();
+  });
+  document.addEventListener('mouseup', () => {
+    if(!dragging) return;
+    dragging = false; resizer.classList.remove('dragging');
+    document.body.style.userSelect = ''; document.body.style.cursor = '';
+    try{ localStorage.setItem(storageKey, parseFloat(pane.style.width)); }catch(e){}
+  });
+}
+initPaneResizer('foldersResizer', 'foldersPane', 'left', 'csb_email_folders_w', 0.13, 160, 400);
+initPaneResizer('listResizer', 'listPane', 'left', 'csb_email_list_w', 0.24, 260, 600);
+initPaneResizer('previewResizer', 'previewPane', 'right', 'csb_email_preview_w', 0.3, 300, 800);
+
+function updateHeaderHeight(){
+  const h = document.getElementById('pageHeader').offsetHeight;
+  document.documentElement.style.setProperty('--header-h', h + 'px');
+}
+window.addEventListener('resize', updateHeaderHeight);
+new ResizeObserver(updateHeaderHeight).observe(document.getElementById('pageHeader'));
+
+// ---------- Démarrage ----------
+(async function init(){
+  updateHeaderHeight();
+  const status = await refreshStatus();
+  if(status.connected){
+    loadFolders();
+    loadMessages();
+  }
+})();
+</script>
+</body>
+</html>

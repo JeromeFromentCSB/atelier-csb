@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vectorisation Broderie — Atelier CSB</title>
+<style>
+  :root{
+    --paper: #FAF6EF; --paper-dim: #F1EADC; --ink: #2A2622; --ink-soft: #6B6155;
+    --line: #E2D8C6; --thread: #B33A3A; --thread-dark: #8E2B2B; --spool-gold: #C08A2E;
+    --vert: #3E7A52; --vert-bg: #E4EFE6;
+    --shadow: 0 1px 2px rgba(42,38,34,.06), 0 4px 14px rgba(42,38,34,.05);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; height:100%;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    font-size:14px;
+  }
+  .app{display:flex; height:100vh;}
+
+  .panel-options{
+    width:320px; flex:none; background:#fff; border-right:2px solid var(--ink);
+    padding:18px 18px 24px; overflow-y:auto;
+  }
+  .panel-options h1{font-family:Georgia,serif; font-size:17px; margin:0 0 16px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block; font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; font-weight:600;}
+  .field .hint{font-size:11.5px; color:var(--ink-soft); margin-top:4px; text-transform:none; letter-spacing:0; font-weight:400;}
+  input[type=file]{font-size:12.5px; width:100%;}
+  input[type=number]{
+    width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:7px;
+    font-family:inherit; font-size:13px; background:#fff; color:var(--ink);
+  }
+  input[type=range]{width:100%; accent-color:var(--thread);}
+  .radio-group{display:flex; flex-direction:column; gap:6px;}
+  .radio-group label, .checks label{
+    display:flex; align-items:center; gap:8px; font-size:13px; font-weight:400;
+    text-transform:none; letter-spacing:0; color:var(--ink); cursor:pointer;
+  }
+  .checks{display:flex; flex-direction:column; gap:8px;}
+  input[type=radio], input[type=checkbox]{width:auto; accent-color:var(--thread);}
+
+  button{
+    font-family:inherit; cursor:pointer; border:1px solid var(--line); background:#fff;
+    color:var(--ink); padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600;
+  }
+  button:hover{border-color:var(--ink-soft); background:var(--paper-dim);}
+  button.primary{background:var(--thread); border-color:var(--thread-dark); color:#fff; width:100%; padding:11px; font-size:14px;}
+  button.primary:hover{background:var(--thread-dark);}
+  button.primary:disabled{opacity:.45; cursor:not-allowed; background:var(--thread);}
+  button.secondary{background:var(--paper-dim);}
+
+  #status{font-size:12px; color:var(--ink-soft); margin-top:10px; min-height:16px;}
+  #status.err{color:var(--thread-dark); font-weight:600;}
+  #status.ok{color:var(--vert); font-weight:600;}
+
+  .panel-preview{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .preview-tabs{display:flex; gap:2px; padding:10px 16px 0; border-bottom:1.5px solid var(--ink); background:#fff;}
+  .preview-tabs .tab{
+    border:none; border-bottom:2.5px solid transparent; border-radius:0; background:none;
+    padding:9px 14px; color:var(--ink-soft); font-weight:600;
+  }
+  .preview-tabs .tab.active{color:var(--ink); border-bottom-color:var(--thread);}
+  .preview-area{
+    flex:1; overflow:auto; display:flex; align-items:center; justify-content:center;
+    padding:24px; background:
+      linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+    background-size:20px 20px; background-position:0 0, 0 10px, 10px -10px, -10px 0px; background-color:#fff;
+  }
+  .preview-area img, .preview-area svg{max-width:100%; max-height:100%; box-shadow:var(--shadow);}
+  .preview-area .empty{color:var(--ink-soft); font-size:13px; text-align:center; max-width:320px;}
+  .preview-actions{
+    display:flex; gap:10px; padding:12px 16px; border-top:1.5px solid var(--line); background:#fff;
+  }
+  .spinner{
+    width:26px; height:26px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--thread);
+    animation:spin .8s linear infinite; margin:0 auto 10px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel-options">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <h1 style="margin:0;">🎨 Vectorisation Broderie</h1>
+      <button class="secondary" id="aiSettingsBtn" title="Réglages IA (OpenAI)" style="padding:6px 9px;">⚙︎</button>
+    </div>
+
+    <div class="field" id="aiSettingsPanel" style="display:none; border:1px solid var(--line); border-radius:8px; padding:12px; background:var(--paper-dim);">
+      <label>Clé API OpenAI</label>
+      <input type="password" id="openaiApiKey" placeholder="sk-...">
+      <div class="hint" style="margin-bottom:8px;">Stockée uniquement sur ce poste. Nécessaire pour "Nettoyer avec l'IA" — chaque nettoyage a un coût sur ton compte OpenAI.</div>
+      <label>Modèle</label>
+      <input type="text" id="openaiModel" value="gpt-image-1">
+      <div style="margin-top:8px;"><button id="aiSettingsSaveBtn">Enregistrer</button> <span class="hint" id="aiSettingsMsg"></span></div>
+    </div>
+
+    <div class="field">
+      <label>Image</label>
+      <input type="file" id="imgInput" accept="image/*">
+      <div class="hint" id="imgName">Aucune image chargée.</div>
+    </div>
+
+    <div class="field">
+      <button class="secondary" id="aiCleanupBtn" disabled style="width:100%;">🪄 Nettoyer avec l'IA</button>
+      <div class="hint">Redessine l'image en version simplifiée (formes pleines, moins de détail) avant vectorisation — utile pour les logos/dessins trop fins. Optionnel, nécessite une clé API OpenAI (⚙︎ ci-dessus).</div>
+    </div>
+
+    <div class="field">
+      <label>Profil</label>
+      <div class="radio-group">
+        <label><input type="radio" name="imgtype" value="logo_couleur" checked> LOGO COULEUR</label>
+        <label><input type="radio" name="imgtype" value="dtf"> DTF</label>
+        <label><input type="radio" name="imgtype" value="broderie"> BRODERIE</label>
+      </div>
+      <div class="hint" id="profileHint">Fidélité visuelle maximale, couleurs franches — pour logo destiné à être réutilisé tel quel.</div>
+    </div>
+
+    <div class="field">
+      <label for="numColors">Nombre de couleurs</label>
+      <input type="number" id="numColors" min="1" max="64" value="3">
+    </div>
+
+    <div class="field">
+      <label for="minDetail">Détail minimum (mm)</label>
+      <input type="number" id="minDetail" min="0.1" max="10" step="0.1" value="0.7">
+      <div class="hint">Estimé pour une broderie d'environ 100 mm de large — à affiner à l'œil sur l'aperçu selon la taille réelle.</div>
+    </div>
+
+    <div class="field" id="targetWidthField">
+      <label for="targetWidthMm">Largeur finale du motif (mm)</label>
+      <input type="number" id="targetWidthMm" min="5" max="500" step="1" value="100">
+      <div class="hint">Utilisée uniquement par le contrôle qualité du profil BRODERIE, pour adapter les seuils à la taille réelle de la broderie (un motif de 50 mm et un motif de 300 mm ne sont pas jugés avec la même exigence).</div>
+    </div>
+
+    <div class="field">
+      <label for="simplification">Simplification — <span id="simplificationVal">70 %</span></label>
+      <input type="range" id="simplification" min="0" max="100" value="70">
+    </div>
+
+    <div class="field checks">
+      <label><input type="checkbox" id="optNoise" checked> Supprimer le bruit</label>
+      <label><input type="checkbox" id="optMerge" checked> Fusionner les petites formes</label>
+      <label><input type="checkbox" id="optContours" checked> Simplifier les contours</label>
+    </div>
+
+    <button class="primary" id="vectorizeBtn" disabled>VECTORISER</button>
+    <div id="status"></div>
+
+    <div class="field" id="qcPanel" style="display:none; margin-top:18px; border:1px solid var(--line); border-radius:8px; padding:12px; background:var(--paper-dim);">
+      <label style="margin-bottom:8px;">Contrôle qualité broderie</label>
+      <div id="qcStatusBadge" style="display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:700; margin-bottom:8px;"></div>
+      <div id="qcSummary" class="hint" style="text-transform:none; margin-bottom:6px;"></div>
+      <ul id="qcMessages" style="margin:0; padding-left:18px; font-size:12.5px; color:var(--ink-soft);"></ul>
+    </div>
+  </div>
+
+  <div class="panel-preview">
+    <div class="preview-tabs">
+      <button class="tab active" data-view="original">Image d'origine</button>
+      <button class="tab" data-view="result">Résultat vectorisé</button>
+    </div>
+    <div class="preview-area" id="previewArea">
+      <div class="empty">Charge une image (logo, dessin, photo…) puis clique sur VECTORISER pour obtenir un rendu simplifié en aplats de couleur, prêt à servir de base à la numérisation broderie.</div>
+    </div>
+    <div class="preview-actions" id="previewActions" style="display:none;">
+      <button id="downloadSvgBtn">⬇ Télécharger le SVG</button>
+      <button class="secondary" id="downloadPngBtn">⬇ Télécharger en PNG</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== Vectorisation Broderie — Atelier CSB =====================
+   Traitement 100% local (aucun envoi réseau). Le moteur est VTracer (@visioncortex/vtracer,
+   Rust/WASM) — c'est un module Node, donc il tourne dans le processus principal d'Electron ;
+   ce module (chargé dans un iframe sans accès à Node) lui envoie l'image via le socle commun
+   (postMessage -> main.js -> réponse), au lieu de l'appeler directement.
+
+   "Détail minimum (mm)" est indicatif plutôt que précis : VTracer travaille en pixels de
+   l'image source, et on ne connaît pas la taille finale de la broderie. Le réglage reste
+   volontairement modeste (voir filterSpeckle plus bas) pour ne jamais effacer de vrais détails
+   par défaut — mieux vaut repartir d'un résultat trop détaillé et simplifier ensuite au curseur
+   "Simplification" que l'inverse.
+*/
+const PROFILE_HINTS = {
+  logo_couleur: "Fidélité visuelle maximale, couleurs franches — pour logo destiné à être réutilisé tel quel.",
+  dtf: "Conserve un maximum de détails et de nuances pour l'impression DTF. Le fond reste transparent si l'image source en a un (aucune suppression de fond automatique).",
+  broderie: "Profil le plus exigeant : formes fermées, nœuds réduits, couleurs séparées nettement — préparation pour numérisation Tajima DG16. Le résultat est contrôlé automatiquement (panneau ci-dessous)."
+};
+
+let reqId = 0;
+function vectorizeViaHost(rgbaUint8, width, height, options){
+  return new Promise((resolve, reject) => {
+    const id = ++reqId;
+    function onMessage(event){
+      if(!event.data || event.data.type !== 'csb:vectorize-response' || event.data.id !== id) return;
+      window.removeEventListener('message', onMessage);
+      if(event.data.error) reject(new Error(event.data.error));
+      else resolve(event.data.svg);
+    }
+    window.addEventListener('message', onMessage);
+    window.parent.postMessage(
+      { type: 'csb:vectorize-request', id, rgba: rgbaUint8.buffer, width, height, options },
+      '*',
+      [rgbaUint8.buffer]
+    );
+  });
+}
+
+let currentDataUrl = null;
+let currentImgWidthPx = null;
+let currentImgHeightPx = null;
+let currentSvgString = null;
+
+const imgInput = document.getElementById('imgInput');
+const imgName = document.getElementById('imgName');
+const vectorizeBtn = document.getElementById('vectorizeBtn');
+const statusEl = document.getElementById('status');
+const previewArea = document.getElementById('previewArea');
+const previewActions = document.getElementById('previewActions');
+const simplification = document.getElementById('simplification');
+const simplificationVal = document.getElementById('simplificationVal');
+const aiCleanupBtn = document.getElementById('aiCleanupBtn');
+
+// ---------- Réglages OpenAI (nettoyage IA, optionnel) ----------
+const OPENAI_CFG_KEY = 'csb_vectorisation_openai_config';
+function getOpenAiConfig(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(OPENAI_CFG_KEY));
+    return { apiKey: (raw && raw.apiKey) || '', model: (raw && raw.model) || 'gpt-image-1' };
+  }catch(e){ return { apiKey: '', model: 'gpt-image-1' }; }
+}
+function setOpenAiConfig(cfg){ try{ localStorage.setItem(OPENAI_CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
+
+const aiSettingsBtn = document.getElementById('aiSettingsBtn');
+const aiSettingsPanel = document.getElementById('aiSettingsPanel');
+aiSettingsBtn.addEventListener('click', () => aiSettingsPanel.style.display = aiSettingsPanel.style.display === 'none' ? 'block' : 'none');
+{
+  const cfg = getOpenAiConfig();
+  document.getElementById('openaiApiKey').value = cfg.apiKey;
+  document.getElementById('openaiModel').value = cfg.model;
+}
+document.getElementById('aiSettingsSaveBtn').addEventListener('click', () => {
+  setOpenAiConfig({
+    apiKey: document.getElementById('openaiApiKey').value.trim(),
+    model: document.getElementById('openaiModel').value.trim() || 'gpt-image-1'
+  });
+  const msg = document.getElementById('aiSettingsMsg');
+  msg.textContent = '✔ Enregistré.';
+  setTimeout(() => { msg.textContent = ''; }, 2000);
+});
+
+const AI_CLEANUP_PROMPTS = {
+  logo_couleur: "Redessine ce logo en le nettoyant légèrement pour la vectorisation : contours nets, couleurs unies, sans dégradé ni texture, tout en gardant fidèlement le même niveau de détail, la même composition et le même texte que l'original.",
+  dtf: "Nettoie légèrement cette image pour l'impression DTF : contours nets, conserve un maximum de détails et de nuances de couleur, ne simplifie pas excessivement. Garde exactement le même sujet, la même composition et le même texte.",
+  broderie: "Redessine cette image en version très simplifiée pour la broderie textile : formes pleines et épaisses, peu de couleurs unies, aucun trait fin, aucun dégradé, contours nets et arrondis. Garde exactement le même sujet, la même composition et le même texte, mais dans un style d'icône simplifiée et audacieuse."
+};
+
+async function dataUrlToBlob(dataUrl){
+  const res = await fetch(dataUrl);
+  return res.blob();
+}
+
+aiCleanupBtn.addEventListener('click', async () => {
+  if(!currentDataUrl) return;
+  const cfg = getOpenAiConfig();
+  if(!cfg.apiKey){
+    statusEl.className = 'err';
+    statusEl.textContent = "Renseigne d'abord ta clé API OpenAI (⚙︎ en haut).";
+    aiSettingsPanel.style.display = 'block';
+    return;
+  }
+  const type = document.querySelector('input[name=imgtype]:checked').value;
+  aiCleanupBtn.disabled = true;
+  vectorizeBtn.disabled = true;
+  statusEl.className = '';
+  statusEl.textContent = 'Nettoyage IA en cours (peut prendre 10-30 s)…';
+  try{
+    const blob = await dataUrlToBlob(currentDataUrl);
+    const form = new FormData();
+    form.append('model', cfg.model);
+    form.append('image', blob, 'image.png');
+    form.append('prompt', AI_CLEANUP_PROMPTS[type]);
+    form.append('size', '1024x1024');
+
+    const res = await fetch('https://api.openai.com/v1/images/edits', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + cfg.apiKey },
+      body: form
+    });
+    if(!res.ok){
+      const errBody = await res.text();
+      throw new Error('HTTP ' + res.status + ' — ' + errBody.slice(0, 200));
+    }
+    const json = await res.json();
+    const b64 = json.data && json.data[0] && json.data[0].b64_json;
+    if(!b64) throw new Error('Réponse inattendue de l\'API OpenAI.');
+
+    currentDataUrl = 'data:image/png;base64,' + b64;
+    currentSvgString = null;
+    const probe = new Image();
+    probe.onload = () => { currentImgWidthPx = probe.naturalWidth; currentImgHeightPx = probe.naturalHeight; };
+    probe.src = currentDataUrl;
+    previewActions.style.display = 'none';
+    document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'original'));
+    renderPreview('original');
+    statusEl.className = 'ok';
+    statusEl.textContent = '✔ Image nettoyée par l\'IA — vérifie le rendu puis clique sur VECTORISER.';
+  }catch(e){
+    statusEl.className = 'err';
+    statusEl.textContent = 'Erreur IA : ' + e.message;
+  }finally{
+    aiCleanupBtn.disabled = false;
+    vectorizeBtn.disabled = false;
+  }
+});
+
+simplification.addEventListener('input', () => {
+  simplificationVal.textContent = simplification.value + ' %';
+});
+
+const profileHint = document.getElementById('profileHint');
+const qcPanel = document.getElementById('qcPanel');
+document.querySelectorAll('input[name=imgtype]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    profileHint.textContent = PROFILE_HINTS[radio.value] || '';
+    if(radio.value !== 'broderie'){ qcPanel.style.display = 'none'; }
+  });
+});
+
+document.querySelectorAll('.preview-tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    renderPreview(tab.dataset.view);
+  });
+});
+
+function renderPreview(view){
+  if(view === 'original'){
+    previewArea.innerHTML = currentDataUrl ? `<img src="${currentDataUrl}" alt="Image d'origine">` : '<div class="empty">Aucune image chargée.</div>';
+  } else {
+    previewArea.innerHTML = currentSvgString || '<div class="empty">Clique sur VECTORISER pour générer le résultat.</div>';
+  }
+}
+
+imgInput.addEventListener('change', () => {
+  const file = imgInput.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    currentDataUrl = reader.result;
+    currentSvgString = null;
+    imgName.textContent = file.name;
+    const probe = new Image();
+    probe.onload = () => { currentImgWidthPx = probe.naturalWidth; currentImgHeightPx = probe.naturalHeight; };
+    probe.src = currentDataUrl;
+    vectorizeBtn.disabled = false;
+    aiCleanupBtn.disabled = false;
+    previewActions.style.display = 'none';
+    document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'original'));
+    renderPreview('original');
+    statusEl.className = ''; statusEl.textContent = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+// Construit les options VTracer pour un profil donné ("logo_couleur" | "dtf" | "broderie").
+// mode est un paramètre séparé (et non lu depuis le formulaire) pour permettre au profil
+// BRODERIE de comparer spline/polygon après coup (voir chooseBroderieMode()) sans reconstruire
+// tout l'objet d'options.
+function buildOptions(type, mode){
+  type = type || document.querySelector('input[name=imgtype]:checked').value;
+  const maxColors = Math.max(1, parseInt(document.getElementById('numColors').value, 10) || 3);
+  const minDetailMm = Math.max(0.1, parseFloat(document.getElementById('minDetail').value) || 0.5);
+  const simPct = parseInt(simplification.value, 10);
+  const noise = document.getElementById('optNoise').checked;
+  const merge = document.getElementById('optMerge').checked;
+  const contours = document.getElementById('optContours').checked;
+
+  let opts;
+
+  if(type === 'dtf'){
+    // DTF : conserver le maximum de détails et de nuances, simplification très faible,
+    // filtrage de bruit minimal pour ne pas effacer de petits détails utiles à l'impression.
+    opts = {
+      hierarchical: 'stacked',
+      mode: mode || 'spline',
+      maxColors,
+      colorPrecision: 8,                                     // conserve les nuances de couleur
+      filterSpeckle: Math.max(1, Math.round(minDetailMm)),   // flou/filtre minimal
+      simplify: +(0.1 + (simPct / 100) * 0.4).toFixed(2),     // très faible simplification
+      cornerThreshold: Math.round(85 + (simPct / 100) * 25),  // préserve les angles/détails
+      pathPrecision: 0,
+      optimize: 1
+    };
+    if(noise) opts.filterSpeckle = opts.filterSpeckle + 1;     // léger, ne supprime pas les petits détails
+    if(merge) opts.layerDifference = 4;                        // doux, pour ne pas fondre les nuances
+    if(contours) opts.cornerThreshold = Math.min(120, opts.cornerThreshold + 5);
+
+  } else if(type === 'broderie'){
+    // BRODERIE : le profil le plus exigeant — couleurs séparées nettement, nœuds réduits,
+    // filtrage adapté à la taille des détails cousables. mode par défaut 'spline' ; le choix
+    // 'polygon' n'est jamais imposé ici, il est décidé après coup par chooseBroderieMode().
+    opts = {
+      hierarchical: 'stacked',
+      mode: mode || 'spline',
+      maxColors,
+      colorPrecision: 4,                                          // faible/contrôlée
+      filterSpeckle: Math.max(3, Math.round(minDetailMm * 3)),    // adapté à la taille des détails
+      simplify: +(0.6 + (simPct / 100) * 1.6).toFixed(2),          // plus important que LOGO COULEUR
+      cornerThreshold: Math.round(90 + (simPct / 100) * 30),
+      pathPrecision: 0,
+      optimize: 1
+    };
+    if(noise) opts.filterSpeckle = opts.filterSpeckle + 2;
+    if(merge) opts.layerDifference = 12;
+    if(contours) opts.cornerThreshold = Math.min(120, opts.cornerThreshold + 10);
+
+  } else {
+    // LOGO COULEUR (défaut) : fidélité visuelle avant tout, réduction de bruit contrôlée,
+    // pas de simplification excessive des courbes.
+    opts = {
+      hierarchical: 'stacked',
+      mode: mode || 'spline',
+      maxColors,
+      colorPrecision: 6,                                          // couleurs franches mais fidèles
+      filterSpeckle: Math.max(1, Math.round(minDetailMm * 2)),
+      simplify: +(0.2 + (simPct / 100) * 0.8).toFixed(2),          // plafond bas : pas de simplification excessive
+      cornerThreshold: Math.round(70 + (simPct / 100) * 30),
+      pathPrecision: 0,
+      optimize: 1
+    };
+    if(noise) opts.filterSpeckle = opts.filterSpeckle + 1;
+    if(merge) opts.layerDifference = 8;
+    if(contours) opts.cornerThreshold = Math.min(110, opts.cornerThreshold + 5);
+  }
+
+  return opts;
+}
+
+// Intensité de base de la fusion des détails fins avant traçage (0 = aucune, 1 = très forte),
+// selon le profil. DTF : flou minimal/nul (conserver le maximum de détails utiles à l'impression).
+// LOGO COULEUR : flou léger (fidélité avant tout). BRODERIE : flou le plus fort des trois — c'est
+// le profil qui doit le plus fusionner les micro-détails non cousables. VTracer n'a pas de flou
+// intégré, d'où ce pseudo-flou par réduction/agrandissement du canvas.
+const BLUR_BASE = { logo_couleur: 0.2, dtf: 0.02, broderie: 0.45 };
+
+// Fusionne les détails fins en réduisant puis ré-agrandissant l'image (le ré-échantillonnage du
+// canvas fait le lissage/fusion) — équivalent maison d'un flou, absent de VTracer.
+function preprocessCanvas(img, blurFactor){
+  const maxDim = 1000;
+  let workW = img.naturalWidth, workH = img.naturalHeight;
+  if(Math.max(workW, workH) > maxDim){
+    const scale = maxDim / Math.max(workW, workH);
+    workW = Math.round(workW * scale); workH = Math.round(workH * scale);
+  }
+  const full = document.createElement('canvas');
+  full.width = workW; full.height = workH;
+  full.getContext('2d').drawImage(img, 0, 0, workW, workH);
+  if(blurFactor <= 0) return full;
+
+  const shrink = Math.max(0.06, 1 - blurFactor * 0.9);
+  const smallW = Math.max(10, Math.round(workW * shrink));
+  const smallH = Math.max(10, Math.round(workH * shrink));
+  const small = document.createElement('canvas');
+  small.width = smallW; small.height = smallH;
+  const sctx = small.getContext('2d');
+  sctx.imageSmoothingEnabled = true; sctx.imageSmoothingQuality = 'high';
+  sctx.drawImage(full, 0, 0, smallW, smallH);
+
+  const blurred = document.createElement('canvas');
+  blurred.width = workW; blurred.height = workH;
+  const bctx = blurred.getContext('2d');
+  bctx.imageSmoothingEnabled = true; bctx.imageSmoothingQuality = 'high';
+  bctx.drawImage(small, 0, 0, workW, workH);
+  return blurred;
+}
+
+// ===================== Contrôle qualité BRODERIE =====================
+// Aucune dépendance externe : DOMParser est natif au renderer Chromium/Electron.
+//
+// Deux familles de seuils, à ne pas confondre :
+//  - Complexité géométrique (nœuds/forme) : dépend légitimement de la largeur finale du motif —
+//    un motif de 300 mm a physiquement plus de place pour du détail qu'un motif de 50 mm.
+//  - Brodabilité physique (tailles en mm) : volontairement FIXE, jamais mise à l'échelle avec la
+//    largeur du motif. Un détail de 0.8 mm est tout aussi difficile à broder proprement sur un
+//    motif de 50 mm que sur un motif de 300 mm — c'est une limite de l'aiguille/du fil, pas de
+//    composition. Un motif "OK" côté complexité peut donc rester TROP COMPLEXE côté brodabilité.
+const EMBROIDERY_QC_CONFIG = {
+  // --- Complexité géométrique (dépend de la largeur finale, voir scaledThreshold()) ---
+  referenceWidthMm: 100,
+  avgNodesPerPathAtReference: 18,
+  maxNodesPerPathAtReference: 40,
+
+  // --- Brodabilité physique — paramètres de calibration indicatifs, PAS une norme universelle.
+  // Ordres de grandeur usuels en broderie machine (colonne satin, trait cousable) ; à ajuster
+  // sur pièce selon le fil, l'aiguille et la machine réels de l'atelier si l'expérience le montre.
+  nearZeroShapeMm: 0.3,      // forme quasi nulle : résidu/artefact plutôt qu'une vraie forme
+  minShapeSizeMm: 1.2,       // sous ce côté (largeur ET hauteur) : "micro-forme"
+  minStitchWidthMm: 0.8,     // sous ce côté (le plus petit des deux) : détail "trop fin" pour un point propre
+  filiformMinLengthMm: 3,    // longueur mini pour qu'une forme allongée soit jugée "filiforme" (sinon simple micro-forme)
+  filiformRatio: 6,          // rapport longueur/largeur à partir duquel une forme allongée est jugée "filiforme"
+  minClosedAreaMm2: 1.0,     // aire mini d'une forme fermée avant d'être signalée comme "petite zone fermée"
+  minGapMm: 0.4              // distance mini indicative entre deux petites formes voisines (approximation bounding box)
+};
+
+// Ramène un seuil "de référence" (calé sur referenceWidthMm) à la largeur finale réelle du motif.
+function scaledThreshold(baseAtReference, targetWidthMm){
+  const ref = EMBROIDERY_QC_CONFIG.referenceWidthMm;
+  const w = (targetWidthMm && targetWidthMm > 0) ? targetWidthMm : ref;
+  return baseAtReference * (w / ref);
+}
+
+// Parseur minimal du "d" d'un <path> VTracer (commandes M/L/C/Q, absolues ou relatives, + Z).
+// Calcule : bounding box (taille réelle de la forme), nombre de nœuds (un nœud = un point
+// d'ancrage tracé, hors points de contrôle des courbes), et une aire approximative par la
+// formule du lacet sur les seuls points d'ancrage (les courbes de contrôle des Bézier sont
+// ignorées) — approximation suffisante pour détecter une "petite zone fermée", pas une mesure
+// d'aire exacte.
+function parsePathBBoxAndNodes(d){
+  const re = /([MLCQZmlcqz])([^MLCQZmlcqz]*)/g;
+  let m, curX = 0, curY = 0, startX = 0, startY = 0;
+  let prevX = null, prevY = null, shoelace = 0;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let nodeCount = 0, closed = false, sawAny = false;
+  function feed(x, y){ sawAny = true; if(x < minX) minX = x; if(x > maxX) maxX = x; if(y < minY) minY = y; if(y > maxY) maxY = y; }
+  function trackVertex(x, y){ if(prevX !== null) shoelace += (prevX * y - x * prevY); prevX = x; prevY = y; }
+  while((m = re.exec(d)) !== null){
+    const cmd = m[1];
+    const upper = cmd.toUpperCase();
+    if(upper === 'Z'){ trackVertex(startX, startY); curX = startX; curY = startY; closed = true; nodeCount++; continue; }
+    const isRel = cmd !== upper;
+    // Tokenisation par regex plutôt que split(",", " ") : en SVG, un nombre négatif peut être
+    // collé au précédent sans séparateur ("180-74" = deux nombres 180 et -74, syntaxe valide et
+    // effectivement produite par VTracer) — un simple split() perdrait ces coordonnées.
+    const nums = m[2].match(/[+-]?(?:\d*\.\d+|\d+\.?)(?:[eE][+-]?\d+)?/g)?.map(Number) || [];
+    const arity = upper === 'C' ? 6 : upper === 'Q' ? 4 : 2;
+    for(let i = 0; i + arity <= nums.length; i += arity){
+      const chunk = nums.slice(i, i + arity);
+      for(let k = 0; k < chunk.length; k += 2){
+        let px = chunk[k], py = chunk[k + 1];
+        if(isRel){ px += curX; py += curY; }
+        feed(px, py);
+      }
+      const lastX = chunk[chunk.length - 2], lastY = chunk[chunk.length - 1];
+      curX = isRel ? curX + lastX : lastX;
+      curY = isRel ? curY + lastY : lastY;
+      if(upper === 'M' && i === 0){ startX = curX; startY = curY; }
+      trackVertex(curX, curY);
+      nodeCount++;
+    }
+  }
+  if(!sawAny) return { minX: 0, minY: 0, maxX: 0, maxY: 0, widthPx: 0, heightPx: 0, nodeCount, closed, areaPxApprox: 0 };
+  return { minX, minY, maxX, maxY, widthPx: maxX - minX, heightPx: maxY - minY, nodeCount, closed, areaPxApprox: Math.abs(shoelace) / 2 };
+}
+
+// Analyse un SVG produit par VTracer et rend un rapport structuré exploitable par l'interface.
+// targetWidthMm/targetHeightMm : taille finale prévue du motif brodé — sert uniquement à adapter
+// les seuils de complexité (voir EMBROIDERY_QC_CONFIG) ; si absent, retombe sur une largeur de
+// référence de 100 mm.
+function analyzeSvgForEmbroidery(svgString, targetWidthMm, targetHeightMm){
+  const result = {
+    status: 'ERREUR', messages: [],
+    pathCount: 0, colorCount: 0, totalNodes: 0, avgNodesPerPath: 0,
+    paths: [], openPaths: [], nearZeroShapes: [], strayShapes: [],
+    microShapes: [], tooThinShapes: [], filiformShapes: [], smallClosedAreas: [], closeShapePairs: 0,
+    targetWidthMm: null, targetHeightMm: null
+  };
+  if(!svgString){ result.messages.push('Aucun SVG à analyser.'); return result; }
+
+  let doc;
+  try{
+    doc = new DOMParser().parseFromString(svgString, 'image/svg+xml');
+    if(doc.querySelector('parsererror')) throw new Error('SVG invalide.');
+  }catch(e){
+    result.messages.push("Erreur d'analyse du SVG : " + e.message);
+    return result;
+  }
+
+  const svgEl = doc.documentElement;
+  const svgWidthPx = parseFloat(svgEl.getAttribute('width')) || 0;
+  const svgHeightPx = parseFloat(svgEl.getAttribute('height')) || 0;
+  const pathEls = Array.from(doc.querySelectorAll('path'));
+
+  if(pathEls.length === 0){
+    result.status = 'ERREUR';
+    result.messages.push('Aucune forme détectée dans le SVG.');
+    return result;
+  }
+
+  const effWidthMm = (targetWidthMm && targetWidthMm > 0) ? targetWidthMm : EMBROIDERY_QC_CONFIG.referenceWidthMm;
+  const effHeightMm = (targetHeightMm && targetHeightMm > 0)
+    ? targetHeightMm
+    : (svgWidthPx > 0 ? effWidthMm * (svgHeightPx / svgWidthPx) : effWidthMm);
+  const scaleX = svgWidthPx > 0 ? effWidthMm / svgWidthPx : 1;
+  const scaleY = svgHeightPx > 0 ? effHeightMm / svgHeightPx : 1;
+
+  const colors = new Set();
+  let totalNodes = 0;
+
+  pathEls.forEach((el, idx) => {
+    const d = el.getAttribute('d') || '';
+    const fill = (el.getAttribute('fill') || '').toLowerCase();
+    if(fill) colors.add(fill);
+    const geo = parsePathBBoxAndNodes(d);
+    const widthMm = geo.widthPx * scaleX;
+    const heightMm = geo.heightPx * scaleY;
+    const areaMm2 = geo.areaPxApprox * scaleX * scaleY;
+    const longSideMm = Math.max(widthMm, heightMm);
+    const shortSideMm = Math.min(widthMm, heightMm);
+    const info = {
+      index: idx, fill, nodeCount: geo.nodeCount, closed: geo.closed,
+      widthMm: +widthMm.toFixed(2), heightMm: +heightMm.toFixed(2),
+      shortSideMm: +shortSideMm.toFixed(2), longSideMm: +longSideMm.toFixed(2), areaMm2: +areaMm2.toFixed(2),
+      minX: geo.minX * scaleX, maxX: geo.maxX * scaleX, minY: geo.minY * scaleY, maxY: geo.maxY * scaleY
+    };
+    result.paths.push(info);
+    totalNodes += geo.nodeCount;
+
+    if(!geo.closed) result.openPaths.push(info);
+
+    const isNearZero = shortSideMm <= EMBROIDERY_QC_CONFIG.nearZeroShapeMm;
+    const isMicro = !isNearZero && longSideMm <= EMBROIDERY_QC_CONFIG.minShapeSizeMm;
+    const isTooThin = !isNearZero && shortSideMm <= EMBROIDERY_QC_CONFIG.minStitchWidthMm;
+    const isFiliform = longSideMm >= EMBROIDERY_QC_CONFIG.filiformMinLengthMm
+      && (longSideMm / Math.max(shortSideMm, 0.001)) >= EMBROIDERY_QC_CONFIG.filiformRatio;
+    const isSmallClosedArea = geo.closed && !isNearZero && areaMm2 < EMBROIDERY_QC_CONFIG.minClosedAreaMm2;
+    const isStray = isNearZero && longSideMm > EMBROIDERY_QC_CONFIG.minShapeSizeMm * 3;
+
+    if(isNearZero) result.nearZeroShapes.push(info);
+    if(isStray) result.strayShapes.push(info);
+    if(isMicro) result.microShapes.push(info);
+    if(isTooThin) result.tooThinShapes.push(info);
+    if(isFiliform) result.filiformShapes.push(info);
+    if(isSmallClosedArea) result.smallClosedAreas.push(info);
+  });
+
+  // Distances entre formes voisines : approximation par écart entre bounding boxes (pas une
+  // distance géométrique exacte entre contours). Vérifié uniquement autour des petites formes
+  // (micro/trop fines/filiformes) — les grandes zones de couleurs adjacentes se touchent par
+  // construction (hierarchical:'stacked') et ce n'est pas un problème à signaler.
+  const smallIndices = new Set();
+  result.microShapes.forEach(p => smallIndices.add(p.index));
+  result.tooThinShapes.forEach(p => smallIndices.add(p.index));
+  result.filiformShapes.forEach(p => smallIndices.add(p.index));
+  const smallList = result.paths.filter(p => smallIndices.has(p.index));
+  function bboxGapMm(a, b){
+    const dx = Math.max(0, Math.max(a.minX, b.minX) - Math.min(a.maxX, b.maxX));
+    const dy = Math.max(0, Math.max(a.minY, b.minY) - Math.min(a.maxY, b.maxY));
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  let closePairsCount = 0;
+  for(let i = 0; i < smallList.length; i++){
+    for(let j = i + 1; j < smallList.length; j++){
+      if(bboxGapMm(smallList[i], smallList[j]) < EMBROIDERY_QC_CONFIG.minGapMm) closePairsCount++;
+    }
+  }
+  result.closeShapePairs = closePairsCount;
+
+  result.pathCount = pathEls.length;
+  result.colorCount = colors.size;
+  result.totalNodes = totalNodes;
+  result.avgNodesPerPath = +(totalNodes / pathEls.length).toFixed(1);
+  result.targetWidthMm = +effWidthMm.toFixed(1);
+  result.targetHeightMm = +effHeightMm.toFixed(1);
+
+  const avgThreshold = scaledThreshold(EMBROIDERY_QC_CONFIG.avgNodesPerPathAtReference, effWidthMm);
+  const maxThreshold = scaledThreshold(EMBROIDERY_QC_CONFIG.maxNodesPerPathAtReference, effWidthMm);
+  const worstPath = result.paths.reduce((m, p) => Math.max(m, p.nodeCount), 0);
+  const complexityExceeded = result.avgNodesPerPath > avgThreshold || worstPath > maxThreshold;
+
+  let status = 'OK';
+  let anyPhysicalIssue = false;
+  const messages = [];
+  messages.push(`${result.pathCount} forme(s) / ${result.totalNodes} nœud(s) (${result.avgNodesPerPath} nœud/forme en moyenne, ${result.colorCount} couleur(s)).`);
+
+  if(result.nearZeroShapes.length > 0){
+    messages.push(`${result.nearZeroShapes.length} forme(s) quasi nulle(s).`);
+    status = 'ATTENTION'; anyPhysicalIssue = true;
+  }
+  if(result.strayShapes.length > 0){
+    messages.push(`${result.strayShapes.length} forme(s) parasite(s) (résidu filiforme).`);
+    status = 'ATTENTION'; anyPhysicalIssue = true;
+  }
+  if(result.openPaths.length > 0){
+    messages.push(`${result.openPaths.length} chemin(s) ouvert(s).`);
+    status = 'ATTENTION'; anyPhysicalIssue = true;
+  }
+  if(result.microShapes.length > 0){
+    messages.push(`${result.microShapes.length} micro-forme(s) inférieure(s) à ${EMBROIDERY_QC_CONFIG.minShapeSizeMm} mm.`);
+    if(status !== 'TROP COMPLEXE') status = result.microShapes.length >= 5 ? 'TROP COMPLEXE' : 'ATTENTION';
+    anyPhysicalIssue = true;
+  }
+  if(result.tooThinShapes.length > 0){
+    messages.push(`${result.tooThinShapes.length} forme(s) trop fine(s) (sous ${EMBROIDERY_QC_CONFIG.minStitchWidthMm} mm de large).`);
+    if(status !== 'TROP COMPLEXE') status = result.tooThinShapes.length >= 3 ? 'TROP COMPLEXE' : 'ATTENTION';
+    anyPhysicalIssue = true;
+  }
+  if(result.filiformShapes.length > 0){
+    messages.push(`${result.filiformShapes.length} forme(s) filiforme(s) (rapport longueur/largeur ≥ ${EMBROIDERY_QC_CONFIG.filiformRatio}).`);
+    if(status !== 'TROP COMPLEXE') status = result.filiformShapes.length >= 3 ? 'TROP COMPLEXE' : 'ATTENTION';
+    anyPhysicalIssue = true;
+  }
+  if(result.smallClosedAreas.length > 0){
+    messages.push(`${result.smallClosedAreas.length} petite(s) zone(s) fermée(s) sous ${EMBROIDERY_QC_CONFIG.minClosedAreaMm2} mm².`);
+    if(status !== 'TROP COMPLEXE') status = 'ATTENTION';
+    anyPhysicalIssue = true;
+  }
+  if(result.closeShapePairs > 0){
+    messages.push(`${result.closeShapePairs} paire(s) de petites formes très rapprochées (< ${EMBROIDERY_QC_CONFIG.minGapMm} mm).`);
+    if(status !== 'TROP COMPLEXE') status = 'ATTENTION';
+    anyPhysicalIssue = true;
+  }
+  if(complexityExceeded){
+    messages.push(`Complexité élevée pour une largeur de ${result.targetWidthMm} mm (moyenne ${result.avgNodesPerPath} nœuds/forme, seuil indicatif ${Math.round(avgThreshold)}).`);
+    status = 'TROP COMPLEXE';
+  }
+  if(!anyPhysicalIssue && !complexityExceeded){
+    messages.push('Aucun détail inférieur au seuil configuré.');
+  }
+
+  result.status = status;
+  result.messages = messages;
+  return result;
+}
+
+// Décide, pour le profil BRODERIE uniquement, si 'polygon' doit remplacer 'spline'. Jamais
+// imposé par défaut : on ne bascule que si polygon réduit fortement la complexité (nœuds) sans
+// perdre de forme (même nombre de chemins, pas plus de chemins ouverts qu'en spline).
+function chooseBroderieMode(splineSvg, splineAnalysis, polygonSvg, polygonAnalysis){
+  const nodeReduction = splineAnalysis.totalNodes > 0
+    ? 1 - (polygonAnalysis.totalNodes / splineAnalysis.totalNodes)
+    : 0;
+  const samePathCount = polygonAnalysis.pathCount === splineAnalysis.pathCount;
+  const notMoreOpen = polygonAnalysis.openPaths.length <= splineAnalysis.openPaths.length;
+  if(nodeReduction >= 0.3 && samePathCount && notMoreOpen){
+    return { mode: 'polygon', svg: polygonSvg, analysis: polygonAnalysis, reason: `polygon réduit les nœuds de ${Math.round(nodeReduction * 100)}% sans perdre de forme.` };
+  }
+  return { mode: 'spline', svg: splineSvg, analysis: splineAnalysis, reason: nodeReduction >= 0.3 ? 'polygon réduit les nœuds mais modifie le nombre de formes/chemins ouverts — conservé spline par prudence.' : 'polygon n\'apporte pas de réduction significative — conservé spline.' };
+}
+
+function renderQcPanel(analysis, modeInfo){
+  const badge = document.getElementById('qcStatusBadge');
+  const summary = document.getElementById('qcSummary');
+  const list = document.getElementById('qcMessages');
+  const colors = { OK: ['#E4EFE6', '#3E7A52'], ATTENTION: ['#FBE8CC', '#9A6B1A'], 'TROP COMPLEXE': ['#F6DADA', '#8E2B2B'], ERREUR: ['#F6DADA', '#8E2B2B'] };
+  const [bg, fg] = colors[analysis.status] || colors.ERREUR;
+  badge.style.background = bg; badge.style.color = fg;
+  badge.textContent = analysis.status;
+  summary.textContent = modeInfo ? `Mode retenu : ${modeInfo.mode} — ${modeInfo.reason}` : '';
+  list.innerHTML = '';
+  analysis.messages.forEach(msg => {
+    const li = document.createElement('li');
+    li.textContent = msg;
+    list.appendChild(li);
+  });
+  qcPanel.style.display = 'block';
+}
+
+vectorizeBtn.addEventListener('click', async () => {
+  if(!currentDataUrl) return;
+  vectorizeBtn.disabled = true;
+  statusEl.className = '';
+  statusEl.textContent = '';
+  previewArea.innerHTML = '<div style="text-align:center;"><div class="spinner"></div><div class="empty" style="max-width:none;">Vectorisation en cours…</div></div>';
+  document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'result'));
+
+  try{
+    const img = new Image();
+    img.src = currentDataUrl;
+    await img.decode();
+
+    const type = document.querySelector('input[name=imgtype]:checked').value;
+    const simPct = parseInt(simplification.value, 10);
+    // Le curseur "Simplification" ajoute à la fusion de base propre au profil choisi.
+    const blurFactor = Math.min(0.9, BLUR_BASE[type] + (simPct / 100) * 0.4);
+    const canvas = preprocessCanvas(img, blurFactor);
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    // Copie RGBA : le canal alpha du canvas est préservé tel quel (aucun fond n'est jamais
+    // peint avant drawImage) — une image source transparente reste transparente jusqu'à
+    // VTracer, qui ignore déjà les pixels totalement transparents (vérifié empiriquement).
+    const rgba = new Uint8Array(imgData.data); // copie (le postMessage transférable détache le buffer)
+
+    if(type === 'broderie'){
+      const targetWidthMm = parseFloat(document.getElementById('targetWidthMm').value) || null;
+      const splineOpts = buildOptions(type, 'spline');
+      const splineSvg = await vectorizeViaHost(rgba, canvas.width, canvas.height, splineOpts);
+      const splineAnalysis = analyzeSvgForEmbroidery(splineSvg, targetWidthMm);
+
+      const rgba2 = new Uint8Array(imgData.data); // le buffer précédent a été détaché par le transfert
+      const polygonOpts = buildOptions(type, 'polygon');
+      const polygonSvg = await vectorizeViaHost(rgba2, canvas.width, canvas.height, polygonOpts);
+      const polygonAnalysis = analyzeSvgForEmbroidery(polygonSvg, targetWidthMm);
+
+      const chosen = chooseBroderieMode(splineSvg, splineAnalysis, polygonSvg, polygonAnalysis);
+      currentSvgString = chosen.svg;
+      renderPreview('result');
+      previewActions.style.display = 'flex';
+      renderQcPanel(chosen.analysis, chosen);
+      statusEl.className = chosen.analysis.status === 'OK' ? 'ok' : (chosen.analysis.status === 'TROP COMPLEXE' ? 'err' : '');
+      statusEl.textContent = `✔ Vectorisation terminée — contrôle qualité : ${chosen.analysis.status}.`;
+    } else {
+      qcPanel.style.display = 'none';
+      const options = buildOptions(type);
+      const svgstr = await vectorizeViaHost(rgba, canvas.width, canvas.height, options);
+      currentSvgString = svgstr;
+      renderPreview('result');
+      previewActions.style.display = 'flex';
+      statusEl.className = 'ok';
+      statusEl.textContent = '✔ Vectorisation terminée.';
+    }
+  }catch(e){
+    statusEl.className = 'err';
+    statusEl.textContent = 'Erreur : ' + e.message;
+    renderPreview('result');
+  }finally{
+    vectorizeBtn.disabled = false;
+  }
+});
+
+document.getElementById('downloadSvgBtn').addEventListener('click', () => {
+  if(!currentSvgString) return;
+  const blob = new Blob([currentSvgString], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (imgInput.files[0] ? imgInput.files[0].name.replace(/\.[^.]+$/, '') : 'vectorisation') + '.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('downloadPngBtn').addEventListener('click', () => {
+  if(!currentSvgString) return;
+  const svgBlob = new Blob([currentSvgString], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = currentImgWidthPx || img.naturalWidth || 800;
+    canvas.height = canvas.width * (img.naturalHeight / img.naturalWidth || 1);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((blob) => {
+      const pngUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = (imgInput.files[0] ? imgInput.files[0].name.replace(/\.[^.]+$/, '') : 'vectorisation') + '.png';
+      a.click();
+      URL.revokeObjectURL(pngUrl);
+    }, 'image/png');
+  };
+  img.src = url;
+});
+</script>
+</body>
+</html>

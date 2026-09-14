@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atelier CSB</title>
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="brand" title="Atelier CSB"><div class="spool"></div></div>
+    <nav id="moduleNav"></nav>
+    <div class="spacer"></div>
+    <div id="userMenuWrap" style="display:none;">
+      <button id="userMenuBtn">
+        <span id="userMenuName"></span>
+        <span class="role" id="userMenuRole"></span>
+        <span class="chev">▾</span>
+      </button>
+      <div id="userMenuDropdown">
+        <button class="ghost" id="manageUsersBtn" style="display:none;">👥 Gérer les utilisateurs</button>
+        <button class="ghost" id="logoutBtn">🚪 Se déconnecter</button>
+      </div>
+    </div>
+  </div>
+  <div id="main">
+    <div class="main-placeholder">
+      <h2>Choisis un module</h2>
+      <p>Sélectionne un module dans la barre du haut pour commencer.</p>
+    </div>
+  </div>
+  <div id="updateBanner" style="display:none;">
+    <span id="updateBannerText"></span>
+    <button class="primary" id="updateRestartBtn" style="display:none;">Redémarrer et installer</button>
+    <button class="ghost icon" id="updateBannerClose">✕</button>
+  </div>
+</div>
+
+<div id="loginOverlay">
+  <div id="loginBox">
+    <div class="brand"><div class="spool"></div><h1>Atelier CSB</h1></div>
+    <div class="subtitle">Connecte-toi pour accéder à l'application.</div>
+    <form id="loginForm">
+      <div class="field">
+        <label for="loginIdentity">Identifiant</label>
+        <select id="loginIdentity" required>
+          <option value="" disabled selected>Chargement…</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Mot de passe</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="primary" id="loginSubmitBtn">Se connecter</button>
+      <div id="loginError"></div>
+    </form>
+    <button id="loginSettingsToggle">Réglages de connexion (PocketBase)</button>
+    <div id="loginSettings">
+      <div class="field">
+        <label for="loginPbUrl">URL du serveur PocketBase</label>
+        <input type="text" id="loginPbUrl" placeholder="http://192.168.1.142:8090">
+      </div>
+      <button class="ghost" id="loginPbSaveBtn" type="button">Enregistrer</button>
+      <div class="hint">Adresse du Synology sur le réseau de l'atelier. À ne changer que si tu sais ce que tu fais.</div>
+    </div>
+  </div>
+</div>
+
+<div id="usersOverlay">
+  <div id="usersModal">
+    <div class="modal-head">
+      <h3>Utilisateurs</h3>
+      <button class="ghost icon" id="usersModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <button class="ghost" id="userAddBtn" style="margin-bottom:12px;">+ Ajouter un utilisateur</button>
+      <div id="userFormBox" style="display:none;">
+        <div class="form-grid">
+          <div class="field">
+            <label>Identifiant</label>
+            <input type="text" id="userFUsername">
+          </div>
+          <div class="field">
+            <label>Mot de passe <span id="userFPasswordHint" class="hint-inline"></span></label>
+            <input type="password" id="userFPassword">
+          </div>
+          <div class="field">
+            <label>Rôle</label>
+            <select id="userFRole">
+              <option value="user">Utilisateur</option>
+              <option value="admin">Admin (tous les droits, partout)</option>
+            </select>
+          </div>
+        </div>
+        <div id="userFPermsWrap"></div>
+        <div class="form-actions">
+          <button class="ghost" id="userFCancelBtn" type="button">Annuler</button>
+          <button class="primary" id="userFSaveBtn" type="button">Enregistrer</button>
+        </div>
+      </div>
+      <div id="usersMsg" class="hint"></div>
+      <div class="table-wrap">
+        <table id="usersTable">
+          <thead><tr><th>Identifiant</th><th>Rôle</th><th>Modules</th><th></th></tr></thead>
+          <tbody id="usersTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../shared/vendor/pocketbase.umd.js"></script>
+<script src="../shared/csb-auth.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vectorisation Broderie — Atelier CSB</title>
+<style>
+  :root{
+    --paper: #FAF6EF; --paper-dim: #F1EADC; --ink: #2A2622; --ink-soft: #6B6155;
+    --line: #E2D8C6; --thread: #B33A3A; --thread-dark: #8E2B2B; --spool-gold: #C08A2E;
+    --vert: #3E7A52; --vert-bg: #E4EFE6;
+    --shadow: 0 1px 2px rgba(42,38,34,.06), 0 4px 14px rgba(42,38,34,.05);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; height:100%;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    font-size:14px;
+  }
+  .app{display:flex; height:100vh;}
+
+  .panel-options{
+    width:320px; flex:none; background:#fff; border-right:2px solid var(--ink);
+    padding:18px 18px 24px; overflow-y:auto;
+  }
+  .panel-options h1{font-family:Georgia,serif; font-size:17px; margin:0 0 16px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block; font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; font-weight:600;}
+  .field .hint{font-size:11.5px; color:var(--ink-soft); margin-top:4px; text-transform:none; letter-spacing:0; font-weight:400;}
+  input[type=file]{font-size:12.5px; width:100%;}
+  input[type=number]{
+    width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:7px;
+    font-family:inherit; font-size:13px; background:#fff; color:var(--ink);
+  }
+  input[type=range]{width:100%; accent-color:var(--thread);}
+  .radio-group{display:flex; flex-direction:column; gap:6px;}
+  .radio-group label, .checks label{
+    display:flex; align-items:center; gap:8px; font-size:13px; font-weight:400;
+    text-transform:none; letter-spacing:0; color:var(--ink); cursor:pointer;
+  }
+  .checks{display:flex; flex-direction:column; gap:8px;}
+  input[type=radio], input[type=checkbox]{width:auto; accent-color:var(--thread);}
+
+  button{
+    font-family:inherit; cursor:pointer; border:1px solid var(--line); background:#fff;
+    color:var(--ink); padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600;
+  }
+  button:hover{border-color:var(--ink-soft); background:var(--paper-dim);}
+  button.primary{background:var(--thread); border-color:var(--thread-dark); color:#fff; width:100%; padding:11px; font-size:14px;}
+  button.primary:hover{background:var(--thread-dark);}
+  button.primary:disabled{opacity:.45; cursor:not-allowed; background:var(--thread);}
+  button.secondary{background:var(--paper-dim);}
+
+  #status{font-size:12px; color:var(--ink-soft); margin-top:10px; min-height:16px;}
+  #status.err{color:var(--thread-dark); font-weight:600;}
+  #status.ok{color:var(--vert); font-weight:600;}
+
+  .panel-preview{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .preview-tabs{display:flex; gap:2px; padding:10px 16px 0; border-bottom:1.5px solid var(--ink); background:#fff;}
+  .preview-tabs .tab{
+    border:none; border-bottom:2.5px solid transparent; border-radius:0; background:none;
+    padding:9px 14px; color:var(--ink-soft); font-weight:600;
+  }
+  .preview-tabs .tab.active{color:var(--ink); border-bottom-color:var(--thread);}
+  .preview-area{
+    flex:1; overflow:auto; display:flex; align-items:center; justify-content:center;
+    padding:24px; background:
+      linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+    background-size:20px 20px; background-position:0 0, 0 10px, 10px -10px, -10px 0px; background-color:#fff;
+  }
+  .preview-area img, .preview-area svg{max-width:100%; max-height:100%; box-shadow:var(--shadow);}
+  .preview-area .empty{color:var(--ink-soft); font-size:13px; text-align:center; max-width:320px;}
+  .preview-actions{
+    display:flex; gap:10px; padding:12px 16px; border-top:1.5px solid var(--line); background:#fff;
+  }
+  .spinner{
+    width:26px; height:26px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--thread);
+    animation:spin .8s linear infinite; margin:0 auto 10px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel-options">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <h1 style="margin:0;">🎨 Vectorisation Broderie</h1>
+      <button class="secondary" id="aiSettingsBtn" title="Réglages IA (OpenAI)" style="padding:6px 9px;">⚙︎</button>
+    </div>
+
+    <div class="field" id="aiSettingsPanel" style="display:none; border:1px solid var(--line); border-radius:8px; padding:12px; background:var(--paper-dim);">
+      <label>Clé API OpenAI</label>
+      <input type="password" id="openaiApiKey" placeholder="sk-...">
+      <div class="hint" style="margin-bottom:8px;">Stockée uniquement sur ce poste. Nécessaire pour "Nettoyer avec l'IA" — chaque nettoyage a un coût sur ton compte OpenAI.</div>
+      <label>Modèle</label>
+      <input type="text" id="openaiModel" value="gpt-image-1">
+      <div style="margin-top:8px;"><button id="aiSettingsSaveBtn">Enregistrer</button> <span class="hint" id="aiSettingsMsg"></span></div>
+    </div>
+
+    <div class="field">
+      <label>Image</label>
+      <input type="file" id="imgInput" accept="image/*">
+      <div class="hint" id="imgName">Aucune image chargée.</div>
+    </div>
+
+    <div class="field">
+      <button class="secondary" id="aiCleanupBtn" disabled style="width:100%;">🪄 Nettoyer avec l'IA</button>
+      <div class="hint">Redessine l'image en version simplifiée (formes pleines, moins de détail) avant vectorisation — utile pour les logos/dessins trop fins. Optionnel, nécessite une clé API OpenAI (⚙︎ ci-dessus).</div>
+    </div>
+
+    <div class="field">
+      <label>Type d'image</label>
+      <div class="radio-group">
+        <label><input type="radio" name="imgtype" value="logo_simple" checked> Logo simple</label>
+        <label><input type="radio" name="imgtype" value="logo_detaille"> Logo détaillé</label>
+        <label><input type="radio" name="imgtype" value="illustration"> Dessin / illustration</label>
+        <label><input type="radio" name="imgtype" value="photo"> Photo</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="numColors">Nombre de couleurs</label>
+      <input type="number" id="numColors" min="1" max="64" value="3">
+    </div>
+
+    <div class="field">
+      <label for="minDetail">Détail minimum (mm)</label>
+      <input type="number" id="minDetail" min="0.1" max="10" step="0.1" value="0.7">
+      <div class="hint">Estimé pour une broderie d'environ 100 mm de large — à affiner à l'œil sur l'aperçu selon la taille réelle.</div>
+    </div>
+
+    <div class="field">
+      <label for="simplification">Simplification — <span id="simplificationVal">70 %</span></label>
+      <input type="range" id="simplification" min="0" max="100" value="70">
+    </div>
+
+    <div class="field checks">
+      <label><input type="checkbox" id="optNoise" checked> Supprimer le bruit</label>
+      <label><input type="checkbox" id="optMerge" checked> Fusionner les petites formes</label>
+      <label><input type="checkbox" id="optContours" checked> Simplifier les contours</label>
+      <label><input type="checkbox" id="optEmbroidery" checked> Préparer pour broderie</label>
+    </div>
+
+    <button class="primary" id="vectorizeBtn" disabled>VECTORISER</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="panel-preview">
+    <div class="preview-tabs">
+      <button class="tab active" data-view="original">Image d'origine</button>
+      <button class="tab" data-view="result">Résultat vectorisé</button>
+    </div>
+    <div class="preview-area" id="previewArea">
+      <div class="empty">Charge une image (logo, dessin, photo…) puis clique sur VECTORISER pour obtenir un rendu simplifié en aplats de couleur, prêt à servir de base à la numérisation broderie.</div>
+    </div>
+    <div class="preview-actions" id="previewActions" style="display:none;">
+      <button id="downloadSvgBtn">⬇ Télécharger le SVG</button>
+      <button class="secondary" id="downloadPngBtn">⬇ Télécharger en PNG</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== Vectorisation Broderie — Atelier CSB =====================
+   Traitement 100% local (aucun envoi réseau). Le moteur est VTracer (@visioncortex/vtracer,
+   Rust/WASM) — c'est un module Node, donc il tourne dans le processus principal d'Electron ;
+   ce module (chargé dans un iframe sans accès à Node) lui envoie l'image via le socle commun
+   (postMessage -> main.js -> réponse), au lieu de l'appeler directement.
+
+   "Détail minimum (mm)" est indicatif plutôt que précis : VTracer travaille en pixels de
+   l'image source, et on ne connaît pas la taille finale de la broderie. Le réglage reste
+   volontairement modeste (voir filterSpeckle plus bas) pour ne jamais effacer de vrais détails
+   par défaut — mieux vaut repartir d'un résultat trop détaillé et simplifier ensuite au curseur
+   "Simplification" que l'inverse.
+*/
+const PRESETS = {
+  logo_simple:    { preset: 'poster', hierarchical: 'stacked', mode: 'spline' },
+  logo_detaille:  { preset: 'poster', hierarchical: 'stacked', mode: 'spline' },
+  illustration:   { hierarchical: 'stacked', mode: 'spline' },
+  photo:          { preset: 'photo', hierarchical: 'cutout', mode: 'spline' }
+};
+
+let reqId = 0;
+function vectorizeViaHost(rgbaUint8, width, height, options){
+  return new Promise((resolve, reject) => {
+    const id = ++reqId;
+    function onMessage(event){
+      if(!event.data || event.data.type !== 'csb:vectorize-response' || event.data.id !== id) return;
+      window.removeEventListener('message', onMessage);
+      if(event.data.error) reject(new Error(event.data.error));
+      else resolve(event.data.svg);
+    }
+    window.addEventListener('message', onMessage);
+    window.parent.postMessage(
+      { type: 'csb:vectorize-request', id, rgba: rgbaUint8.buffer, width, height, options },
+      '*',
+      [rgbaUint8.buffer]
+    );
+  });
+}
+
+let currentDataUrl = null;
+let currentImgWidthPx = null;
+let currentImgHeightPx = null;
+let currentSvgString = null;
+
+const imgInput = document.getElementById('imgInput');
+const imgName = document.getElementById('imgName');
+const vectorizeBtn = document.getElementById('vectorizeBtn');
+const statusEl = document.getElementById('status');
+const previewArea = document.getElementById('previewArea');
+const previewActions = document.getElementById('previewActions');
+const simplification = document.getElementById('simplification');
+const simplificationVal = document.getElementById('simplificationVal');
+const aiCleanupBtn = document.getElementById('aiCleanupBtn');
+
+// ---------- Réglages OpenAI (nettoyage IA, optionnel) ----------
+const OPENAI_CFG_KEY = 'csb_vectorisation_openai_config';
+function getOpenAiConfig(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(OPENAI_CFG_KEY));
+    return { apiKey: (raw && raw.apiKey) || '', model: (raw && raw.model) || 'gpt-image-1' };
+  }catch(e){ return { apiKey: '', model: 'gpt-image-1' }; }
+}
+function setOpenAiConfig(cfg){ try{ localStorage.setItem(OPENAI_CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
+
+const aiSettingsBtn = document.getElementById('aiSettingsBtn');
+const aiSettingsPanel = document.getElementById('aiSettingsPanel');
+aiSettingsBtn.addEventListener('click', () => aiSettingsPanel.style.display = aiSettingsPanel.style.display === 'none' ? 'block' : 'none');
+{
+  const cfg = getOpenAiConfig();
+  document.getElementById('openaiApiKey').value = cfg.apiKey;
+  document.getElementById('openaiModel').value = cfg.model;
+}
+document.getElementById('aiSettingsSaveBtn').addEventListener('click', () => {
+  setOpenAiConfig({
+    apiKey: document.getElementById('openaiApiKey').value.trim(),
+    model: document.getElementById('openaiModel').value.trim() || 'gpt-image-1'
+  });
+  const msg = document.getElementById('aiSettingsMsg');
+  msg.textContent = '✔ Enregistré.';
+  setTimeout(() => { msg.textContent = ''; }, 2000);
+});
+
+const AI_CLEANUP_PROMPTS = {
+  logo_simple: "Redessine ce logo en version très simplifiée pour la broderie textile : formes pleines et épaisses, 2 à 4 couleurs unies maximum, aucun trait fin, aucun dégradé, contours nets et arrondis. Garde exactement le même sujet, la même composition et le même texte, mais dans un style d'icône minimaliste et audacieuse.",
+  logo_detaille: "Redessine ce logo en le simplifiant pour la broderie textile : épaissis les traits fins, réduis les dégradés, limite le nombre de couleurs, tout en gardant un peu plus de détail qu'une icône minimaliste. Garde exactement le même sujet, la même composition et le même texte.",
+  illustration: "Simplifie ce dessin/cette illustration pour la broderie textile : aplats de couleurs francs, contours nets et épais, réduis fortement les détails fins tout en gardant la composition reconnaissable.",
+  photo: "Transforme cette photo en illustration simplifiée façon affiche/poster, avec des aplats de couleurs francs et des contours nets, en réduisant fortement les textures et détails fins — optimisée pour la broderie textile."
+};
+
+async function dataUrlToBlob(dataUrl){
+  const res = await fetch(dataUrl);
+  return res.blob();
+}
+
+aiCleanupBtn.addEventListener('click', async () => {
+  if(!currentDataUrl) return;
+  const cfg = getOpenAiConfig();
+  if(!cfg.apiKey){
+    statusEl.className = 'err';
+    statusEl.textContent = "Renseigne d'abord ta clé API OpenAI (⚙︎ en haut).";
+    aiSettingsPanel.style.display = 'block';
+    return;
+  }
+  const type = document.querySelector('input[name=imgtype]:checked').value;
+  aiCleanupBtn.disabled = true;
+  vectorizeBtn.disabled = true;
+  statusEl.className = '';
+  statusEl.textContent = 'Nettoyage IA en cours (peut prendre 10-30 s)…';
+  try{
+    const blob = await dataUrlToBlob(currentDataUrl);
+    const form = new FormData();
+    form.append('model', cfg.model);
+    form.append('image', blob, 'image.png');
+    form.append('prompt', AI_CLEANUP_PROMPTS[type]);
+    form.append('size', '1024x1024');
+
+    const res = await fetch('https://api.openai.com/v1/images/edits', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + cfg.apiKey },
+      body: form
+    });
+    if(!res.ok){
+      const errBody = await res.text();
+      throw new Error('HTTP ' + res.status + ' — ' + errBody.slice(0, 200));
+    }
+    const json = await res.json();
+    const b64 = json.data && json.data[0] && json.data[0].b64_json;
+    if(!b64) throw new Error('Réponse inattendue de l\'API OpenAI.');
+
+    currentDataUrl = 'data:image/png;base64,' + b64;
+    currentSvgString = null;
+    const probe = new Image();
+    probe.onload = () => { currentImgWidthPx = probe.naturalWidth; currentImgHeightPx = probe.naturalHeight; };
+    probe.src = currentDataUrl;
+    previewActions.style.display = 'none';
+    document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'original'));
+    renderPreview('original');
+    statusEl.className = 'ok';
+    statusEl.textContent = '✔ Image nettoyée par l\'IA — vérifie le rendu puis clique sur VECTORISER.';
+  }catch(e){
+    statusEl.className = 'err';
+    statusEl.textContent = 'Erreur IA : ' + e.message;
+  }finally{
+    aiCleanupBtn.disabled = false;
+    vectorizeBtn.disabled = false;
+  }
+});
+
+simplification.addEventListener('input', () => {
+  simplificationVal.textContent = simplification.value + ' %';
+});
+
+document.querySelectorAll('.preview-tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    renderPreview(tab.dataset.view);
+  });
+});
+
+function renderPreview(view){
+  if(view === 'original'){
+    previewArea.innerHTML = currentDataUrl ? `<img src="${currentDataUrl}" alt="Image d'origine">` : '<div class="empty">Aucune image chargée.</div>';
+  } else {
+    previewArea.innerHTML = currentSvgString || '<div class="empty">Clique sur VECTORISER pour générer le résultat.</div>';
+  }
+}
+
+imgInput.addEventListener('change', () => {
+  const file = imgInput.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    currentDataUrl = reader.result;
+    currentSvgString = null;
+    imgName.textContent = file.name;
+    const probe = new Image();
+    probe.onload = () => { currentImgWidthPx = probe.naturalWidth; currentImgHeightPx = probe.naturalHeight; };
+    probe.src = currentDataUrl;
+    vectorizeBtn.disabled = false;
+    aiCleanupBtn.disabled = false;
+    previewActions.style.display = 'none';
+    document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'original'));
+    renderPreview('original');
+    statusEl.className = ''; statusEl.textContent = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+function buildOptions(){
+  const type = document.querySelector('input[name=imgtype]:checked').value;
+  const preset = { ...PRESETS[type] };
+
+  const maxColors = Math.max(1, parseInt(document.getElementById('numColors').value, 10) || 3);
+  const minDetailMm = Math.max(0.1, parseFloat(document.getElementById('minDetail').value) || 0.5);
+  const simPct = parseInt(simplification.value, 10);
+
+  // "Détail minimum" -> filterSpeckle (en pixels de l'image source, pas en pixels de broderie
+  // réels puisqu'on ne connaît pas la taille finale). Volontairement indépendant de la résolution
+  // de l'image : un filtre calculé à partir de la largeur en pixels devenait bien trop agressif
+  // sur une grande photo (des milliers de pixels de large) et effaçait de vrais détails.
+  let filterSpeckle = Math.max(1, Math.round(minDetailMm * 3));
+
+  // 0-100% -> tolérance de simplification des courbes (px) : plus haut = moins de points.
+  const simplify = +(0.2 + (simPct / 100) * 1.8).toFixed(2);
+  const cornerThreshold = Math.round(60 + (simPct / 100) * 40); // 60..100°
+
+  const opts = {
+    ...preset,
+    maxColors,
+    filterSpeckle,
+    simplify,
+    cornerThreshold,
+    pathPrecision: 3
+  };
+
+  if(document.getElementById('optNoise').checked){
+    opts.filterSpeckle = opts.filterSpeckle + 2;
+  }
+  if(document.getElementById('optMerge').checked){
+    // Fusionne les formes de couleurs proches entre elles (distinct du bruit ci-dessus).
+    opts.layerDifference = 10;
+  }
+  if(document.getElementById('optContours').checked){
+    opts.cornerThreshold = Math.min(120, opts.cornerThreshold + 10);
+  }
+  if(document.getElementById('optEmbroidery').checked){
+    // La broderie n'aime pas les micro-îlots ni les tracés non refermés :
+    // léger plancher de filtrage, sans écraser le réglage "Détail minimum".
+    opts.filterSpeckle = Math.max(opts.filterSpeckle, 3);
+    opts.hierarchical = 'stacked';
+  }
+  return opts;
+}
+
+// Intensité de base de la fusion des détails fins avant traçage (0 = aucune, 1 = très forte),
+// selon le type d'image. "Logo simple" en a besoin le plus : un dessin au trait fin (mobilier,
+// lettrage...) reste une seule forme complexe pour le traceur tant que ses traits ne sont pas
+// visuellement épaissis/fusionnés en amont — VTracer lui-même n'a pas de flou intégré.
+const BLUR_BASE = { logo_simple: 0.4, logo_detaille: 0.18, illustration: 0.12, photo: 0 };
+
+// Fusionne les détails fins en réduisant puis ré-agrandissant l'image (le ré-échantillonnage du
+// canvas fait le lissage/fusion) — équivalent maison d'un flou, absent de VTracer.
+function preprocessCanvas(img, blurFactor){
+  const maxDim = 1000;
+  let workW = img.naturalWidth, workH = img.naturalHeight;
+  if(Math.max(workW, workH) > maxDim){
+    const scale = maxDim / Math.max(workW, workH);
+    workW = Math.round(workW * scale); workH = Math.round(workH * scale);
+  }
+  const full = document.createElement('canvas');
+  full.width = workW; full.height = workH;
+  full.getContext('2d').drawImage(img, 0, 0, workW, workH);
+  if(blurFactor <= 0) return full;
+
+  const shrink = Math.max(0.06, 1 - blurFactor * 0.9);
+  const smallW = Math.max(10, Math.round(workW * shrink));
+  const smallH = Math.max(10, Math.round(workH * shrink));
+  const small = document.createElement('canvas');
+  small.width = smallW; small.height = smallH;
+  const sctx = small.getContext('2d');
+  sctx.imageSmoothingEnabled = true; sctx.imageSmoothingQuality = 'high';
+  sctx.drawImage(full, 0, 0, smallW, smallH);
+
+  const blurred = document.createElement('canvas');
+  blurred.width = workW; blurred.height = workH;
+  const bctx = blurred.getContext('2d');
+  bctx.imageSmoothingEnabled = true; bctx.imageSmoothingQuality = 'high';
+  bctx.drawImage(small, 0, 0, workW, workH);
+  return blurred;
+}
+
+vectorizeBtn.addEventListener('click', async () => {
+  if(!currentDataUrl) return;
+  vectorizeBtn.disabled = true;
+  statusEl.className = '';
+  statusEl.textContent = '';
+  previewArea.innerHTML = '<div style="text-align:center;"><div class="spinner"></div><div class="empty" style="max-width:none;">Vectorisation en cours…</div></div>';
+  document.querySelectorAll('.preview-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === 'result'));
+
+  try{
+    const img = new Image();
+    img.src = currentDataUrl;
+    await img.decode();
+
+    const type = document.querySelector('input[name=imgtype]:checked').value;
+    const simPct = parseInt(simplification.value, 10);
+    // Le curseur "Simplification" ajoute à la fusion de base propre au type d'image choisi.
+    const blurFactor = Math.min(0.9, BLUR_BASE[type] + (simPct / 100) * 0.4);
+    const canvas = preprocessCanvas(img, blurFactor);
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const rgba = new Uint8Array(imgData.data); // copie (le postMessage transférable détache le buffer)
+
+    const options = buildOptions();
+    const svgstr = await vectorizeViaHost(rgba, canvas.width, canvas.height, options);
+    currentSvgString = svgstr;
+    renderPreview('result');
+    previewActions.style.display = 'flex';
+    statusEl.className = 'ok';
+    statusEl.textContent = '✔ Vectorisation terminée.';
+  }catch(e){
+    statusEl.className = 'err';
+    statusEl.textContent = 'Erreur : ' + e.message;
+    renderPreview('result');
+  }finally{
+    vectorizeBtn.disabled = false;
+  }
+});
+
+document.getElementById('downloadSvgBtn').addEventListener('click', () => {
+  if(!currentSvgString) return;
+  const blob = new Blob([currentSvgString], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (imgInput.files[0] ? imgInput.files[0].name.replace(/\.[^.]+$/, '') : 'vectorisation') + '.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('downloadPngBtn').addEventListener('click', () => {
+  if(!currentSvgString) return;
+  const svgBlob = new Blob([currentSvgString], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = currentImgWidthPx || img.naturalWidth || 800;
+    canvas.height = canvas.width * (img.naturalHeight / img.naturalWidth || 1);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((blob) => {
+      const pngUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = (imgInput.files[0] ? imgInput.files[0].name.replace(/\.[^.]+$/, '') : 'vectorisation') + '.png';
+      a.click();
+      URL.revokeObjectURL(pngUrl);
+    }, 'image/png');
+  };
+  img.src = url;
+});
+</script>
+</body>
+</html>

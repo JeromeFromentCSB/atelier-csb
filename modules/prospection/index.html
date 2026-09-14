@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prospection CSB — Mairies &amp; Associations</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1c1f26;
+    --paper:#f6f4ef;
+    --panel:#ffffff;
+    --line:#e2ddd0;
+    --thread:#b3492f;
+    --thread-dark:#8f3a24;
+    --gold:#b08a3e;
+    --green:#3f6e4e;
+    --muted:#6b6f76;
+    --radius:8px;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    line-height:1.45;
+  }
+  header{
+    background:var(--ink);
+    color:#f2ede1;
+    padding:18px 28px;
+    display:flex;
+    align-items:baseline;
+    gap:14px;
+    border-bottom:3px solid var(--thread);
+  }
+  header h1{
+    font-size:19px;
+    margin:0;
+    letter-spacing:.3px;
+    font-weight:600;
+  }
+  header .tag{
+    font-size:12px;
+    color:#c9c2ad;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+  }
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:20px 20px 80px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px 20px;
+    margin-bottom:18px;
+  }
+  .panel h2{
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.6px;
+    color:var(--thread-dark);
+    margin:0 0 14px;
+    font-weight:700;
+  }
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{font-size:12px;color:var(--muted);font-weight:600;}
+  input[type=text],input[type=number],select{
+    border:1px solid #c9c2ad;
+    border-radius:6px;
+    padding:8px 10px;
+    font-size:14px;
+    background:#fff;
+    color:var(--ink);
+    min-width:120px;
+  }
+  input#originAddr{min-width:320px;}
+  button{
+    border:none;
+    border-radius:6px;
+    padding:9px 16px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    background:var(--thread);
+    color:#fff;
+    transition:background .15s;
+  }
+  button:hover{background:var(--thread-dark);}
+  button.secondary{background:#fff;color:var(--ink);border:1px solid #c9c2ad;}
+  button.secondary:hover{background:#efe9dc;}
+  button.ghost{background:transparent;color:var(--thread-dark);padding:4px 8px;font-size:12px;}
+  button.ghost:hover{background:#f1e6df;}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+  .chk{display:flex;align-items:center;gap:6px;font-size:13px;}
+  .naf-grid{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;}
+  .status{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;}
+  .status.err{color:var(--thread-dark);font-weight:600;}
+  .status.ok{color:var(--green);font-weight:600;}
+  progress{width:100%;height:8px;accent-color:var(--thread);}
+
+  .mairie-card{
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    margin-bottom:10px;
+    background:var(--panel);
+    overflow:hidden;
+  }
+  .mairie-head{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:12px 16px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .mairie-head:hover{background:#faf7f0;}
+  .mairie-head .name{font-weight:700;font-size:15px;flex:1;}
+  .mairie-head .dist{font-size:12px;color:var(--muted);white-space:nowrap;}
+  .mairie-head .count{
+    font-size:11px;
+    background:#efe6d5;
+    color:var(--thread-dark);
+    border-radius:12px;
+    padding:2px 9px;
+    font-weight:700;
+  }
+  .caret{transition:transform .15s;color:var(--muted);}
+  .mairie-card.open .caret{transform:rotate(90deg);}
+  .mairie-body{display:none;padding:0 16px 16px;}
+  .mairie-card.open .mairie-body{display:block;}
+
+  .mairie-contact{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:8px 16px;
+    background:#faf7f0;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:10px 14px;
+    margin-bottom:12px;
+    font-size:13px;
+  }
+  .mairie-contact div span.lbl{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
+  .subtabs{display:flex;gap:6px;margin-bottom:8px;}
+  .subtabs button{background:#fff;color:var(--ink);border:1px solid #c9c2ad;padding:5px 12px;font-size:12px;}
+  .subtabs button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  table.orgs{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.orgs th{
+    text-align:left;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.4px;
+    color:var(--muted);
+    border-bottom:1px solid var(--line);
+    padding:6px 6px;
+    white-space:nowrap;
+  }
+  table.orgs td{
+    border-bottom:1px solid #efece3;
+    padding:6px 6px;
+    vertical-align:top;
+  }
+  table.orgs input[type=text]{
+    width:100%;
+    min-width:90px;
+    font-size:12px;
+    padding:4px 6px;
+  }
+  table.orgs tr.selected{background:#fbf1ea;}
+  .linkbtns{display:flex;gap:4px;flex-wrap:wrap;}
+  .linkbtns a{
+    font-size:10.5px;
+    color:var(--thread-dark);
+    text-decoration:none;
+    border:1px solid #dcb99c;
+    border-radius:4px;
+    padding:2px 6px;
+    white-space:nowrap;
+  }
+  .linkbtns a:hover{background:#f6e6d9;}
+  details.raw{margin-top:2px;}
+  details.raw summary{font-size:10px;color:var(--muted);cursor:pointer;}
+  details.raw pre{
+    font-size:10px;
+    max-height:160px;
+    overflow:auto;
+    background:#f4f1ea;
+    padding:6px;
+    border-radius:4px;
+  }
+  .empty{color:var(--muted);font-size:12px;font-style:italic;padding:8px 2px;}
+  .footer-actions{
+    position:sticky;bottom:0;
+    background:var(--paper);
+    border-top:1px solid var(--line);
+    padding:12px 0 4px;
+    margin-top:14px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .badge{font-size:11px;color:var(--muted);}
+  small.hint{color:var(--muted);display:block;margin-top:6px;font-size:11.5px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="panel">
+    <h2>1. Zone de recherche</h2>
+    <div class="row">
+      <div class="field">
+        <label for="originAddr">Adresse ou ville de départ</label>
+        <input type="text" id="originAddr" placeholder="ex: 12 rue de la Paix, 59300 Valenciennes">
+      </div>
+      <div class="field">
+        <label for="radiusKm">Rayon (km)</label>
+        <input type="number" id="radiusKm" value="15" min="1" max="150">
+      </div>
+      <button id="btnSearchCommunes">Rechercher les mairies</button>
+      <button class="secondary" id="btnRefreshIndex" title="Force le rechargement de la base des communes">↻ Base communes</button>
+    </div>
+    <div class="status" id="statusCommunes"></div>
+    <progress id="progCommunes" style="display:none" max="100" value="0"></progress>
+  </div>
+
+  <div class="panel" id="panelFilters" style="display:none">
+    <h2>2. Recherche associations &amp; sociétés</h2>
+    <div class="row">
+      <div class="chk"><input type="checkbox" id="fAssoc" checked><label for="fAssoc">Associations</label></div>
+      <div class="chk"><input type="checkbox" id="fSociete" checked><label for="fSociete">Sociétés / commerces</label></div>
+      <div class="chk"><input type="checkbox" id="fAutre" checked><label for="fAutre">Autres organismes (collectivités, comités, fondations...)</label></div>
+      <div class="field">
+        <label for="fNafFree">Code NAF précis (optionnel)</label>
+        <input type="text" id="fNafFree" placeholder="ex: 93.12Z">
+      </div>
+      <div class="field">
+        <label for="fMaxPerCommune">Max résultats / commune</label>
+        <select id="fMaxPerCommune">
+          <option value="25">25 (rapide)</option>
+          <option value="75" selected>75</option>
+          <option value="150">150</option>
+          <option value="300">300 (grandes villes, plus lent)</option>
+          <option value="0">Sans limite (peut être lent sur les grandes villes)</option>
+        </select>
+      </div>
+      <button id="btnFetchOrgs">Chercher associations &amp; sociétés</button>
+    </div>
+    <div class="naf-grid" id="nafSections"></div>
+    <small class="hint">Sans sélection de section NAF : toutes les sociétés actives remontées sont incluses, jusqu'au plafond choisi ci-dessus. Coche une ou plusieurs sections pour affiner (sport, événementiel, hôtellerie, enseignement...).</small>
+    <div class="status" id="statusOrgs"></div>
+    <progress id="progOrgs" style="display:none" max="100" value="0"></progress>
+  </div>
+
+  <div class="panel" id="panelManualAdd" style="display:none">
+    <h2>Ajout manuel par SIRET</h2>
+    <div class="row">
+      <div class="field">
+        <label for="manualSiret">SIRET (14 chiffres)</label>
+        <input type="text" id="manualSiret" placeholder="82851064400010" maxlength="14">
+      </div>
+      <button id="btnAddSiret">Rechercher / Ajouter</button>
+    </div>
+    <small class="hint">Utile pour les auto-entrepreneurs et structures en « diffusion partielle » que l'API ne remonte jamais dans une recherche par commune (voir explication en fin de conversation). Si l'API ne retrouve rien, une fiche « à compléter » est créée avec un lien societe.com pour vérifier manuellement.</small>
+    <div class="status" id="statusManual"></div>
+  </div>
+
+  <div class="panel" id="panelResults" style="display:none">
+    <h2>3. Résultats</h2>
+    <div id="mairieList"></div>
+  </div>
+
+  <div class="panel footer-actions" id="panelExport" style="display:none">
+    <span class="badge" id="selCount">0 ligne(s) sélectionnée(s)</span>
+    <button class="secondary" id="btnSelectAll">Tout sélectionner</button>
+    <button class="secondary" id="btnSelectNone">Tout désélectionner</button>
+    <select id="exportFormat">
+      <option value="axonaut_csv">Export CSV — modèle import Axonaut (sociétés)</option>
+      <option value="generic_csv">Export CSV — générique (toutes colonnes)</option>
+      <option value="xlsx">Export Excel (.xlsx)</option>
+    </select>
+    <button id="btnExport">Exporter la sélection</button>
+    <button class="secondary" id="btnClearAll" style="margin-left:auto;">🗑 Vider toutes les données enregistrées</button>
+  </div>
+
+</div>
+
+<script>
+/* =========================================================================
+   PROSPECTION CSB
+   - geo.api.gouv.fr           : liste des communes (cache local compact)
+   - api-adresse.data.gouv.fr  : géocodage du point de départ
+   - api-lannuaire.service-public.gouv.fr : coordonnées des mairies
+   - recherche-entreprises.api.gouv.fr    : associations & sociétés par commune
+   Toutes les données API sont marchandées défensivement (plusieurs noms de
+   champs possibles testés) car les schémas exacts n'ont pas pu être vérifiés
+   en environnement sandbox — un bloc "JSON brut" est affiché par fiche pour
+   ajuster facilement le mapping si un champ manque.
+   ========================================================================= */
+
+const LS_COMMUNES = 'csb_prospect_communes_v2';
+const LS_COMMUNES_TS = 'csb_prospect_communes_v2_ts';
+const LS_STATE = 'csb_prospect_state_v1';
+const COMMUNES_MAX_AGE_MS = 60*24*60*60*1000; // 60 jours
+
+const NAF_SECTIONS = [
+  {code:'G', label:'Commerce'},
+  {code:'I', label:'Hébergement-restauration'},
+  {code:'P', label:'Enseignement'},
+  {code:'Q', label:'Santé / social'},
+  {code:'R', label:'Arts, spectacles, loisirs'},
+  {code:'S', label:'Autres services (dont clubs, assoc.)'},
+  {code:'N', label:'Services admin. / soutien (événementiel)'},
+  {code:'F', label:'Construction (workwear)'},
+];
+
+// ---- state ----------------------------------------------------------
+let state = {
+  origin: null,           // {lat, lon, label}
+  radiusKm: 15,
+  mairies: {},            // codeInsee -> {code,nom,cp,lat,lon,pop,dist, contact:{...}, orgsLoaded:false}
+  orgs: {}                // siret -> {siret, codeInsee, type:'association'|'societe', nom, adresse, cp, ville, naf, nafLabel, tel, email, contact, source:'api'|'manuel' flags, selected}
+};
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_STATE);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      state.mairies = normalizeMairies(parsed.mairies || {});
+      state.orgs = normalizeOrgs(parsed.orgs || {});
+    }
+  }catch(e){
+    console.warn('state load failed, reset', e);
+    state.mairies = {}; state.orgs = {};
+  }
+}
+// Remet à plat toute donnée existante dans localStorage vers le format attendu par cette
+// version du code -> évite qu'un ancien enregistrement (fait avec une version antérieure de
+// l'outil) fasse planter silencieusement l'affichage.
+function normalizeMairies(obj){
+  const out = {};
+  for(const k in obj){
+    const m = obj[k] || {};
+    out[k] = {
+      code: m.code || k, nom: m.nom || '(sans nom)', cp: m.cp || '',
+      lat: m.lat != null ? m.lat : null, lon: m.lon != null ? m.lon : null,
+      dist: m.dist != null ? m.dist : null,
+      contact: m.contact || null,
+      orgsLoaded: !!m.orgsLoaded
+    };
+  }
+  return out;
+}
+function normalizeOrgs(obj){
+  const out = {};
+  for(const k in obj){
+    const o = obj[k] || {};
+    out[k] = {
+      siret: o.siret || k, codeInsee: o.codeInsee || '_manuel',
+      type: (o.type==='association'||o.type==='societe'||o.type==='autre'||o.type==='inconnu') ? o.type : 'autre',
+      nom: o.nom || '(sans nom)', adresse: o.adresse || '', cp: o.cp || '', ville: o.ville || '',
+      naf: o.naf || '', nafLabel: o.nafLabel || '',
+      tel: o.tel || '', email: o.email || '', contact: o.contact || '',
+      selected: !!o.selected, manualStub: !!o.manualStub, raw: o.raw || {}
+    };
+  }
+  return out;
+}
+function saveState(){
+  try{
+    localStorage.setItem(LS_STATE, JSON.stringify({mairies:state.mairies, orgs:state.orgs}));
+  }catch(e){ console.warn('state save failed (quota?)', e); }
+}
+
+// ---- utils ------------------------------------------------------------
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371;
+  const dLat=(lat2-lat1)*Math.PI/180;
+  const dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function csvEscape(v){
+  v = (v==null?'':String(v));
+  if(/[",;\n]/.test(v)) return '"' + v.replace(/"/g,'""') + '"';
+  return v;
+}
+async function fetchJsonBatched(urls, concurrency, onProgress, minIntervalMs){
+  const results = new Array(urls.length);
+  let idx = 0, done = 0;
+  let nextSlot = 0;
+  async function throttle(){
+    if(!minIntervalMs) return;
+    const now = Date.now();
+    const wait = Math.max(0, nextSlot - now);
+    nextSlot = Math.max(now, nextSlot) + minIntervalMs;
+    if(wait > 0) await new Promise(res=>setTimeout(res, wait));
+  }
+  async function worker(){
+    while(idx < urls.length){
+      const my = idx++;
+      let attempts = 0, ok=false, data=null;
+      while(attempts < 4 && !ok){
+        attempts++;
+        await throttle();
+        try{
+          const r = await fetchWithTimeout(urls[my], 15000);
+          if(r.ok){ data = await r.json(); ok = true; }
+          else if((r.status === 429 || r.status >= 500) && attempts < 4){
+            // 429 = quota API dépassé (7 appels/s sur recherche-entreprises) -> backoff et nouvel essai
+            await new Promise(res=>setTimeout(res, 400*attempts));
+          }
+          else { ok = true; data = {__error:true, status:r.status}; }
+        }catch(e){
+          if(attempts >= 4) data = {__error:true, status:'network'};
+          else await new Promise(res=>setTimeout(res,300*attempts));
+        }
+      }
+      results[my] = data;
+      done++;
+      if(onProgress) onProgress(done, urls.length);
+    }
+  }
+  const workers = [];
+  for(let i=0;i<concurrency;i++) workers.push(worker());
+  await Promise.all(workers);
+  return results;
+}
+
+// ---- 1. communes index (cache compact "code|nom|cp|lat|lon|pop") -----
+async function loadCommunesIndex(force){
+  const ts = parseInt(localStorage.getItem(LS_COMMUNES_TS) || '0', 10);
+  const fresh = (Date.now() - ts) < COMMUNES_MAX_AGE_MS;
+  if(!force && fresh){
+    const raw = localStorage.getItem(LS_COMMUNES);
+    if(raw) return parseCommunesCache(raw);
+  }
+  setStatus('statusCommunes', 'Téléchargement de la base des communes françaises (une fois, ~2-3 Mo)...', '');
+  showProg('progCommunes', true);
+  const url = 'https://geo.api.gouv.fr/communes?fields=nom,code,codesPostaux,centre,population&format=json';
+  const r = await fetchWithTimeout(url, 20000);
+  if(!r.ok) throw new Error('Impossible de charger la base des communes (HTTP '+r.status+')');
+  const list = await r.json();
+  const lines = [];
+  let missingCentre = [];
+  for(const c of list){
+    const cp = (c.codesPostaux && c.codesPostaux[0]) ? c.codesPostaux[0] : '';
+    const nom = (c.nom||'').replace(/\|/g,'/');
+    if(!c.centre || !c.centre.coordinates){
+      // Pas de point "centre" fourni par l'API pour cette commune (arrive surtout sur
+      // de très petites communes) -> on la garde quand même, coordonnées vides pour
+      // l'instant, elle sera géocodée en secours à la volée si besoin.
+      lines.push([c.code, nom, cp, '', '', c.population||0].join('|'));
+      missingCentre.push(nom);
+      continue;
+    }
+    const lon = c.centre.coordinates[0], lat = c.centre.coordinates[1];
+    lines.push([c.code, nom, cp, lat.toFixed(5), lon.toFixed(5), c.population||0].join('|'));
+  }
+  if(missingCentre.length){
+    console.warn(missingCentre.length + ' commune(s) sans coordonnées "centre" dans geo.api.gouv.fr, ex: ' + missingCentre.slice(0,10).join(', '));
+  }
+  const raw = lines.join('\n');
+  try{
+    localStorage.setItem(LS_COMMUNES, raw);
+    localStorage.setItem(LS_COMMUNES_TS, String(Date.now()));
+  }catch(e){
+    console.warn('Cache communes trop volumineux pour localStorage, non mis en cache', e);
+  }
+  showProg('progCommunes', false);
+  return parseCommunesCache(raw);
+}
+function parseCommunesCache(raw){
+  const out = [];
+  const lines = raw.split('\n');
+  for(const l of lines){
+    if(!l) continue;
+    const [code,nom,cp,lat,lon,pop] = l.split('|');
+    out.push({code, nom, cp, lat: lat?parseFloat(lat):null, lon: lon?parseFloat(lon):null, pop:parseInt(pop||'0',10)});
+  }
+  return out;
+}
+
+// Géocodage de secours pour les communes sans "centre" dans geo.api.gouv.fr
+async function geocodeMissingCommune(c){
+  try{
+    const q = c.nom + (c.cp ? ' ' + c.cp : '');
+    const url = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) + '&type=municipality&limit=1';
+    const r = await fetchWithTimeout(url, 8000);
+    if(!r.ok) return null;
+    const j = await r.json();
+    const f = j.features && j.features[0];
+    if(!f) return null;
+    return {lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0]};
+  }catch(e){ return null; }
+}
+
+// ---- 2. géocodage du point de départ ----------------------------------
+async function fetchWithTimeout(url, ms){
+  const controller = new AbortController();
+  const t = setTimeout(()=>controller.abort(), ms||15000);
+  try{
+    return await fetch(url, {signal: controller.signal});
+  }catch(e){
+    if(e.name === 'AbortError') throw new Error('Le serveur n\'a pas répondu à temps (délai dépassé). Vérifie ta connexion, ton pare-feu/antivirus, ou réessaie dans quelques instants.');
+    throw new Error('Connexion impossible à ' + new URL(url).hostname + ' — vérifie ta connexion internet, ton pare-feu ou ton antivirus.');
+  }
+}
+async function geocode(query){
+  const url = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(query) + '&limit=1';
+  const r = await fetchWithTimeout(url, 12000);
+  if(!r.ok) throw new Error('Géocodage échoué (HTTP '+r.status+')');
+  const j = await r.json();
+  if(!j.features || !j.features.length) throw new Error('Adresse introuvable — précise la ville ou le code postal.');
+  const f = j.features[0];
+  return {
+    lat: f.geometry.coordinates[1],
+    lon: f.geometry.coordinates[0],
+    label: f.properties.label
+  };
+}
+
+// ---- 3. mairies via annuaire administration ---------------------------
+function mairieRecordUrl(codeInsee){
+  const where = encodeURIComponent(`code_insee_commune="${codeInsee}" and pivot like "mairie"`);
+  return 'https://api-lannuaire.service-public.gouv.fr/api/explore/v2.1/catalog/datasets/api-lannuaire-administration/records?where=' + where + '&limit=1';
+}
+function extractMairieContact(json){
+  const out = {telephone:'', email:'', adresse:'', web:'', horaires:'', raw:json};
+  try{
+    const rec = json && json.results && json.results[0];
+    if(!rec) return out;
+    out.telephone = rec.telephone || rec.telephone_1 || '';
+    out.email = rec.adresse_courriel || rec.email || '';
+    out.web = rec.site_internet || rec.url || '';
+    out.horaires = rec.plage_ouverture || '';
+    // l'adresse peut être un objet, un tableau ou une chaîne selon le schéma retourné
+    let adr = rec.adresse || rec.adresse_1 || rec.complement1_adresse || '';
+    if(Array.isArray(adr)) adr = adr.join(', ');
+    if(typeof adr === 'object' && adr) adr = JSON.stringify(adr);
+    out.adresse = adr;
+  }catch(e){}
+  return out;
+}
+
+// ---- 4. associations & sociétés via recherche-entreprises -------------
+function orgsSearchUrl(codeCommune, nafFree, page){
+  let url = 'https://recherche-entreprises.api.gouv.fr/search?code_commune=' + encodeURIComponent(codeCommune) + '&etat_administratif=A&per_page=25&page=' + (page||1);
+  if(nafFree) url += '&activite_principale=' + encodeURIComponent(nafFree);
+  return url;
+}
+// Table de repli division NAF (2 premiers chiffres du code APE) -> libellé lisible,
+// utilisée seulement si l'API ne renvoie pas déjà un libellé explicite.
+const NAF_DIVISION_FALLBACK = {
+  '01':'Agriculture','02':'Sylviculture','03':'Pêche, aquaculture',
+  '10':'Industrie alimentaire','13':'Industrie textile','14':'Habillement',
+  '25':'Fabrication de produits métalliques','31':'Fabrication de meubles',
+  '41':'Construction de bâtiments','42':'Travaux de génie civil','43':'Travaux de construction spécialisés',
+  '45':'Commerce, réparation automobile','46':'Commerce de gros','47':'Commerce de détail',
+  '49':'Transport terrestre','52':'Entreposage, services auxiliaires des transports','53':'Activités de poste et de courrier',
+  '55':'Hébergement','56':'Restauration',
+  '58':'Édition','59':'Production audiovisuelle','60':'Programmation et diffusion',
+  '62':'Programmation informatique','63':'Services d\'information',
+  '64':'Activités financières','66':'Activités auxiliaires financières',
+  '68':'Activités immobilières',
+  '69':'Activités juridiques et comptables','70':'Conseil de gestion','71':'Architecture, ingénierie','73':'Publicité, études de marché','74':'Activités spécialisées diverses',
+  '77':'Location et location-bail','78':'Activités liées à l\'emploi','79':'Agences de voyage','80':'Sécurité','81':'Services relatifs aux bâtiments','82':'Activités administratives et de soutien aux entreprises',
+  '84':'Administration publique','85':'Enseignement',
+  '86':'Activités pour la santé humaine','87':'Hébergement médico-social','88':'Action sociale sans hébergement',
+  '90':'Activités créatives, artistiques et de spectacle','91':'Bibliothèques, musées, patrimoine',
+  '92':'Organisation de jeux de hasard et d\'argent',
+  '93':'Sports, activités récréatives et de loisirs',
+  '94':'Activités des organisations associatives',
+  '95':'Réparation d\'ordinateurs et de biens personnels','96':'Autres services personnels',
+  '97':'Activités des ménages employeurs',
+  '99':'Activités des organisations extra-territoriales'
+};
+function nafFallbackLabel(code){
+  if(!code) return '';
+  const div = String(code).slice(0,2);
+  return NAF_DIVISION_FALLBACK[div] || '';
+}
+
+function classify(rec){
+  // Utilise le champ officiel complements.est_association quand il est présent (le plus fiable),
+  // sinon se rabat sur la liste exacte des codes "nature_juridique" association documentés par l'API
+  // (5195, 9210, 9220, 9221, 9222, 9223, 9224, 9230, 9240, 9260).
+  const complements = rec.complements || {};
+  if(complements.est_association === true) return 'association';
+  const ASSOC_CODES = new Set(['5195','9210','9220','9221','9222','9223','9224','9230','9240','9260']);
+  const cj = String(rec.nature_juridique || '');
+  if(ASSOC_CODES.has(cj)) return 'association';
+  if(cj.startsWith('9')) return 'autre';        // fondations, syndicats, groupements...
+  if(cj.startsWith('2')) return 'autre';        // collectivités, organismes publics
+  return 'societe';                              // sociétés commerciales, indépendants
+}
+function extractOrg(rec){
+  const siege = rec.siege || {};
+  const complements = rec.complements || {};
+  const nom = rec.nom_complet || rec.nom_raison_sociale || rec.nom || siege.enseigne1 || siege.nom_commercial || 'Sans nom';
+  const naf = rec.activite_principale || siege.activite_principale || complements.activite_principale || '';
+  let nafLabel = rec.libelle_activite_principale || siege.libelle_activite_principale
+              || (typeof rec.activite_principale === 'object' && rec.activite_principale ? rec.activite_principale.libelle : '')
+              || (typeof siege.activite_principale === 'object' && siege.activite_principale ? siege.activite_principale.libelle : '')
+              || '';
+  if(!nafLabel) nafLabel = nafFallbackLabel(naf && naf.code ? naf.code : naf);
+  const nafCode = (naf && naf.code) ? naf.code : naf;
+  let adresse = siege.adresse || siege.geo_adresse || '';
+  const cp = siege.code_postal || '';
+  const ville = siege.libelle_commune || siege.commune || '';
+  return {
+    siret: siege.siret || rec.siren,
+    nom, naf: nafCode, nafLabel, adresse, cp, ville,
+    type: classify(rec),
+    raw: rec
+  };
+}
+
+// ---- orchestration recherche communes ---------------------------------
+function setStatus(id, text, cls){
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'status' + (cls ? ' '+cls : '');
+}
+function showProg(id, show, val){
+  const el = document.getElementById(id);
+  el.style.display = show ? 'block' : 'none';
+  if(val!=null) el.value = val;
+}
+
+document.getElementById('btnSearchCommunes').addEventListener('click', async ()=>{
+  const addr = document.getElementById('originAddr').value.trim();
+  const radius = parseFloat(document.getElementById('radiusKm').value) || 15;
+  if(!addr){ setStatus('statusCommunes','Indique une adresse ou une ville de départ.','err'); return; }
+  const btn = document.getElementById('btnSearchCommunes');
+  btn.disabled = true;
+  try{
+    setStatus('statusCommunes','Géocodage du point de départ...','');
+    const origin = await geocode(addr);
+    state.origin = origin; state.radiusKm = radius;
+
+    const communes = await loadCommunesIndex(false);
+    setStatus('statusCommunes', `Calcul des communes dans un rayon de ${radius} km autour de "${origin.label}"...`, '');
+
+    // Pré-filtrage grossier par coordonnées connues (rapide)
+    const withCoords = communes.filter(c => c.lat != null && c.lon != null);
+    const withoutCoords = communes.filter(c => c.lat == null || c.lon == null);
+
+    let nearby = withCoords
+      .map(c => ({...c, dist: haversine(origin.lat, origin.lon, c.lat, c.lon)}))
+      .filter(c => c.dist <= radius);
+
+    // Communes sans point "centre" dans geo.api.gouv.fr (surtout des petites communes) :
+    // on ne peut pas savoir si elles sont dans le rayon sans les géocoder. On ne le fait
+    // que pour celles du même département qu'au moins une commune déjà trouvée, pour
+    // limiter le nombre d'appels.
+    const deptsProches = new Set(nearby.map(c => c.code.slice(0,2)));
+    const candidates = withoutCoords.filter(c => deptsProches.has(c.code.slice(0,2))).slice(0, 40);
+    if(candidates.length){
+      setStatus('statusCommunes', `Vérification de ${candidates.length} commune(s) sans coordonnées connues...`, '');
+      for(const c of candidates){
+        try{
+          const geo = await geocodeMissingCommune(c);
+          if(geo){
+            const d = haversine(origin.lat, origin.lon, geo.lat, geo.lon);
+            if(d <= radius) nearby.push({...c, lat:geo.lat, lon:geo.lon, dist:d});
+          }
+        }catch(e){ /* on ignore une commune isolée en échec, la recherche continue */ }
+        await new Promise(res=>setTimeout(res, 120));
+      }
+    }
+    nearby.sort((a,b)=>a.dist-b.dist);
+
+    if(!nearby.length){
+      setStatus('statusCommunes', 'Aucune commune trouvée dans ce rayon. Essaie un rayon plus large.', 'err');
+      btn.disabled = false;
+      return;
+    }
+
+    // upsert dans state.mairies (dédoublonné par code INSEE)
+    for(const c of nearby){
+      if(!state.mairies[c.code]){
+        state.mairies[c.code] = {code:c.code, nom:c.nom, cp:c.cp, lat:c.lat, lon:c.lon, dist:c.dist, contact:null, orgsLoaded:false};
+      }else{
+        state.mairies[c.code].dist = c.dist; // rafraîchit la distance si recherche différente
+      }
+    }
+    saveState();
+
+    setStatus('statusCommunes', `${nearby.length} commune(s) trouvée(s). Récupération des coordonnées des mairies...`, '');
+    showProg('progCommunes', true, 0);
+
+    const toFetch = nearby.filter(c => !state.mairies[c.code].contact);
+    const urls = toFetch.map(c => mairieRecordUrl(c.code));
+    const results = await fetchJsonBatched(urls, 4, (done,total)=>{
+      showProg('progCommunes', true, Math.round(done/total*100));
+    });
+    results.forEach((json, i) => {
+      const code = toFetch[i].code;
+      state.mairies[code].contact = json && !json.__error ? extractMairieContact(json) : {telephone:'',email:'',adresse:'',web:'',horaires:'',raw:json};
+    });
+    saveState();
+    showProg('progCommunes', false);
+    setStatus('statusCommunes', `${nearby.length} mairie(s) chargée(s) autour de "${origin.label}" (rayon ${radius} km).`, 'ok');
+
+    document.getElementById('panelFilters').style.display = 'block';
+    document.getElementById('panelResults').style.display = 'block';
+    document.getElementById('panelManualAdd').style.display = 'block';
+    buildNafCheckboxes();
+    renderMairieList();
+  }catch(e){
+    console.error(e);
+    setStatus('statusCommunes', 'Erreur : ' + e.message, 'err');
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btnRefreshIndex').addEventListener('click', async ()=>{
+  setStatus('statusCommunes', 'Rechargement forcé de la base des communes...', '');
+  await loadCommunesIndex(true);
+  setStatus('statusCommunes', 'Base des communes mise à jour.', 'ok');
+});
+
+// ---- NAF checkboxes -----------------------------------------------------
+function buildNafCheckboxes(){
+  const box = document.getElementById('nafSections');
+  if(box.dataset.built) return;
+  box.dataset.built = '1';
+  NAF_SECTIONS.forEach(s=>{
+    const id = 'naf_'+s.code;
+    const wrap = document.createElement('label');
+    wrap.className = 'chk';
+    wrap.innerHTML = `<input type="checkbox" value="${s.code}" id="${id}"> ${esc(s.label)}`;
+    box.appendChild(wrap);
+  });
+}
+function selectedNafSections(){
+  return Array.from(document.querySelectorAll('#nafSections input:checked')).map(i=>i.value);
+}
+
+// ---- fetch associations & sociétés pour toutes les mairies affichées ---
+document.getElementById('btnFetchOrgs').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnFetchOrgs');
+  const includeAssoc = document.getElementById('fAssoc').checked;
+  const includeSoc = document.getElementById('fSociete').checked;
+  const includeAutre = document.getElementById('fAutre').checked;
+  const nafFree = document.getElementById('fNafFree').value.trim();
+  const sections = selectedNafSections();
+  if(!includeAssoc && !includeSoc && !includeAutre){
+    setStatus('statusOrgs','Coche au moins une catégorie (associations, sociétés, autres organismes).','err');
+    return;
+  }
+  btn.disabled = true;
+  const codes = Object.keys(state.mairies);
+  setStatus('statusOrgs', `Recherche en cours sur ${codes.length} commune(s)...`, '');
+  showProg('progOrgs', true, 0);
+
+  const urls = codes.map(c => orgsSearchUrl(c, nafFree, 1));
+  const results = await fetchJsonBatched(urls, 2, (done,total)=>{
+    showProg('progOrgs', true, Math.round(done/total*100));
+  }, 160); // ~6 req/s, sous le quota de 7 appels/s de l'API
+
+  let added = 0;
+  function ingest(json, codeInsee){
+    if(!json || json.__error || !json.results) return;
+    for(const rec of json.results){
+      const org = extractOrg(rec);
+      if(!org.siret) continue;
+      if(org.type==='association' && !includeAssoc) continue;
+      if(org.type==='societe' && !includeSoc) continue;
+      if(org.type==='autre' && !includeAutre) continue;
+      if(!state.orgs[org.siret]){
+        state.orgs[org.siret] = {
+          siret: org.siret, codeInsee, type: org.type,
+          nom: org.nom, adresse: org.adresse, cp: org.cp, ville: org.ville,
+          naf: org.naf, nafLabel: org.nafLabel,
+          tel:'', email:'', contact:'', // champs à compléter manuellement
+          selected:false, raw: org.raw
+        };
+        added++;
+      }else{
+        state.orgs[org.siret].codeInsee = codeInsee;
+      }
+    }
+  }
+  results.forEach((json, i)=>{ ingest(json, codes[i]); state.mairies[codes[i]].orgsLoaded = true; });
+
+  // Pagination : pour les communes ayant plus d'une page de résultats, on récupère
+  // jusqu'à 2 pages supplémentaires (soit 75 structures max par commune) pour éviter
+  // de perdre des sociétés/associations situées au-delà des 25 premières.
+  const needsMore = [];
+  const maxPerCommuneRaw = parseInt(document.getElementById('fMaxPerCommune').value, 10);
+  const maxPerCommune = maxPerCommuneRaw || 75; // 0 = sans limite
+  const maxPages = maxPerCommuneRaw === 0 ? Infinity : Math.ceil(maxPerCommune / 25);
+  results.forEach((json, i)=>{
+    if(json && !json.__error && json.total_pages > 1){
+      const extra = Math.min(json.total_pages, maxPages);
+      for(let p=2; p<=extra; p++) needsMore.push({codeInsee: codes[i], url: orgsSearchUrl(codes[i], nafFree, p)});
+    }
+  });
+  if(needsMore.length){
+    setStatus('statusOrgs', `Récupération de ${needsMore.length} page(s) supplémentaire(s) pour les communes les plus fournies...`, '');
+    const moreResults = await fetchJsonBatched(needsMore.map(n=>n.url), 2, (done,total)=>{
+      showProg('progOrgs', true, Math.round(done/total*100));
+    }, 160);
+    moreResults.forEach((json, i)=> ingest(json, needsMore[i].codeInsee));
+  }
+
+  saveState();
+  showProg('progOrgs', false);
+  setStatus('statusOrgs', `${added} nouvelle(s) fiche(s) association/société ajoutée(s) (doublons ignorés par SIRET).`, 'ok');
+  btn.disabled = false;
+  renderMairieList();
+  document.getElementById('panelExport').style.display = 'flex';
+  document.getElementById('panelManualAdd').style.display = 'block';
+});
+
+// ---- ajout manuel par SIRET (auto-entrepreneurs / structures non-diffusibles) ----
+document.getElementById('btnAddSiret').addEventListener('click', async ()=>{
+  const input = document.getElementById('manualSiret');
+  const siret = input.value.replace(/\s/g,'').trim();
+  if(!/^\d{14}$/.test(siret)){
+    setStatus('statusManual', 'Le SIRET doit contenir exactement 14 chiffres.', 'err');
+    return;
+  }
+  if(state.orgs[siret]){
+    setStatus('statusManual', 'Cette fiche existe déjà dans la liste (voir plus bas).', 'ok');
+    return;
+  }
+  setStatus('statusManual', 'Recherche en cours...', '');
+  let found = null;
+  try{
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + encodeURIComponent(siret) + '&per_page=5');
+    if(r.ok){
+      const j = await r.json();
+      for(const rec of (j.results||[])){
+        const all = [rec.siege, ...(rec.matching_etablissements||[])].filter(Boolean);
+        const match = all.find(e => e.siret === siret);
+        if(match){ found = extractOrg({...rec, siege: match}); break; }
+      }
+    }
+  }catch(e){ /* réseau indisponible -> on retombe sur la fiche à compléter */ }
+
+  const socCom = 'https://www.societe.com/cgi-bin/search?champs=' + encodeURIComponent(siret);
+
+  if(found){
+    // Rattache à une mairie existante si la commune est déjà dans la liste, sinon
+    // crée une mini-fiche "Ajouts manuels" pour l'accueillir.
+    let codeInsee = null;
+    // le code commune n'est pas directement extrait par extractOrg -> on le retrouve via l'adresse ville/cp déjà connue des mairies
+    const matchMairie = Object.values(state.mairies).find(m => m.nom.toUpperCase() === (found.ville||'').toUpperCase());
+    codeInsee = matchMairie ? matchMairie.code : '_manuel';
+    ensureManualBucket(codeInsee);
+    state.orgs[siret] = {
+      siret, codeInsee, type: found.type, nom: found.nom, adresse: found.adresse,
+      cp: found.cp, ville: found.ville, naf: found.naf, nafLabel: found.nafLabel,
+      tel:'', email:'', contact:'', selected:false, raw: found.raw
+    };
+    setStatus('statusManual', `Trouvé : ${found.nom} (${found.ville}). Ajouté à la liste.`, 'ok');
+  }else{
+    ensureManualBucket('_manuel');
+    state.orgs[siret] = {
+      siret, codeInsee:'_manuel', type:'inconnu', nom:'(non diffusé — à compléter)',
+      adresse:'', cp:'', ville:'', naf:'', nafLabel:'',
+      tel:'', email:'', contact:'', selected:false, manualStub:true, raw:{info:'Non retrouvé via recherche-entreprises.api.gouv.fr (probablement non-diffusible). Vérifier sur societe.com : '+socCom}
+    };
+    setStatus('statusManual', `SIRET non retrouvé automatiquement (probablement non-diffusible) — fiche "à compléter" ajoutée, avec lien societe.com.`, '');
+  }
+  input.value = '';
+  saveState();
+  renderMairieList();
+  document.getElementById('panelResults').style.display = 'block';
+  document.getElementById('panelExport').style.display = 'flex';
+});
+function ensureManualBucket(codeInsee){
+  if(codeInsee !== '_manuel') return;
+  if(!state.mairies['_manuel']){
+    state.mairies['_manuel'] = {code:'_manuel', nom:'Ajouts manuels', cp:'', lat:null, lon:null, dist:null, contact:null, orgsLoaded:true};
+  }
+}
+
+// ---- rendu ---------------------------------------------------------------
+function orgsForCommune(code){
+  return Object.values(state.orgs).filter(o => o.codeInsee === code);
+}
+
+function renderMairieList(){
+  try{
+    renderMairieListInner();
+  }catch(e){
+    console.error('Erreur de rendu', e);
+    document.getElementById('mairieList').innerHTML =
+      '<div class="status err">Erreur d\'affichage : ' + esc(e.message) + '. Essaie "Vider toutes les données enregistrées" en bas de page si le problème persiste (état sauvegardé incompatible avec une mise à jour de l\'outil).</div>';
+  }
+}
+function renderMairieListInner(){
+  const container = document.getElementById('mairieList');
+  container.innerHTML = '';
+  const mairies = Object.values(state.mairies).sort((a,b)=>(a.dist||0)-(b.dist||0));
+  if(!mairies.length){
+    container.innerHTML = '<div class="empty">Aucune mairie chargée pour le moment.</div>';
+    return;
+  }
+  for(const m of mairies){
+    const card = document.createElement('div');
+    card.className = 'mairie-card';
+    card.dataset.code = m.code;
+    const orgs = orgsForCommune(m.code);
+    const c = m.contact || {};
+    card.innerHTML = `
+      <div class="mairie-head">
+        <span class="caret">▶</span>
+        <span class="name">${esc(m.nom)} <span style="color:var(--muted);font-weight:400;">(${esc(m.cp)})</span></span>
+        <span class="count">${orgs.length} fiche(s)</span>
+        <span class="dist">${m.dist!=null ? m.dist.toFixed(1)+' km' : ''}</span>
+      </div>
+      <div class="mairie-body">
+        <div class="mairie-contact">
+          <div><span class="lbl">Téléphone mairie</span>${esc(c.telephone)||'—'}</div>
+          <div><span class="lbl">Email mairie</span>${esc(c.email)||'—'}</div>
+          <div><span class="lbl">Site web</span>${c.web?`<a href="${esc(c.web)}" target="_blank">${esc(c.web)}</a>`:'—'}</div>
+          <div><span class="lbl">Adresse</span>${esc(c.adresse)||'—'}</div>
+        </div>
+        <div class="orgs-holder"></div>
+      </div>`;
+    card.querySelector('.mairie-head').addEventListener('click', ()=>{
+      card.classList.toggle('open');
+    });
+    container.appendChild(card);
+    renderOrgsTable(card.querySelector('.orgs-holder'), m, orgs);
+  }
+  updateSelCount();
+}
+
+function renderOrgsTable(holder, mairie, orgs){
+  if(!mairie.orgsLoaded){
+    holder.innerHTML = '<div class="empty">Associations/sociétés non recherchées pour cette commune — lance la recherche en section 2.</div>';
+    return;
+  }
+  if(!orgs.length){
+    holder.innerHTML = '<div class="empty">Aucune association/société trouvée pour cette commune.</div>';
+    return;
+  }
+  const table = document.createElement('table');
+  table.className = 'orgs';
+  table.innerHTML = `
+    <thead><tr>
+      <th></th><th>Type</th><th>Nom</th><th>Activité (NAF)</th><th>Adresse</th>
+      <th>Téléphone</th><th>Email</th><th>Contact évènement</th><th>Recherche</th>
+    </tr></thead><tbody></tbody>`;
+  const tbody = table.querySelector('tbody');
+  orgs.sort((a,b)=> (a.type||'').localeCompare(b.type||'') || (a.nom||'').localeCompare(b.nom||''));
+  for(const o of orgs){
+    const tr = document.createElement('tr');
+    tr.dataset.siret = o.siret;
+    if(o.selected) tr.classList.add('selected');
+    const gmaps = 'https://www.google.com/maps/search/' + encodeURIComponent(o.nom + ' ' + o.ville);
+    const pj = 'https://www.pagesjaunes.fr/recherche/' + encodeURIComponent(o.ville) + '/' + encodeURIComponent(o.nom);
+    const gsearch = 'https://www.google.com/search?q=' + encodeURIComponent(o.nom + ' ' + o.ville + ' téléphone email');
+    const socCom = 'https://www.societe.com/cgi-bin/search?champs=' + encodeURIComponent(o.siret || o.nom);
+    const typeLabel = o.type==='association' ? 'Association' : (o.type==='autre' ? 'Autre organisme' : 'Société');
+    tr.innerHTML = `
+      <td><input type="checkbox" class="rowSel" ${o.selected?'checked':''}></td>
+      <td>${typeLabel}</td>
+      <td><b>${esc(o.nom)}</b><br><details class="raw"><summary>JSON brut</summary><pre>${esc(JSON.stringify(o.raw,null,1))}</pre></details></td>
+      <td>${esc(o.naf)||'<span style="color:var(--muted)">—</span>'}<br><span style="color:var(--muted)">${esc(o.nafLabel)||'Activité non précisée'}</span></td>
+      <td>${esc(o.adresse)}<br>${esc(o.cp)} ${esc(o.ville)}</td>
+      <td><input type="text" class="edit" data-field="tel" value="${esc(o.tel)}" placeholder="à compléter"></td>
+      <td><input type="text" class="edit" data-field="email" value="${esc(o.email)}" placeholder="à compléter"></td>
+      <td><input type="text" class="edit" data-field="contact" value="${esc(o.contact)}" placeholder="nom personne"></td>
+      <td class="linkbtns">
+        <a href="${gmaps}" target="_blank">Maps</a>
+        <a href="${pj}" target="_blank">P.Jaunes</a>
+        <a href="${gsearch}" target="_blank">Google</a>
+        <a href="${socCom}" target="_blank">Societe.com</a>
+      </td>${o.manualStub ? '<td style="color:var(--thread-dark);font-size:10.5px;">Fiche à compléter (non retrouvée automatiquement)</td>' : ''}`;
+    tr.querySelector('.rowSel').addEventListener('change', e=>{
+      o.selected = e.target.checked;
+      tr.classList.toggle('selected', o.selected);
+      saveState(); updateSelCount();
+    });
+    tr.querySelectorAll('.edit').forEach(inp=>{
+      inp.addEventListener('change', e=>{
+        o[e.target.dataset.field] = e.target.value;
+        saveState();
+      });
+    });
+    tbody.appendChild(tr);
+  }
+  holder.innerHTML = '';
+  holder.appendChild(table);
+}
+
+function updateSelCount(){
+  const n = Object.values(state.orgs).filter(o=>o.selected).length;
+  document.getElementById('selCount').textContent = n + ' ligne(s) sélectionnée(s)';
+}
+document.getElementById('btnSelectAll').addEventListener('click', ()=>{
+  Object.values(state.orgs).forEach(o=>o.selected=true);
+  saveState(); renderMairieList();
+});
+document.getElementById('btnSelectNone').addEventListener('click', ()=>{
+  Object.values(state.orgs).forEach(o=>o.selected=false);
+  saveState(); renderMairieList();
+});
+document.getElementById('btnClearAll').addEventListener('click', ()=>{
+  if(!confirm("Vider toutes les mairies, associations et sociétés enregistrées dans cet outil ? Cette action est irréversible.")) return;
+  state.mairies = {}; state.orgs = {};
+  saveState();
+  document.getElementById('mairieList').innerHTML = '';
+  document.getElementById('panelFilters').style.display = 'none';
+  document.getElementById('panelResults').style.display = 'none';
+  document.getElementById('panelExport').style.display = 'none';
+  setStatus('statusCommunes','Données réinitialisées.', 'ok');
+});
+
+// ---- export ---------------------------------------------------------------
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  const format = document.getElementById('exportFormat').value;
+  const rows = Object.values(state.orgs).filter(o=>o.selected);
+  if(!rows.length){ alert('Sélectionne au moins une ligne à exporter.'); return; }
+
+  if(format === 'axonaut_csv'){
+    // Colonnes alignées sur le modèle d'import "Sociétés" d'Axonaut.
+    // Vérifie l'intitulé exact des colonnes lors du premier import test dans Axonaut.
+    const headers = ['Nom','Adresse','Code postal','Ville','Pays','Téléphone','Email','Site web','Commentaire'];
+    const lines = [headers.join(';')];
+    for(const o of rows){
+      const typeLabel = o.type==='association' ? 'Association' : (o.type==='autre' ? 'Autre organisme' : 'Société');
+      const commentaire = `${typeLabel} — Activité : ${o.nafLabel||'non précisée'} (NAF ${o.naf||'n/a'}) — Prospection broderie CSB`;
+      lines.push([
+        o.nom, o.adresse, o.cp, o.ville, 'France', o.tel, o.email, '', commentaire
+      ].map(csvEscape).join(';'));
+    }
+    downloadText('prospection_csb_axonaut.csv', lines.join('\n'));
+  } else if(format === 'generic_csv'){
+    const headers = ['SIRET','Type','Nom','NAF','Libellé activité','Adresse','CP','Ville','Téléphone','Email','Contact évènement','Commune (rattachement)'];
+    const lines = [headers.join(';')];
+    for(const o of rows){
+      lines.push([
+        o.siret,o.type,o.nom,o.naf,o.nafLabel,o.adresse,o.cp,o.ville,o.tel,o.email,o.contact,
+        (state.mairies[o.codeInsee]?state.mairies[o.codeInsee].nom:o.codeInsee)
+      ].map(csvEscape).join(';'));
+    }
+    downloadText('prospection_csb_generique.csv', lines.join('\n'));
+  } else if(format === 'xlsx'){
+    const data = rows.map(o=>({
+      SIRET:o.siret, Type:o.type, Nom:o.nom, NAF:o.naf, Activite:o.nafLabel,
+      Adresse:o.adresse, CP:o.cp, Ville:o.ville, Telephone:o.tel, Email:o.email,
+      ContactEvenement:o.contact, Commune:(state.mairies[o.codeInsee]?state.mairies[o.codeInsee].nom:o.codeInsee)
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Prospection');
+    XLSX.writeFile(wb, 'prospection_csb.xlsx');
+  }
+});
+function downloadText(filename, text){
+  const blob = new Blob(['\uFEFF'+text], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+// ---- init -------------------------------------------------------------
+loadState();
+if(Object.keys(state.mairies).length){
+  document.getElementById('panelFilters').style.display = 'block';
+  document.getElementById('panelResults').style.display = 'block';
+  document.getElementById('panelManualAdd').style.display = 'block';
+  if(Object.keys(state.orgs).length) document.getElementById('panelExport').style.display = 'flex';
+  buildNafCheckboxes();
+  renderMairieList();
+  setStatus('statusCommunes', `${Object.keys(state.mairies).length} mairie(s) rechargée(s) depuis la session précédente.`, 'ok');
+}
+</script>
+</body>
+</html>

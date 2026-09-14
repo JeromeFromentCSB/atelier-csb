@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/*.ico
+build/*.icns
+.run-stdout.log
+.run-stderr.log
+*.log
+FichiersTest/
