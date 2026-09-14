@@ -65,22 +65,26 @@ L'appli vérifie au démarrage si une version plus récente existe (via `electro
 oui : bandeau discret en bas de l'écran, téléchargement en arrière-plan, puis un bouton
 "Redémarrer et installer" une fois prêt. Aucune action requise poste par poste.
 
-Les fichiers de mise à jour sont hébergés dans le dossier `pb_public` de PocketBase sur le
-Synology (servi automatiquement en fichiers statiques, à l'URL `http://192.168.1.142:8090/`) —
-pas de serveur supplémentaire à gérer.
+Les mises à jour sont publiées sous forme de **Release GitHub** sur le dépôt
+[JeromeFromentCSB/atelier-csb](https://github.com/JeromeFromentCSB/atelier-csb) (public — voir
+`build.publish` dans `package.json`) : `electron-updater` interroge la dernière Release publiée,
+peu importe où se trouve le poste (plus besoin d'être sur le réseau de l'atelier, contrairement à
+l'ancienne solution via le Synology).
 
-**Pour publier une nouvelle version :**
-1. Augmente le numéro de version dans `package.json` (ex. `"version": "0.2.0"`).
-2. `npm run dist:win` (variable d'environnement `CSC_IDENTITY_AUTO_DISCOVERY=false` recommandée
-   pour éviter un téléchargement inutile d'outil de signature).
-3. Dans `dist/`, récupère les 3 fichiers : `Atelier CSB Setup <version>.exe`, son `.blockmap`,
-   et `latest.yml`.
-4. Dépose-les dans `pb_public/app-updates/` sur le Synology (via l'interface PocketBase, ou un
-   partage réseau/File Station vers ce dossier — à côté de `pb_data`).
-5. Au prochain lancement, chaque poste détecte la nouvelle version automatiquement.
+**Pour publier une nouvelle version (entièrement automatisé via GitHub Actions) :**
+1. Augmente le numéro de version dans `package.json` (ex. `"version": "0.2.0"`), commit, push.
+2. Crée et pousse un tag correspondant :
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+3. Le workflow `.github/workflows/build.yml` compile Windows + Mac et publie automatiquement une
+   Release GitHub `v0.2.0` avec les installeurs et les fichiers `latest.yml`/`latest-mac.yml`.
+4. Au prochain lancement, chaque poste détecte la nouvelle version automatiquement.
 
-Le numéro de version dans `latest.yml` doit être strictement supérieur à celui déjà en place
-pour que la mise à jour soit proposée.
+Un déclenchement manuel du workflow (bouton "Run workflow" dans l'onglet Actions, ou push sur
+`master` sans tag) compile aussi les deux plateformes mais **ne publie pas** de Release — pratique
+pour tester une compilation sans la proposer en mise à jour à tout le monde.
 
 ## État actuel
 

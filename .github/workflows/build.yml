@@ -1,13 +1,19 @@
 name: Build installers
 
-# Se déclenche soit manuellement (bouton "Run workflow" sur GitHub), soit en poussant un tag
-# de version (ex. v0.2.0) — pratique pour préparer une nouvelle version sans y penser à chaque
-# push habituel sur le code.
+# Se déclenche soit manuellement (bouton "Run workflow" sur GitHub, build de test sans
+# publication), soit en poussant un tag de version (ex. v0.2.0) — dans ce cas, la Release
+# GitHub correspondante est créée/mise à jour avec les installeurs, et c'est cette Release
+# que l'app va vérifier automatiquement (electron-updater, provider "github").
 on:
   workflow_dispatch:
   push:
     tags:
       - 'v*'
+
+# Nécessaire pour qu'electron-builder puisse créer/mettre à jour une Release GitHub avec le
+# jeton fourni automatiquement par Actions (GITHUB_TOKEN), sans avoir à en créer un à part.
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -16,11 +22,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
-      - run: npm run dist:win
+      - name: Build (+ publication sur un tag de version)
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            npx electron-builder --win --publish always
+          else
+            npx electron-builder --win --publish never
+          fi
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
           name: atelier-csb-windows
@@ -35,11 +49,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
-      - run: npm run dist:mac
+      - name: Build (+ publication sur un tag de version)
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            npx electron-builder --mac --publish always
+          else
+            npx electron-builder --mac --publish never
+          fi
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
           name: atelier-csb-mac

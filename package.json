@@ -54,8 +54,9 @@
     },
     "publish": [
       {
-        "provider": "generic",
-        "url": "http://192.168.1.142:8090/app-updates/"
+        "provider": "github",
+        "owner": "JeromeFromentCSB",
+        "repo": "atelier-csb"
       }
     ]
   },
