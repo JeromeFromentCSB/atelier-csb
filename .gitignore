@@ -6,3 +6,4 @@ build/*.icns
 .run-stderr.log
 *.log
 FichiersTest/
+ci-artifacts/

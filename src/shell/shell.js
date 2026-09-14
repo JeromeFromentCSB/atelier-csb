@@ -126,10 +126,30 @@
     });
   }
 
+  // Une iframe par module, créée une seule fois puis simplement montrée/masquée ensuite —
+  // avant, changer d'onglet recréait l'iframe à chaque clic (main.innerHTML = ...), ce qui
+  // rechargeait le module de zéro et perdait tout son état (sélection en cours, connexion
+  // IMAP/PocketBase, formulaire à moitié rempli...).
+  const moduleFrames = {};
+
   function openModule(mod) {
     activeModuleId = mod.id;
     renderModuleNav();
-    main.innerHTML = `<iframe src="${mod.path}" title="${mod.label}"></iframe>`;
+
+    const placeholder = main.querySelector('.main-placeholder');
+    if (placeholder) placeholder.remove();
+
+    Object.keys(moduleFrames).forEach((id) => {
+      moduleFrames[id].style.display = id === mod.id ? 'block' : 'none';
+    });
+
+    if (!moduleFrames[mod.id]) {
+      const iframe = document.createElement('iframe');
+      iframe.src = mod.path;
+      iframe.title = mod.label;
+      main.appendChild(iframe);
+      moduleFrames[mod.id] = iframe;
+    }
   }
 
   function renderUserMenu() {
@@ -158,6 +178,7 @@
     } else {
       activeModuleId = null;
       userMenuDropdown.classList.remove('show');
+      Object.keys(moduleFrames).forEach((id) => delete moduleFrames[id]);
       main.innerHTML = `
         <div class="main-placeholder">
           <h2>Choisis un module</h2>
