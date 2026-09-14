@@ -1492,6 +1492,9 @@ function isAdmin(){ return CSBAuth.isAdmin(); }
 function canEditGeneral(){ return isAdmin(); }
 function canEditCoussinTrousse(){ return CSBAuth.can('casaque', 'coussin_trousse'); }
 function canManageLabels(){ return CSBAuth.can('casaque', 'labels'); }
+function canExport(){ return CSBAuth.can('casaque', 'export'); }
+function canExportAlerts(){ return CSBAuth.can('casaque', 'export_alertes'); }
+function canFindDuplicates(){ return CSBAuth.can('casaque', 'doublons'); }
 
 // sha256Bytes reste utilisé ailleurs (détection de doublons à l'import, hashBuffer) —
 // implémentation SHA-256 en JavaScript pur, sans dépendre de
@@ -4546,6 +4549,12 @@ function applyPermissionsToUI(){
   updateSettingsBtnVisibility();
   const fileLabel = document.querySelector('label[for="fileInput"]');
   if(fileLabel) fileLabel.style.display = isAdmin() ? '' : 'none';
+  const exportBtn = document.getElementById('exportBtn');
+  if(exportBtn) exportBtn.style.display = canExport() ? '' : 'none';
+  const exportAlertsBtn = document.getElementById('exportAlertsBtn');
+  if(exportAlertsBtn) exportAlertsBtn.style.display = canExportAlerts() ? '' : 'none';
+  const findDuplicatesBtn = document.getElementById('findDuplicatesBtn');
+  if(findDuplicatesBtn) findDuplicatesBtn.style.display = canFindDuplicates() ? '' : 'none';
 }
 
 // La connexion est gérée par le socle commun (CSBAuth) — ce module se contente d'appliquer

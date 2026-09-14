@@ -528,7 +528,7 @@ function startSync(){
 function currentUser(){ return CSBAuth.currentUser(); }
 function allowedTabs(){
   if(CSBAuth.isAdmin()) return TABS.map(t=>t.id);
-  return TABS.filter(t => t.id === 'stock' ? CSBAuth.can('stock_fil','access') : CSBAuth.can('stock_fil', t.id)).map(t=>t.id);
+  return TABS.filter(t => CSBAuth.can('stock_fil', t.id)).map(t=>t.id);
 }
 function userCan(user, permId){ return CSBAuth.can('stock_fil', permId); }
 function clearSession(){} // conservé pour compat avec les appels existants (reset/import) — sans effet

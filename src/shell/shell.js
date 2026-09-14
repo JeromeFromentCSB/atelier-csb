@@ -10,7 +10,10 @@
     ] },
     { id: 'casaque', label: 'Gestion Casaque', icon: '🏇', path: '../../modules/casaque/index.html', perms: [
       { key: 'coussin_trousse', label: 'Modifier Coussin / Trousse' },
-      { key: 'labels', label: 'Étiquettes Colissimo' }
+      { key: 'labels', label: 'Étiquettes Colissimo' },
+      { key: 'export', label: 'Bouton Exporter (.xlsx)' },
+      { key: 'export_alertes', label: 'Bouton Exporter les alertes' },
+      { key: 'doublons', label: 'Bouton Doublons probables' }
     ] },
     { id: 'inventaire', label: 'Inventaire', icon: '🗂️', path: '../../modules/inventaire/index.html', perms: [
       { key: 'catalogue', label: 'Onglet Catalogue fournisseurs' },
@@ -20,6 +23,7 @@
       { key: 'import', label: 'Importer une sauvegarde' }
     ] },
     { id: 'stock_fil', label: 'Stock de Fil', icon: '🧵', path: '../../modules/stock_fil/index.html', perms: [
+      { key: 'stock', label: 'Onglet État du stock' },
       { key: 'mouvements', label: 'Onglet Mouvements' },
       { key: 'recherche', label: 'Onglet Recherche' },
       { key: 'parametres', label: 'Onglet Paramètres' },

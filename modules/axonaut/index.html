@@ -3732,8 +3732,8 @@ function render(){
     if(!row || row.querySelector('.iconbtn-download')) return;
     const safeName = (r.numeroCommande || 'etiquette').replace(/[^a-z0-9]+/gi, '_');
     const dlBtn = document.createElement('button');
-    dlBtn.className = 'iconbtn iconbtn-download'; dlBtn.title = "Télécharger l'étiquette"; dlBtn.textContent = '⭳';
-    dlBtn.addEventListener('click', () => downloadBase64(lbl.base64, lbl.contentType || 'application/pdf', safeName + '_etiquette.pdf'));
+    dlBtn.className = 'iconbtn iconbtn-download'; dlBtn.title = "Ouvrir l'étiquette (impression)"; dlBtn.textContent = '🖨️';
+    dlBtn.addEventListener('click', () => openPdfInNewTab(lbl.base64, lbl.contentType || 'application/pdf'));
     row.insertBefore(dlBtn, row.querySelector('.iconbtn-delete') || null);
     if(lbl.cn23Base64){
       const cn23Btn = document.createElement('button');
