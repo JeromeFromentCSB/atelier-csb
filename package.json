@@ -56,7 +56,8 @@
       {
         "provider": "github",
         "owner": "JeromeFromentCSB",
-        "repo": "atelier-csb"
+        "repo": "atelier-csb",
+        "releaseType": "release"
       }
     ]
   },

@@ -44,6 +44,7 @@ jobs:
             dist/latest.yml
 
   build-mac:
+    needs: build-windows # évite que les deux jobs créent/publient la même Release en parallèle
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
