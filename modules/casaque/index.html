@@ -70,6 +70,14 @@
       la taille max du champ si PocketBase la limite par défaut, un montage
       de plusieurs dizaines d'éléments reste malgré tout de l'ordre de
       quelques Ko).
+    - Sur la collection "envoi_colis" : ajouter 6 champs texte LONG (sans
+      limite de taille, ou une limite large) pour que l'étiquette/CN23/
+      facture générées survivent à une réinstallation ou soient visibles
+      depuis un autre appareil (avant ça, ces PDF n'étaient stockés que dans
+      IndexedDB, donc perdus dès qu'on changeait de poste) :
+      etiquette_pdf, etiquette_pdf_ct, cn23_pdf, cn23_pdf_ct, facture_pdf,
+      facture_pdf_ct (les "_ct" contiennent le content-type, presque toujours
+      "application/pdf").
   ============================================================================
 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -2651,7 +2659,7 @@ document.getElementById('colGenerateBtn').addEventListener('click', async () => 
         catch(e){ console.warn('Echec génération facture proforma', e); }
       }
 
-      await idbSetLabel(r._key, {
+      const storedLabel = {
         base64: finalLabel,
         contentType: parsed.labelContentType || 'application/pdf',
         cn23Base64: finalCn23,
@@ -2659,7 +2667,10 @@ document.getElementById('colGenerateBtn').addEventListener('click', async () => 
         proformaBase64: finalProforma,
         proformaContentType,
         parcelNumber, date: new Date().toISOString()
-      });
+      };
+      await idbSetLabel(r._key, storedLabel);
+      r._pbLabel = storedLabel;
+      await pushLabelToPocketBase(r, storedLabel);
     }
 
     persistState(r, { tracking: parcelNumber || r._state.tracking, labelGenerated: true });
@@ -3119,8 +3130,37 @@ function pbRecordToLocal(pb){
     _state: {
       tracking: pb.tracking || '', sent: !!pb.envoye,
       programGenerated: !!pb.programme_genere, labelGenerated: !!pb.etiquette_generee
-    }
+    },
+    // Repli PDF (étiquette/CN23/facture) : sauvegardés dans PocketBase en plus d'IndexedDB pour
+    // rester accessibles depuis n'importe quel appareil, même après une réinstallation.
+    _pbLabel: (pb.etiquette_pdf ? {
+      base64: pb.etiquette_pdf, contentType: pb.etiquette_pdf_ct || 'application/pdf',
+      cn23Base64: pb.cn23_pdf || null, cn23ContentType: pb.cn23_pdf_ct || 'application/pdf',
+      proformaBase64: pb.facture_pdf || null, proformaContentType: pb.facture_pdf_ct || 'application/pdf'
+    } : null)
   };
+}
+// Récupère le PDF d'une fiche (étiquette/CN23/facture) : IndexedDB d'abord (rapide, local),
+// sinon repli sur la copie PocketBase (partagée entre appareils) qu'on recopie alors en local.
+async function getLabelForRecord(r){
+  const local = await idbGetLabel(r._key);
+  if(local) return local;
+  if(r._pbLabel){
+    try{ await idbSetLabel(r._key, r._pbLabel); }catch(e){}
+    return r._pbLabel;
+  }
+  return null;
+}
+// Pousse le PDF généré vers PocketBase (repli inter-appareils), en plus d'IndexedDB.
+async function pushLabelToPocketBase(r, stored){
+  if(!pbAvailable || !r._pbId) return;
+  try{
+    await pbPatch(r._pbId, {
+      etiquette_pdf: stored.base64 || '', etiquette_pdf_ct: stored.contentType || 'application/pdf',
+      cn23_pdf: stored.cn23Base64 || '', cn23_pdf_ct: stored.cn23ContentType || 'application/pdf',
+      facture_pdf: stored.proformaBase64 || '', facture_pdf_ct: stored.proformaContentType || 'application/pdf'
+    });
+  }catch(e){ console.warn('Echec sauvegarde du PDF étiquette dans PocketBase (repli local uniquement)', e); }
 }
 async function pbCreate(r){
   const body = {
@@ -4224,9 +4264,9 @@ function buildRowElement(r){
 
   const labelDlBtn = tr.querySelector('.labelDlBtn');
   if(labelDlBtn) labelDlBtn.addEventListener('click', async () => {
-    const stored = await idbGetLabel(r._key);
+    const stored = await getLabelForRecord(r);
     if(!stored){
-      alert("Étiquette introuvable sur cet appareil (elle n'a peut-être été générée que sur un autre appareil). Reclique sur « Régénérer » pour en recréer une.");
+      alert("Étiquette introuvable (ni sur cet appareil, ni dans PocketBase). Reclique sur « Régénérer » pour en recréer une.");
       return;
     }
     openPdfInNewTab(stored.base64, stored.contentType);
@@ -4234,9 +4274,9 @@ function buildRowElement(r){
 
   const labelCn23Btn = tr.querySelector('.labelCn23Btn');
   if(labelCn23Btn) labelCn23Btn.addEventListener('click', async () => {
-    const stored = await idbGetLabel(r._key);
+    const stored = await getLabelForRecord(r);
     if(!stored || !stored.cn23Base64){
-      alert("Document douanier CN23 introuvable sur cet appareil pour cette fiche (générée sans CN23, ou sur un autre appareil). Reclique sur « Régénérer » pour en récupérer un nouveau.");
+      alert("Document douanier CN23 introuvable (ni sur cet appareil, ni dans PocketBase) pour cette fiche (générée sans CN23, ou avant la mise en place de la sauvegarde partagée). Reclique sur « Régénérer » pour en récupérer un nouveau.");
       return;
     }
     openPdfInNewTab(stored.cn23Base64, stored.cn23ContentType || 'application/pdf');
@@ -4244,9 +4284,9 @@ function buildRowElement(r){
 
   const labelFactureBtn = tr.querySelector('.labelFactureBtn');
   if(labelFactureBtn) labelFactureBtn.addEventListener('click', async () => {
-    const stored = await idbGetLabel(r._key);
+    const stored = await getLabelForRecord(r);
     if(!stored || !stored.proformaBase64){
-      alert("Facture (proforma) introuvable sur cet appareil pour cette fiche — Colissimo ne l'a peut-être pas fournie pour ce pays/produit, ou elle a été générée sur un autre appareil.");
+      alert("Facture (proforma) introuvable (ni sur cet appareil, ni dans PocketBase) — Colissimo ne l'a peut-être pas fournie pour ce pays/produit, ou elle a été générée avant la mise en place de la sauvegarde partagée.");
       return;
     }
     openPdfInNewTab(stored.proformaBase64, stored.proformaContentType || 'application/pdf');
@@ -4256,13 +4296,18 @@ function buildRowElement(r){
   if(labelDeleteBtn) labelDeleteBtn.addEventListener('click', async () => {
     const proceed = confirm(
       `Supprimer l'étiquette et le n° de suivi de « ${r.nom} » ?\n\n` +
-      `Ceci efface le PDF enregistré sur cet appareil et vide le n° de suivi. ` +
+      `Ceci efface le PDF enregistré (sur cet appareil et dans PocketBase) et vide le n° de suivi. ` +
       `⚠ Si l'étiquette a déjà été scannée/collectée par La Poste, contacte le support Colissimo ` +
       `pour une annulation officielle — cette action ne fait que nettoyer la fiche dans l'appli.`
     );
     if(!proceed) return;
     await idbDeleteLabel(r._key);
+    r._pbLabel = null;
     persistState(r, { labelGenerated: false, tracking: '' });
+    if(pbAvailable && r._pbId){
+      try{ await pbPatch(r._pbId, { etiquette_pdf: '', cn23_pdf: '', facture_pdf: '' }); }
+      catch(e){ console.warn('Echec suppression du PDF étiquette dans PocketBase', e); }
+    }
     render();
   });
 

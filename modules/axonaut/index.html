@@ -628,6 +628,17 @@
     <div class="hint">Image avec fond transparent recommandée (PNG). Utilisée pour incruster la signature sur le CN23 et la facture proforma.</div>
 
     <div class="row" style="margin-top:14px; padding-top:14px; border-top:1.5px dashed var(--line);">
+      <label style="min-width:100%; font-weight:700; color:var(--ink);">Logo (bon de fabrication)</label>
+    </div>
+    <div class="row">
+      <label>Image logo</label>
+      <input type="file" id="logoFileInput" accept="image/png,image/jpeg">
+      <img id="logoPreview" style="display:none; height:36px; border:1px solid var(--line); border-radius:4px; background:#fff;">
+      <button class="btn ghost" id="logoRemoveBtn" style="display:none;">Retirer</button>
+    </div>
+    <div class="hint">Image avec fond transparent recommandée (PNG). Affichée en haut à gauche du bon de fabrication, à côté des coordonnées de l'atelier.</div>
+
+    <div class="row" style="margin-top:14px; padding-top:14px; border-top:1.5px dashed var(--line);">
       <label style="min-width:100%; font-weight:700; color:var(--ink);">France Express (GEODIS)</label>
     </div>
     <div class="row">
@@ -2187,38 +2198,81 @@ async function stampSignatureOnCn23(base64, signatureDataUrl){
 }
 // Génère un "Bon de fabrication" interne (mise en page inspirée du BL fourni en exemple) à partir
 // des lignes du devis — document 100% local, ne touche pas Axonaut.
-async function generateBonDeFabrication(q){
-  const cfg = await getColConfig();
+// Coordonnées propres de l'Atelier CSB (raison sociale SARL C.S.B.) — distinctes des réglages
+// « Colissimo — Expéditeur », qui servent à une autre identité (Upstride - Le Nouvel Atelier)
+// utilisée uniquement pour l'envoi des étiquettes, pas pour ce document interne.
+async function generateBonDeFabrication(q, clientAddress){
   const pdfDoc = await PDFLib.PDFDocument.create();
   const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
-  const page = pdfDoc.addPage([595.28, 841.89]); // A4
+  const PAGE_SIZE = [595.28, 841.89]; // A4
+  let page = pdfDoc.addPage(PAGE_SIZE);
   const { width, height } = page.getSize();
   const left = 40, right = width - 40;
+  const bottom = 50;
   const navy = PDFLib.rgb(0.11, 0.22, 0.38);
   const lightGrey = PDFLib.rgb(0.94, 0.94, 0.94);
-  let y = height - 50;
+  function drawTableHeader(yy){
+    page.drawRectangle({ x: left, y: yy - 18, width: right - left, height: 20, color: navy });
+    page.drawText('Description', { x: left + 8, y: yy - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
+    page.drawText('Quantité', { x: right - 90, y: yy - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
+    return yy - 22;
+  }
 
-  page.drawText(cfg.senderCompany || 'Atelier CSB', { x: left, y, size: 15, font: fontBold });
-  page.drawText('Bon de fabrication', { x: right - 180, y, size: 20, font: fontBold, color: navy });
-  y -= 18;
-  const senderLines = [cfg.senderLine2, `${cfg.senderZip || ''} ${cfg.senderCity || ''}`, cfg.senderPhone].filter(Boolean);
-  senderLines.forEach(line => { page.drawText(line, { x: left, y, size: 9, font }); y -= 12; });
-  page.drawText(`N° ${q.number || ''}`, { x: right - 180, y: height - 72, size: 10, font });
-  page.drawText(`Le ${new Date().toLocaleDateString('fr-FR')}`, { x: right - 180, y: height - 86, size: 10, font });
+  // Logo de l'atelier (facultatif, réglages ⚙︎) — dessiné à gauche, coordonnées de l'atelier
+  // à sa droite, pour former un bloc "en-tête" en haut à gauche du document.
+  let logoImage = null, logoDims = { width: 0, height: 0 };
+  try{
+    const logoDataUrl = await getLogoImg();
+    if(logoDataUrl){
+      const logoBytes = Uint8Array.from(atob(logoDataUrl.split(',')[1]), c => c.charCodeAt(0));
+      logoImage = logoDataUrl.startsWith('data:image/png') ? await pdfDoc.embedPng(logoBytes) : await pdfDoc.embedJpg(logoBytes);
+      const maxW = 130, maxH = 90;
+      const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height, 1);
+      logoDims = { width: logoImage.width * scale, height: logoImage.height * scale };
+    }
+  }catch(e){ console.warn('Logo illisible pour le bon de fabrication', e); }
 
-  y -= 20;
-  page.drawText(q.company_name || '', { x: left, y, size: 10, font: fontBold });
-  y -= 12;
+  const clientName = (clientAddress && clientAddress.nomSoc) || q.company_name || '';
+  const clientLines = clientAddress ? [
+    clientAddress.adresse,
+    [clientAddress.cp, clientAddress.ville].filter(Boolean).join(' ') + (clientAddress.pays && clientAddress.pays !== 'France' ? ' — ' + clientAddress.pays : ''),
+    clientAddress.tel
+  ].filter(Boolean) : [];
   const chapterTxt = stripHtmlToText((q.quotation_lines && q.quotation_lines[0] && q.quotation_lines[0].chapter) || q.title || '');
-  if(chapterTxt){ page.drawText(chapterTxt, { x: left, y, size: 9, font }); y -= 12; }
 
-  y -= 16;
-  // En-tête de tableau
-  page.drawRectangle({ x: left, y: y - 18, width: right - left, height: 20, color: navy });
-  page.drawText('Description', { x: left + 8, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
-  page.drawText('Quantité', { x: right - 90, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
-  y -= 22;
+  // Bloc en-tête (logo + titre + n° + date + société + adresse client) — répété sur chaque page.
+  function drawHeaderBlock(){
+    const logoTop = height - 12;
+    let yy = height - 50;
+    if(logoImage){
+      page.drawImage(logoImage, { x: left, y: logoTop - logoDims.height, width: logoDims.width, height: logoDims.height });
+    }
+
+    page.drawText('Bon de fabrication', { x: right - 180, y: yy, size: 20, font: fontBold, color: navy });
+    page.drawText(`N° ${q.number || ''}`, { x: right - 180, y: height - 72, size: 10, font });
+    page.drawText(`Le ${new Date().toLocaleDateString('fr-FR')}`, { x: right - 180, y: height - 86, size: 10, font });
+    if(clientName){
+      page.drawText(`Société : ${clientName}`, { x: right - 180, y: height - 104, size: 12, font: fontBold });
+    }
+
+    // Descend sous le logo avant le bloc client.
+    if(logoImage) yy = logoTop - logoDims.height - 6;
+
+    yy -= 8;
+    clientLines.forEach(line => { page.drawText(line, { x: left, y: yy, size: 9, font }); yy -= 12; });
+    if(chapterTxt){ page.drawText(chapterTxt, { x: left, y: yy, size: 9, font }); yy -= 12; }
+
+    yy -= 16;
+    return drawTableHeader(yy);
+  }
+
+  function newPage(){
+    page = pdfDoc.addPage(PAGE_SIZE);
+    return drawHeaderBlock();
+  }
+
+  let y = drawHeaderBlock();
 
   const lines = q.quotation_lines || [];
   let totalQty = 0;
@@ -2226,6 +2280,7 @@ async function generateBonDeFabrication(q){
     const details = stripHtmlToText(l.details || '').split('\n').filter(Boolean);
     const blockLines = [l.title || l.product_name || '', ...details];
     const blockHeight = 14 + blockLines.length * 11;
+    if(y - blockHeight < bottom) y = newPage();
     if(i % 2 === 1) page.drawRectangle({ x: left, y: y - blockHeight + 4, width: right - left, height: blockHeight, color: lightGrey });
     let ly = y;
     page.drawText(blockLines[0], { x: left + 8, y: ly - 10, size: 9.5, font: fontBold });
@@ -2240,14 +2295,10 @@ async function generateBonDeFabrication(q){
   });
 
   y -= 10;
+  if(y - 20 < bottom) y = newPage();
   page.drawRectangle({ x: right - 200, y: y - 18, width: 200, height: 20, color: navy });
   page.drawText('Total quantité', { x: right - 194, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
   page.drawText(totalQty.toFixed(2).replace('.', ','), { x: right - 55, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
-  y -= 50;
-
-  page.drawText('Signature', { x: right - 200, y, size: 11, font: fontBold, color: navy });
-  page.drawRectangle({ x: right - 200, y: y - 90, width: 200, height: 80, borderWidth: 1, borderColor: PDFLib.rgb(0.7,0.7,0.7) });
-
   const outBytes = await pdfDoc.save();
   let binary = '';
   outBytes.forEach(b => binary += String.fromCharCode(b));
@@ -2413,6 +2464,56 @@ document.getElementById('signatureRemoveBtn').addEventListener('click', () => {
   renderSignaturePreview();
 });
 
+// ---------- Logo (bon de fabrication) ----------
+// Stocké via window.csbHost (fichier de config de l'app) plutôt que localStorage seul : le
+// localStorage d'une iframe module s'est déjà révélé peu fiable dans cette app (cf. le bug du
+// Worker Axonaut qui ne restait pas enregistré) — on garde quand même un repli localStorage
+// pour le cas où l'app tournerait hors Electron.
+const LOGO_CFG_KEY = 'csb_axonaut_logo_img';
+async function getLogoImg(){
+  if(window.csbHost){
+    try{
+      const appCfg = await window.csbHost.getConfig();
+      if(appCfg && appCfg[LOGO_CFG_KEY]) return appCfg[LOGO_CFG_KEY];
+    }catch(e){}
+  }
+  try{ return localStorage.getItem(LOGO_CFG_KEY) || ''; }catch(e){ return ''; }
+}
+async function setLogoImg(dataUrl){
+  if(window.csbHost){
+    try{ await window.csbHost.setConfig({ [LOGO_CFG_KEY]: dataUrl }); return; }catch(e){}
+  }
+  try{ localStorage.setItem(LOGO_CFG_KEY, dataUrl); }catch(e){}
+}
+async function removeLogoImg(){
+  if(window.csbHost){
+    try{ await window.csbHost.setConfig({ [LOGO_CFG_KEY]: '' }); return; }catch(e){}
+  }
+  try{ localStorage.removeItem(LOGO_CFG_KEY); }catch(e){}
+}
+async function renderLogoPreview(){
+  const logo = await getLogoImg();
+  const img = document.getElementById('logoPreview');
+  const removeBtn = document.getElementById('logoRemoveBtn');
+  if(logo){ img.src = logo; img.style.display = 'inline-block'; removeBtn.style.display = 'inline-flex'; }
+  else{ img.style.display = 'none'; removeBtn.style.display = 'none'; }
+}
+document.getElementById('logoFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    await setLogoImg(reader.result);
+    renderLogoPreview();
+    e.target.value = '';
+  };
+  reader.readAsDataURL(file);
+});
+document.getElementById('logoRemoveBtn').addEventListener('click', async () => {
+  await removeLogoImg();
+  renderLogoPreview();
+});
+
 // ---------- Réglages : chargement / sauvegarde ----------
 async function loadSettingsForm(){
   const cfg = getConfig();
@@ -2442,6 +2543,7 @@ async function loadSettingsForm(){
   document.getElementById('colCustomsOrigin').value = colCfg.customsOrigin;
   document.getElementById('colCustomsHsCode').value = colCfg.customsHsCode;
   renderSignaturePreview();
+  renderLogoPreview();
   const feCfg = await getFeConfig();
   document.getElementById('feLoginId').value = feCfg.loginId;
   document.getElementById('feApiKey').value = feCfg.apiKey;
@@ -3132,7 +3234,14 @@ async function openBlModal(r){
   updateFabricationBtnLabel(r.contractId);
   fabricationBtn.onclick = async () => {
     if(!currentBlQuotation){ alert('Devis introuvable pour cette commande.'); return; }
-    await generateBonDeFabrication(currentBlQuotation);
+    await generateBonDeFabrication(currentBlQuotation, {
+      nomSoc: r.nomSoc || r.clientCompany,
+      adresse: r.adresse,
+      cp: r.cp,
+      ville: r.ville,
+      pays: r.pays,
+      tel: r.tel
+    });
     markFabricationPrinted(r.contractId);
     updateFabricationBtnLabel(r.contractId);
   };
@@ -3311,6 +3420,7 @@ function buildStatusCellHtml(r){
   return `<span class="badge warn">À traiter</span>`;
 }
 function buildActionsCellHtml(r){
+  if(!isAdminUser()) return '';
   const canEtiquettes = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'etiquettes');
   const labelBtn = !canEtiquettes
     ? `<span class="badge warn" title="Accès non autorisé pour cet utilisateur">Étiquette non autorisée</span>`
@@ -3328,7 +3438,7 @@ function updateSortArrows(){
 }
 
 // ---------- Colonnes configurables (ordre, largeur, visibilité) ----------
-const ADMIN_ONLY_COLUMNS = new Set(['montant']);
+const ADMIN_ONLY_COLUMNS = new Set(['montant', 'actions']);
 const COLUMN_DEFS = {
   commande: { label:'Commande', defaultWidth:170, cellClass:'name', render:r => escapeHtml(r.numeroCommande) },
   date: { label:'Date commande', defaultWidth:110, sortable:'date', render:r => formatDateFR(r.startDate) },
@@ -3645,7 +3755,7 @@ function render(){
         <td colspan="${cols.length}" style="padding:8px 16px; background:var(--paper-2); border-bottom:1px solid var(--line); border-top:1px solid var(--line);">
           <div style="display:flex; justify-content:space-between; align-items:center; font-family:sans-serif;">
             <span style="font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);"><span style="display:inline-block; width:14px;">${expanded ? '▾' : '▸'}</span>${escapeHtml(client)} (${rows.length})</span>
-            <span style="font-family:'SF Mono',monospace; font-weight:600; font-size:.78rem;">${formatMontant(clientTotal)}</span>
+            ${isAdminUser() ? `<span style="font-family:'SF Mono',monospace; font-weight:600; font-size:.78rem;">${formatMontant(clientTotal)}</span>` : ''}
           </div>
         </td>
       </tr>`;
@@ -4147,7 +4257,7 @@ function renderDevisTab(){
   // Le compteur et le total de l'en-tête reflètent le filtre actuellement appliqué.
   document.getElementById('devisStatCount').textContent = list.length;
   const total = list.reduce((sum, q) => sum + (typeof q.pre_tax_amount === 'number' ? q.pre_tax_amount : 0), 0);
-  document.getElementById('devisStatTotal').textContent = total.toFixed(2).replace('.', ',') + ' €';
+  document.getElementById('devisStatTotal').textContent = isAdminUser() ? total.toFixed(2).replace('.', ',') + ' €' : '—';
 
   const byClient = {};
   list.forEach(q => {
@@ -4175,14 +4285,14 @@ function renderDevisTab(){
     return `
       <div class="devis-group-header" data-client="${escapeHtml(client)}" style="cursor:pointer; border-left:5px solid ${color}; display:flex; justify-content:space-between; align-items:center;">
         <span><span style="display:inline-block; width:14px;">${expanded ? '▾' : '▸'}</span>${escapeHtml(client)} (${qs.length})</span>
-        <span style="font-family:'SF Mono',monospace; font-weight:600;">${clientTotal.toFixed(2).replace('.', ',')} €</span>
+        ${isAdminUser() ? `<span style="font-family:'SF Mono',monospace; font-weight:600;">${clientTotal.toFixed(2).replace('.', ',')} €</span>` : ''}
       </div>
       ${expanded ? qs.map(q => `
         <div class="devis-row ${q.id === selectedQuotationId ? 'selected' : ''}" data-qid="${q.id}" style="border-left:5px solid ${color};">
           <span class="devis-dot ${q.status === 'accepted' ? 'ok' : 'warn'}" title="${q.status === 'accepted' ? 'Validé' : 'Non validé'}"></span>
           <span class="devis-number">${escapeHtml(q.number || ('#' + q.id))}</span>
           <span style="color:var(--muted); font-size:.75rem;">${formatDateFR((q.date||'').slice(0,10))}</span>
-          <span class="devis-amount">${(q.pre_tax_amount||0).toFixed(2).replace('.', ',')} €</span>
+          ${isAdminUser() ? `<span class="devis-amount">${(q.pre_tax_amount||0).toFixed(2).replace('.', ',')} €</span>` : ''}
         </div>
       `).join('') : ''}
     `;
@@ -4230,7 +4340,7 @@ function renderDevisDetail(q){
         <div id="devisLineImg${i}" style="width:56px; height:56px; flex-shrink:0; border-radius:6px; background:var(--paper-2); display:flex; align-items:center; justify-content:center; overflow:hidden;"></div>
         <div style="flex:1;">
           <div class="title">${escapeHtml(l.title || l.product_name || '')} — Qté : ${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}</div>
-          <div class="meta">${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) + ' · ' : ''}${(l.pre_tax_amount||0).toFixed(2).replace('.', ',')} € HT</div>
+          <div class="meta">${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) : ''}${l.product_code && isAdminUser() ? ' · ' : ''}${isAdminUser() ? (l.pre_tax_amount||0).toFixed(2).replace('.', ',') + ' € HT' : ''}</div>
           <div class="details">${escapeHtml(stripHtmlToText(l.details))}</div>
         </div>
       </div>`;
@@ -4246,8 +4356,8 @@ function renderDevisDetail(q){
       </div>
       <div style="color:var(--muted); font-size:.85rem;">${escapeHtml(q.company_name || '')} · ${formatDateFR((q.date||'').slice(0,10))}</div>
       <div style="margin-top:6px; font-size:.9rem;">
-        Total HT : <strong>${(q.pre_tax_amount||0).toFixed(2).replace('.', ',')} €</strong>
-        ${q.public_path ? ` · <a href="${escapeHtml(q.public_path)}" target="_blank" style="color:var(--poste-yellow-dark);">Voir le PDF</a>` : ''}
+        ${isAdminUser() ? `Total HT : <strong>${(q.pre_tax_amount||0).toFixed(2).replace('.', ',')} €</strong>` : ''}
+        ${q.public_path && isAdminUser() ? ` · <a href="${escapeHtml(q.public_path)}" target="_blank" style="color:var(--poste-yellow-dark);">Voir le PDF</a>` : ''}
       </div>
       <button class="btn ghost" id="devisFabricationBtn" style="margin-top:10px;">🏭 Bon de fabrication</button>
     </div>
