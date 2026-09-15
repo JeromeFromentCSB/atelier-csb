@@ -1,6 +1,6 @@
 {
   "name": "atelier-csb",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Application de gestion de l'Atelier CSB (broderie) — regroupe Envoi Axonaut, Gestion Casaque, Inventaire et Stock de Fil.",
   "main": "main.js",
   "author": "Atelier CSB",
@@ -44,6 +44,13 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "x64",
             "arm64"
