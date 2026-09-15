@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Photos commandes · Atelier CSB</title>
+<style>
+  :root{
+    --ink:#232320; --paper:#faf9f6; --paper-2:#f2f0ea; --line:#e5e1d6;
+    --poste-yellow:#f5c518; --poste-yellow-dark:#c99a00;
+    --silk-green:#3d7a57; --silk-red:#b3453a; --muted:#8a8478;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--paper); color:var(--ink); }
+  header{ position:sticky; top:0; background:var(--ink); color:#fff; padding:14px 16px calc(14px + env(safe-area-inset-top)); padding-top:calc(14px + env(safe-area-inset-top)); z-index:10; }
+  header h1{ margin:0; font-size:1.05rem; }
+  #search{ width:100%; padding:12px 14px; font-size:1rem; border:1px solid var(--line); border-radius:10px; margin:12px 0 0; }
+  #filters{ display:flex; gap:8px; margin-top:10px; }
+  #filters button{ flex:1; padding:9px 6px; border-radius:20px; border:1px solid rgba(255,255,255,.3); background:transparent; color:#fff; font-size:.82rem; }
+  #filters button.active{ background:var(--poste-yellow); color:var(--ink); border-color:var(--poste-yellow); font-weight:700; }
+  main{ padding:12px 14px 40px; }
+  .row{ display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .row .info{ flex:1; min-width:0; }
+  .row .numero{ font-weight:700; font-size:.95rem; }
+  .row .client{ color:var(--muted); font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .photobtn{ flex-shrink:0; width:52px; height:52px; border-radius:50%; border:none; background:var(--poste-yellow); font-size:1.4rem; display:flex; align-items:center; justify-content:center; }
+  .row .photobtn.busy{ background:var(--muted); }
+  .row .count{ flex-shrink:0; font-size:.72rem; color:var(--silk-green); font-weight:700; min-width:16px; text-align:center; }
+  .empty, .hint{ color:var(--muted); text-align:center; padding:30px 10px; font-size:.9rem; }
+  #toast{ position:fixed; left:14px; right:14px; bottom:calc(16px + env(safe-area-inset-bottom)); padding:12px 16px; border-radius:10px; font-size:.9rem; text-align:center; color:#fff; opacity:0; transform:translateY(20px); transition:all .25s; pointer-events:none; }
+  #toast.show{ opacity:1; transform:translateY(0); }
+  #toast.ok{ background:var(--silk-green); }
+  #toast.err{ background:var(--silk-red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>📷 Photos par commande</h1>
+  <input type="text" id="search" placeholder="Rechercher un client ou un n° de commande…">
+  <div id="filters">
+    <button data-filter="all" class="active">Tous</button>
+    <button data-filter="non_facturees">Non facturées</button>
+    <button data-filter="facturees">Facturées</button>
+  </div>
+</header>
+<main>
+  <div id="list"><div class="hint">Chargement…</div></div>
+</main>
+<div id="toast"></div>
+<input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
+
+<script>
+// Page servie par PocketBase lui-même (dossier pb_public) : les appels /api/... sont donc
+// toujours sur la même origine que cette page, pas besoin de configurer d'URL.
+let items = [];
+let pendingContract = null;
+let currentFilter = 'all';
+const fileInput = document.getElementById('fileInput');
+
+function showToast(msg, ok){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = ok ? 'ok show' : 'err show';
+  setTimeout(() => { t.className = t.className.replace('show', ''); }, 2500);
+}
+
+async function loadList(){
+  try{
+    const res = await fetch('/api/collections/commandes_index/records?perPage=500&sort=-updated');
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    items = json.items || [];
+    render();
+  }catch(e){
+    document.getElementById('list').innerHTML = `<div class="hint">Erreur de chargement : ${e.message}<br>Vérifie que la collection "commandes_index" existe dans PocketBase.</div>`;
+  }
+}
+
+function render(){
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  let filtered = items;
+  if(currentFilter === 'facturees') filtered = filtered.filter(it => !!it.facturee);
+  else if(currentFilter === 'non_facturees') filtered = filtered.filter(it => !it.facturee);
+  if(q){
+    filtered = filtered.filter(it =>
+      (it.numero_commande || '').toLowerCase().includes(q) ||
+      (it.client || '').toLowerCase().includes(q)
+    );
+  }
+  const box = document.getElementById('list');
+  if(!filtered.length){
+    box.innerHTML = '<div class="empty">Aucune commande. Ouvre l\'onglet Commande sur le PC et clique sur « Actualiser » pour synchroniser la liste.</div>';
+    return;
+  }
+  box.innerHTML = filtered.map(it => `
+    <div class="row" data-contract="${it.contract_id}">
+      <div class="info">
+        <div class="numero">${escapeHtml(it.numero_commande || '(sans numéro)')}</div>
+        <div class="client">${escapeHtml(it.client || '')}</div>
+      </div>
+      <span class="count" data-count="${it.contract_id}"></span>
+      <button class="photobtn" data-take="${it.contract_id}">📷</button>
+    </div>
+  `).join('');
+  box.querySelectorAll('[data-take]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pendingContract = btn.dataset.take;
+      fileInput.value = '';
+      fileInput.click();
+    });
+  });
+  loadCounts(filtered.map(it => it.contract_id));
+}
+
+async function loadCounts(contractIds){
+  for(const id of contractIds){
+    fetch(`/api/collections/commande_photos/records?filter=${encodeURIComponent(`(contract_id='${id}')`)}&perPage=1&skipTotal=0`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if(!json) return;
+        const el = document.querySelector(`[data-count="${id}"]`);
+        if(el && json.totalItems) el.textContent = json.totalItems;
+      }).catch(() => {});
+  }
+}
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files && fileInput.files[0];
+  if(!file || !pendingContract) return;
+  const contractId = pendingContract;
+  const btn = document.querySelector(`[data-take="${contractId}"]`);
+  if(btn){ btn.disabled = true; btn.classList.add('busy'); btn.textContent = '…'; }
+  try{
+    const form = new FormData();
+    form.append('contract_id', contractId);
+    form.append('photo', file, file.name || 'photo.jpg');
+    const res = await fetch('/api/collections/commande_photos/records', { method:'POST', body:form });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    showToast('✔ Photo enregistrée', true);
+    loadCounts([contractId]);
+  }catch(e){
+    showToast('✘ Échec : ' + e.message, false);
+  }
+  if(btn){ btn.disabled = false; btn.classList.remove('busy'); btn.textContent = '📷'; }
+  pendingContract = null;
+});
+
+function escapeHtml(str){
+  return (str == null ? '' : String(str)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('search').addEventListener('input', render);
+document.querySelectorAll('#filters button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentFilter = btn.dataset.filter;
+    document.querySelectorAll('#filters button').forEach(b => b.classList.toggle('active', b === btn));
+    render();
+  });
+});
+loadList();
+</script>
+</body>
+</html>

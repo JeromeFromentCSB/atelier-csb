@@ -728,6 +728,8 @@
         </div>
         <div id="blLinesList"></div>
         <div class="col-result" id="blResult" style="margin-top:12px;"></div>
+        <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">📷 Photos (prises depuis le mobile)</div>
+        <div id="blPhotosGallery" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents de fabrication</div>
         <div id="blFabricationDocs"></div>
         <div id="blDemandePrixWrap" style="display:none;">
@@ -1036,6 +1038,56 @@ async function addrDelete(id){
 function blBase(){
   const cfg = getConfig();
   return cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.blCollection || 'bl_axonaut') + '/records';
+}
+// ---------- Index léger des commandes (pour la petite page mobile de prise de photo) ----------
+function commandesIndexBase(){
+  const cfg = getConfig();
+  return cfg.url.replace(/\/+$/,'') + '/api/collections/commandes_index/records';
+}
+function commandePhotosBase(){
+  const cfg = getConfig();
+  return cfg.url.replace(/\/+$/,'') + '/api/collections/commande_photos/records';
+}
+// Pousse vers PocketBase la liste des commandes actuellement chargées (contract_id, numéro,
+// client), pour que la page mobile (servie par PocketBase lui-même, hors de ce module) puisse
+// proposer la liste sans jamais toucher à l'API Axonaut ni à sa clé. Best-effort, en tâche de
+// fond : une erreur ici ne doit jamais empêcher l'affichage des commandes dans l'onglet.
+async function syncCommandesIndex(list){
+  try{
+    const res = await fetch(commandesIndexBase() + '?perPage=500');
+    if(!res.ok) return; // collection absente ou PocketBase injoignable : on abandonne silencieusement
+    const existing = (await res.json()).items || [];
+    const byContract = {};
+    existing.forEach(it => { byContract[String(it.contract_id)] = it; });
+    for(const r of list){
+      const key = String(r.contractId);
+      const found = byContract[key];
+      const facturee = Array.isArray(r.invoicesId) && r.invoicesId.length > 0;
+      const body = { contract_id: key, numero_commande: r.numeroCommande || '', client: r.clientCompany || r.nomSoc || '', facturee };
+      if(!found){
+        await fetch(commandesIndexBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
+      }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee){
+        await fetch(commandesIndexBase() + '/' + found.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
+      }
+    }
+  }catch(e){ console.warn('Synchro index commandes (page mobile) impossible', e); }
+}
+// Affiche les photos prises depuis le mobile pour une commande donnée.
+async function loadBlPhotos(contractId){
+  const box = document.getElementById('blPhotosGallery');
+  box.innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement des photos…</div>';
+  try{
+    const filter = encodeURIComponent(`contract_id='${contractId}'`);
+    const res = await fetch(commandePhotosBase() + `?filter=(${filter})&sort=-created&perPage=100`);
+    if(!res.ok){ box.innerHTML = ''; return; }
+    const items = (await res.json()).items || [];
+    if(!items.length){ box.innerHTML = '<div class="hint" style="font-size:.78rem;">Aucune photo pour cette commande.</div>'; return; }
+    const cfg = getConfig();
+    box.innerHTML = items.map(it => {
+      const url = cfg.url.replace(/\/+$/,'') + `/api/files/${it.collectionId}/${it.id}/${it.photo}`;
+      return `<a href="${url}" target="_blank"><img src="${url}?thumb=140x140" style="width:70px; height:70px; object-fit:cover; border-radius:6px; border:1px solid var(--line);"></a>`;
+    }).join('');
+  }catch(e){ box.innerHTML = `<div class="hint" style="color:var(--silk-red); font-size:.78rem;">Erreur : ${escapeHtml(e.message)}</div>`; }
 }
 function dlBase(){
   const cfg = getConfig();
@@ -3224,6 +3276,7 @@ async function openBlModal(r){
   document.getElementById('blDemandePrixWrap').style.display = 'none';
   document.getElementById('blPanelEmpty').style.display = 'none';
   document.getElementById('blPanelContent').style.display = 'block';
+  loadBlPhotos(r.contractId);
   const canViewQuotePdf = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'devis_pdf');
   const viewQuoteBtn = document.getElementById('blViewQuoteBtn');
   viewQuoteBtn.style.display = (canViewQuotePdf && r.quotationId) ? 'inline-flex' : 'none';
@@ -3339,11 +3392,13 @@ function renderBlNotes(contractComment, chapterText, quotationComment){
   return html;
 }
 function renderBlLines(lines, checkedState, contractComment, chapterText, quotationComment){
+  const admin = isAdminUser();
   document.getElementById('blLinesList').innerHTML = renderBlNotes(contractComment, chapterText, quotationComment) + lines.map((l, i) => `
     <label>
       <input type="checkbox" data-idx="${i}" ${checkedState[i] ? 'checked' : ''}>
       <span>
         <strong>${escapeHtml(l.title || l.product_name || '')}</strong> — Qté : ${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}
+        ${admin ? `<br><span style="color:var(--muted); font-size:.78rem;">${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) : ''}${l.product_code ? ' · ' : ''}${(l.pre_tax_amount||0).toFixed(2).replace('.', ',')} € HT</span>` : ''}
         <br><span style="color:var(--muted); font-size:.8rem; white-space:pre-line;">${escapeHtml(stripHtmlToText(l.details))}</span>
       </span>
     </label>
@@ -3668,6 +3723,7 @@ async function refreshAll(){
     }else{
       setSyncStatus('on', `${contracts.length} commande(s) chargée(s) depuis Axonaut, ${shipments.length} envoi(s) trouvé(s) dans PocketBase.`);
     }
+    syncCommandesIndex(contracts); // tâche de fond, pour la page mobile de prise de photo
   }catch(e){
     setSyncStatus('off', 'Erreur : ' + e.message);
   }
@@ -4340,7 +4396,7 @@ function renderDevisDetail(q){
         <div id="devisLineImg${i}" style="width:56px; height:56px; flex-shrink:0; border-radius:6px; background:var(--paper-2); display:flex; align-items:center; justify-content:center; overflow:hidden;"></div>
         <div style="flex:1;">
           <div class="title">${escapeHtml(l.title || l.product_name || '')} — Qté : ${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}</div>
-          <div class="meta">${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) : ''}${l.product_code && isAdminUser() ? ' · ' : ''}${isAdminUser() ? (l.pre_tax_amount||0).toFixed(2).replace('.', ',') + ' € HT' : ''}</div>
+          <div class="meta">${isAdminUser() ? `${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) + ' · ' : ''}${(l.pre_tax_amount||0).toFixed(2).replace('.', ',')} € HT` : ''}</div>
           <div class="details">${escapeHtml(stripHtmlToText(l.details))}</div>
         </div>
       </div>`;
@@ -4499,16 +4555,19 @@ async function ensureDocsFolderAccess(category, promptIfNeeded){
       docsHandles[category] = await window.showDirectoryPicker({ mode:'readwrite' });
       await fsSaveHandle(category, docsHandles[category]);
       return true;
-    }catch(e){ return false; }
+    }catch(e){ lastDocsFolderError = e; return false; }
   }
   return false;
 }
+let lastDocsFolderError = null;
 function wireDocsFolderButton(category, btnId, statusId){
   document.getElementById(btnId).addEventListener('click', async () => {
     const status = document.getElementById(statusId);
+    lastDocsFolderError = null;
     const ok = await ensureDocsFolderAccess(category, true);
     status.style.color = ok ? 'var(--silk-green)' : 'var(--silk-red)';
-    status.textContent = ok ? `✔ Dossier « ${docsHandles[category].name} » autorisé sur cet appareil.` : "Accès refusé ou annulé.";
+    status.textContent = ok ? `✔ Dossier « ${docsHandles[category].name} » autorisé sur cet appareil.`
+      : "Accès refusé ou annulé." + (lastDocsFolderError ? ` (${lastDocsFolderError.name} : ${lastDocsFolderError.message})` : '');
   });
 }
 wireDocsFolderButton('fabrication', 'chooseDocsFolderFabricationBtn', 'docsFolderStatusFabrication');
