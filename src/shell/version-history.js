@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.8', items: [
+    "Gestion Casaque : la signature de la facture douane imprimée ne disparaît plus (elle ne dépendait plus du réglage \"graphiques d'arrière-plan\" de l'imprimante)",
+  ]},
+  { v: '0.2.7', items: [
+    "Gestion Casaque : nouvelle tentative de correction de la facture douane imprimée (mise en page sans flex ni tableau pour la ligne signature, plus fiable à l'impression)",
+  ]},
   { v: '0.2.6', items: [
     "Gestion Casaque : correction de la facture douane imprimée — la signature ne saute plus sur une page à part et se trouve juste sous la dernière ligne",
   ]},

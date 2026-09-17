@@ -605,7 +605,18 @@
   }
   #printArea .invoice-sign-row > div:first-child{ float:left; }
   #printArea .invoice-sign-box{ float:right; text-align:center; min-width:200px; }
-  #printArea .invoice-signature-img{ display:block; max-height:60px; max-width:200px; margin-top:6px; }
+  /* Un <img> pousse Chromium (impression) à isoler l'image sur une nouvelle page quand elle
+     tombe en fin de page, même quand il reste largement la place — un bug de pagination propre
+     aux éléments "remplacés" comme <img>. Un simple <div> avec l'image en arrière-plan CSS
+     n'a pas ce problème et reste bien sur la même page que le texte "Signature". */
+  #printArea .invoice-signature-img{
+    background-repeat:no-repeat; background-position:center; background-size:contain;
+    width:110px; height:40px; margin:6px auto 0;
+    /* Sans ça, l'image (un arrière-plan CSS) ne s'imprime que si la case "Graphiques
+       d'arrière-plan" de la boîte de dialogue d'impression est cochée — désactivée par défaut
+       dans la plupart des navigateurs/imprimantes, ce qui faisait disparaître la signature. */
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact;
+  }
   @media print{
     /* display:none (et non visibility:hidden) pour retirer réellement le
        contenu masqué du flux de mise en page — sinon chaque élément masqué
@@ -2559,7 +2570,7 @@ document.getElementById('colInvoiceBtn').addEventListener('click', () => {
         <div>Lieu et date / place and date<br><strong>${escapeHtml(cfg.senderCity)}, le ${today}</strong></div>
         <div class="invoice-sign-box">
           Signature<br>
-          ${signature ? `<img src="${signature}" class="invoice-signature-img">` : ''}
+          ${signature ? `<div class="invoice-signature-img" style="background-image:url('${signature}');"></div>` : ''}
         </div>
       </div>
     </div>
