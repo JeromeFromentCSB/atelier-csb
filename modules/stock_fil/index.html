@@ -220,8 +220,29 @@ const TABS = [
   { id: "stock", label: "État du stock" },
   { id: "mouvements", label: "Mouvements" },
   { id: "recherche", label: "Recherche" },
+  { id: "nuancier", label: "Nuancier" },
+  { id: "trouver_couleur", label: "Trouver couleur" },
   { id: "parametres", label: "Paramètres" },
 ];
+// Nuancier Madeira Polyneon — numéro + couleur exacte, extraits du shade card officiel Madeira
+// (page-échantillonnage pixel par pixel de chaque vignette du PDF, vérifié visuellement).
+const MADEIRA_COLORS = [["1727","#EBD86C"],["1623","#F8E747"],["1924","#FDDB00"],["1866","#FCEA90"],["1735","#F8D45A"],["1724","#D7AB27"],["1561","#F1DB9C"],["1666","#FAE8B2"],["1661","#F8EFCB"],["1622","#F4E2BD"],["1861","#F6D17A"],["1683","#FFC844"],["1980","#FEC800"],["1971","#FFBD0A"],["1624","#F3A81C"],["1772","#D39415"],["1771","#DEA037"],["1625","#C68021"],["1725","#CF8E39"],["1869","#DA8426"],["1763","#DC771C"],["1626","#FFD17F"],["1951","#F89B16"],["1955","#FC8D01"],["1825","#FFC000"],["1826","#FFD06F"],["1923","#FFBC42"],["1755","#FF963E"],["1965","#F76206"],["1765","#EC6D16"],["1621","#C35428"],["1521","#D96E43"],["1853","#F7BF9B"],["1822","#FFC4A8"],["1752","#FFA980"],["1778","#E8542E"],["1678","#F35222"],["1987","#E63619"],["1878","#CA2724"],["1588","#E33834"],["1637","#C01828"],["1838","#B21729"],["1839","#AD1329"],["1747","#A6162C"],["1653","#F7BCA8"],["1817","#FFA894"],["1820","#FE907C"],["1952","#FF7751"],["1821","#AB352A"],["1899","#8D3629"],["1734","#E32936"],["1754","#E43B42"],["1819","#FFA09C"],["1777","#F78176"],["1779","#C24F41"],["1982","#851E2B"],["1638","#89252C"],["1974","#873A38"],["1639","#AD3637"],["1616","#E36B6A"],["1915","#FFB2B8"],["1620","#FF8B94"],["1707","#C6424C"],["1781","#971631"],["1981","#842331"],["1784","#70222F"],["1567","#69242F"],["1919","#A14D5E"],["1917","#CE7081"],["1713","#FBCFD1"],["1818","#E8C0BC"],["1941","#B98889"],["1998","#7A575E"],["1887","#462A32"],["1983","#4A2D3A"],["1508","#C91939"],["1509","#C81E42"],["1886","#B5173E"],["1681","#BE2848"],["1994","#F0425F"],["1948","#FF8AA2"],["1816","#FFB0C0"],["1815","#FFC1D4"],["1786","#B22647"],["1910","#D7144A"],["1993","#E12E53"],["1909","#FF6084"],["1548","#FFA3CB"],["1721","#F35A88"],["1584","#DB4C79"],["1984","#BB2054"],["1549","#FCB5CD"],["1921","#FD93B8"],["1990","#E0538A"],["1787","#B6235E"],["1783","#84234D"],["1785","#67263A"],["1835","#83263C"],["1782","#7A2B38"],["1635","#6E2C3D"],["1709","#D4308E"],["1710","#9B2568"],["1788","#78285F"],["1833","#7B226B"],["1633","#5E1E59"],["1880","#7D317C"],["1631","#905B9A"],["1831","#A45D9B"],["1712","#A971A1"],["1911","#CEABCF"],["1834","#94749E"],["1680","#583552"],["1719","#673258"],["1720","#5E2F4C"],["1789","#5D364D"],["1731","#9B788F"],["1711","#A887B1"],["1832","#6B4890"],["1922","#532A73"],["1522","#7E6EB5"],["1634","#3D2C54"],["1553","#48405F"],["1630","#9790BC"],["1933","#787BB0"],["1722","#452C74"],["1629","#C3C5DF"],["1529","#BDB5C6"],["1627","#726982"],["1632","#3A2B41"],["1997","#352934"],["1766","#36317A"],["1930","#4E468F"],["1943","#5F68AE"],["1767","#29306E"],["1743","#2D2C4F"],["1966","#2A2D50"],["1566","#21367C"],["1830","#6E84C1"],["1676","#334383"],["1642","#335091"],["1532","#749DD7"],["1842","#174A97"],["1843","#243C74"],["1967","#252F4C"],["1555","#2B2A3E"],["1844","#2C2C37"],["1976","#2C2E3F"],["1944","#2C3140"],["1643","#2B2D3B"],["1574","#2C2F39"],["1874","#91AEDB"],["1562","#8FAECF"],["1542","#6888B5"],["1531","#5778AF"],["1975","#2A4870"],["1742","#233659"],["1934","#005093"],["1829","#275DA1"],["1733","#3D70AE"],["1528","#388CC7"],["1675","#7BA9DA"],["1674","#8EB7DF"],["1953","#A3C2E1"],["1871","#76A7CB"],["1828","#357CA9"],["1775","#426D96"],["1776","#294363"],["1764","#2A3C56"],["1671","#5177A0"],["1628","#739BBD"],["1550","#B3C6E0"],["1960","#6C85A0"],["1961","#48607A"],["1964","#48536D"],["1963","#434861"],["1563","#BCD2E3"],["1761","#85A0B5"],["1760","#486479"],["1962","#23384A"],["1932","#78C0E1"],["1827","#4CB2DB"],["1593","#008BC1"],["1977","#0071AE"],["1797","#005B97"],["1762","#234965"],["1852","#2E6C8C"],["1992","#004D6B"],["1893","#2FA8CF"],["1895","#0083A9"],["1695","#00759D"],["1896","#005F81"],["1577","#007DAD"],["1594","#3BB3CE"],["1694","#0094AD"],["1892","#6BC3CF"],["1888","#00929F"],["1846","#00808B"],["1890","#006877"],["1991","#006176"],["1891","#044B5C"],["1645","#65C0BB"],["1799","#00A7A3"],["1685","#007882"],["1677","#103D47"],["1746","#00979B"],["1692","#98C2C5"],["1592","#C6DCDF"],["1652","#3C6B72"],["1690","#1F4146"],["1996","#2B3839"],["1704","#213A37"],["1985","#024A48"],["1879","#006661"],["1847","#23A08F"],["1868","#008A6F"],["1780","#005F52"],["1849","#1F6960"],["1979","#005140"],["1647","#84B89E"],["1989","#009164"],["1751","#006E46"],["1750","#006247"],["1845","#5EBE9F"],["1580","#006C57"],["1703","#154E3D"],["1770","#45693C"],["1748","#9FDE75"],["1848","#649551"],["1701","#239A2E"],["1650","#1A6F2E"],["1749","#009941"],["1988","#008547"],["1851","#004D32"],["1651","#007845"],["1702","#64C08B"],["1900","#95B598"],["1545","#CADFDB"],["1578","#779991"],["1903","#3A4C47"],["1902","#2A3E32"],["1904","#395241"],["1970","#32503C"],["1968","#5C9054"],["1648","#80995F"],["1768","#A3B67D"],["1541","#D6DF74"],["1940","#BFCD46"],["1649","#61961E"],["1769","#4F6F2A"],["1905","#374331"],["1668","#5B6C61"],["1705","#31392F"],["1669","#3B423C"],["1798","#37352D"],["1969","#625C4C"],["1568","#90896C"],["1569","#696750"],["1795","#434431"],["1794","#52482E"],["1796","#5D532E"],["1956","#85784B"],["1756","#4E5425"],["1790","#77692C"],["1706","#85833E"],["1552","#ACA765"],["1920","#CAC388"],["1792","#A97E28"],["1959","#9C890C"],["1809","#B0A04B"],["1759","#86722F"],["1793","#735B2C"],["1757","#614D2E"],["1684","#BCA570"],["1939","#957F57"],["1906","#5D4B37"],["1660","#B0A2A0"],["1854","#9C7C79"],["1654","#604846"],["1859","#443436"],["1931","#3B3134"],["1554","#E5CAC4"],["1942","#884E4A"],["1990","#6A282E"],["1836","#482F30"],["1958","#663E3E"],["1656","#BE9984"],["1729","#957566"],["1945","#67493B"],["1858","#65352B"],["1658","#784431"],["1898","#94472F"],["1856","#994F2E"],["1753","#BF6F40"],["1857","#804B2B"],["1926","#AE8468"],["1657","#83543E"],["1659","#50332E"],["1558","#402F2C"],["1559","#423532"],["1560","#382C2B"],["1557","#453730"],["1745","#775A4F"],["1929","#65564F"],["1744","#5D4940"],["1936","#72645A"],["1736","#8B7E76"],["1938","#B8A899"],["1573","#A79385"],["1872","#58493A"],["1928","#877464"],["1728","#9A816C"],["1855","#B38E6B"],["1884","#C6AA8A"],["1885","#9E7E5D"],["1527","#C69771"],["1927","#D7AC87"],["1556","#CD9B7A"],["1726","#B27952"],["1949","#F6E9D5"],["1723","#FED3A2"],["1870","#F0A063"],["1773","#A35B24"],["1973","#91582E"],["1565","#704229"],["1758","#5F402B"],["1739","#453D40"],["1540","#464547"],["1741","#767273"],["1812","#A9A7A4"],["1810","#B0B1B1"],["1665","#3F3F3B"],["1664","#54504D"],["1862","#8F8980"],["1860","#A69D92"],["1662","#867A70"],["1663","#665B50"],["1535","#9D8E7A"],["1738","#C8B998"],["1682","#CFBEAC"],["1582","#DBD2C2"],["1822","#E3DCC7"],["1863","#D9D1B0"],["1526","#F0D497"],["1670","#D4A861"],["1673","#AB8C59"],["1672","#9F7530"],["1791","#AC7C3A"],["1538","#AB8B62"],["1730","#755634"],["1957","#453A2C"],["1617","#554958"],["1619","#5D5C67"],["1618","#6C6B7B"],["1740","#706D74"],["1886","#C1B8BB"],["1686","#D2D2D4"],["1687","#B3B8BB"],["1505","#A5A4AB"],["1572","#928E95"],["1640","#5B5B60"],["1614","#5B5C60"],["1539","#625C59"],["1689","#656363"],["1615","#6B6D71"],["1502","#757782"],["1918","#86878E"],["1718","#989CA7"],["1611","#A2A8B6"],["1612","#909FB5"],["1840","#6E7281"],["1841","#484B55"],["1641","#302F35"],["1544","#585E6F"],["1506","#3B4451"],["1507","#2E343E"],["1575","#646B72"],["1613","#8C989B"],["1610","#BDC3C7"],["1811","#A7ABB1"],["1564","#4A4C54"],["1589","#35363A"],["1500","#2E2A2F"],["1800","#2D2A2D"],["2800","#2C2C2C"],["1805","#E3E2FF"],["1801","#EBEAFF"],["1802","#F1F1FF"],["1804","#F0EFEB"],["1803","#F3EDE1"],["1510","#FFFFFF"],["1511","#6A4616"],["1512","#4B4F4B"],["1513","#373329"],["1514","#645447"],["1515","#30383A"],["1516","#223031"],["1517","#0E1B1B"],["1518","#171F22"],["1519","#13334B"],["1600","#016C7E"],["1603","#9F765D"],["1604","#AB7C67"],["1605","#4F84A5"],["1609","#9F4A4A"],["1606","#783157"],["1601","#65906B"],["1602","#3185A1"],["1608","#467164"],["1607","#76ACB5"],["1925","#FFDC12"],["1972","#FFC200"],["1824","#FFE500"],["1883","#FFFE00"],["1995","#FFFF00"],["1823","#E8FF00"],["1935","#D2FF00"],["1867","#D7FF5D"],["1599","#71FB46"],["1850","#34C444"],["1950","#56D62F"],["1901","#3CA822"],["1937","#FFAA00"],["1978","#FF8529"],["1946","#FF6700"],["1598","#FF5600"],["1837","#FF3B11"],["1947","#FF3835"],["1954","#FF423F"],["1908","#FF4155"],["1907","#FF314E"],["1597","#FF5995"],["1596","#F41E70"],["1595","#FF4483"]];
+
+// Noms de couleurs approximatifs (utilisé par l'onglet Trouver couleur pour étiqueter les
+// couleurs détectées dans une image — n'est jamais affiché seul, toujours à côté du numéro
+// Madeira exact retrouvé par distance colorimétrique).
+const NAMED_COLORS = [
+  ["Blanc","#FFFFFF"],["Gris très clair","#D9D9D9"],["Gris clair","#B0AFAA"],["Gris","#7D7B76"],["Gris foncé","#4A4844"],["Noir","#161514"],
+  ["Beige clair","#E8D9BF"],["Beige","#C9B08A"],["Taupe","#9C8468"],["Marron clair","#8C6242"],["Marron","#6B4226"],["Marron foncé","#3F2717"],
+  ["Rouge clair","#F1958C"],["Rouge","#D63A34"],["Rouge foncé","#8C221D"],["Corail","#E86A4F"],["Orange clair","#F5B87A"],["Orange","#EC8A2E"],["Orange foncé","#B45E11"],
+  ["Beige rosé","#E6C6B8"],["Saumon","#F0A08A"],["Or","#D6A631"],["Jaune clair","#F5E28C"],["Jaune","#F0D019"],["Jaune moutarde","#B8942B"],
+  ["Vert anis","#C3D96B"],["Vert clair","#9AC96E"],["Vert","#5C9A4A"],["Vert foncé","#33622C"],["Vert sapin","#1F4A32"],
+  ["Turquoise clair","#8AD4C9"],["Turquoise","#2FA79A"],["Turquoise foncé","#1C6E67"],["Sarcelle","#1D6B6B"],
+  ["Bleu ciel","#9FCBEA"],["Bleu clair","#5FA3DB"],["Bleu","#2E6DB4"],["Bleu foncé","#1B3F73"],["Bleu marine","#152B4A"],
+  ["Lavande","#B7A8DD"],["Violet clair","#A587C9"],["Violet","#7A50A8"],["Violet foncé","#4E2F6E"],
+  ["Rose clair","#F5B8D0"],["Rose","#E87BAA"],["Rose fuchsia","#D6357F"],["Magenta","#B0246B"],["Bordeaux","#6E2038"],["Prune","#5A2E4D"]
+];
+
 const EXTRA_PERMS = [
   { id: "export", label: "Exporter" },
   { id: "import", label: "Importer" },
@@ -712,6 +733,8 @@ function doRender(){
     <div class="panel ${activeTab==='stock'?'active':''}" id="panel-stock"></div>
     <div class="panel ${activeTab==='mouvements'?'active':''}" id="panel-mouvements"></div>
     <div class="panel ${activeTab==='recherche'?'active':''}" id="panel-recherche"></div>
+    <div class="panel ${activeTab==='nuancier'?'active':''}" id="panel-nuancier"></div>
+    <div class="panel ${activeTab==='trouver_couleur'?'active':''}" id="panel-trouver_couleur"></div>
     <div class="panel ${activeTab==='parametres'?'active':''}" id="panel-parametres"></div>
 
     <footer class="foot">
@@ -729,6 +752,8 @@ function doRender(){
   if(activeTab === 'stock') renderStockPanel(stock);
   if(activeTab === 'mouvements') renderMouvementsPanel();
   if(activeTab === 'recherche') renderReberchePanel(stock);
+  if(activeTab === 'nuancier') renderNuancierPanel();
+  if(activeTab === 'trouver_couleur') renderTrouverCouleurPanel();
   if(activeTab === 'parametres') renderParametresPanel();
 }
 
@@ -954,16 +979,418 @@ function renderReberchePanel(stock){
     if(ref) rows = rows.filter(r=>String(r.reference).toLowerCase().includes(ref));
     if(teinte) rows = rows.filter(r=>(r.teinte||'').toLowerCase().includes(teinte));
     const totalBobines = rows.reduce((s,r)=>s+r.total,0);
+    const suggestions = rows.length === 0 ? rcColorSuggestionsHtml() : '';
     document.getElementById('rc-results').innerHTML = `
       <div class="hint" style="margin-bottom:12px;">${rows.length} référence(s) trouvée(s) — soit ${fmtNum(totalBobines)} bobine(s) au total</div>
+      ${suggestions}
       ${stockTableHTML(rows, 'rc')}
     `;
     attachSortHandlers(document.getElementById('rc-results'), refresh);
+  }
+  // Si la référence recherchée n'est pas en stock, propose les 1-2 couleurs les plus proches
+  // parmi ce qui EST en stock (distance colorimétrique RGB par rapport au nuancier Madeira
+  // officiel), avec un pourcentage d'écart pour juger si l'équivalent est acceptable.
+  function rcColorSuggestionsHtml(){
+    const refQ = rcRefQuery.trim();
+    if(!refQ) return '';
+    const target = MADEIRA_COLORS.find(([num]) => String(num) === refQ);
+    if(!target) return '';
+    const targetRgb = tcHexToRgb(target[1]);
+    const stockAll = applyFilTypeFilter(computeStock(), rcFilTypeFilter);
+    const candidates = [];
+    const seenRefs = new Set();
+    stockAll.forEach(r => {
+      const refStr = String(r.reference);
+      if(refStr === refQ || seenRefs.has(refStr)) return;
+      const mad = MADEIRA_COLORS.find(([num]) => String(num) === refStr);
+      if(!mad) return;
+      seenRefs.add(refStr);
+      const dist = Math.sqrt(tcRgbDist2(targetRgb, tcHexToRgb(mad[1])));
+      const pct = Math.round(dist / 441.67 * 100);
+      candidates.push({ ref: refStr, teinte: r.teinte, hex: mad[1], pct, total: r.total });
+    });
+    candidates.sort((a,b) => a.pct - b.pct);
+    const top = candidates.slice(0, 2);
+    if(!top.length) return '';
+    return `
+      <div class="hint" style="margin:0 0 6px; font-weight:600;">Référence ${escapeHtml(refQ)} absente du stock. Équivalent(s) disponible(s) le(s) plus proche(s) :</div>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+        ${top.map(c => `
+          <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); border-radius:8px;">
+            <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${target[1]};" title="Couleur recherchée (${escapeHtml(refQ)})"></div>
+            <div style="font-size:1.1rem; color:var(--muted,#888);">→</div>
+            <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${c.hex};" title="Équivalent en stock"></div>
+            <div style="flex:1; font-size:.83rem; font-weight:600;">Madeira ${escapeHtml(c.ref)}${c.teinte ? ' — ' + escapeHtml(c.teinte) : ''}<div style="font-size:.7rem; color:var(--muted,#888); font-weight:400;">${fmtNum(c.total)} bobine(s) en stock</div></div>
+            <div style="font-size:.8rem; font-weight:700; padding:4px 10px; border-radius:20px; background:var(--bg,#f5f5f5); border:1px solid var(--line,#ddd); white-space:nowrap;">≈ ${c.pct}% d'écart</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
   }
   document.getElementById('rc-ref').addEventListener('input', e=>{ rcRefQuery = e.target.value; refresh(); });
   document.getElementById('rc-teinte').addEventListener('input', e=>{ rcTeinteQuery = e.target.value; refresh(); });
   document.getElementById('rc-filtype').addEventListener('change', e=>{ rcFilTypeFilter = e.target.value; refresh(); });
   refresh();
+}
+
+let nuancierQuery = '';
+function renderNuancierPanel(){
+  const panel = document.getElementById('panel-nuancier');
+  panel.innerHTML = `
+    <div class="form-card">
+      <h3>Nuancier Madeira Polyneon</h3>
+      <div class="hint">Référence rapide des ${MADEIRA_COLORS.length} couleurs Madeira Polyneon (numéro + couleur exacte du shade card officiel).</div>
+      <div class="toolbar">
+        <input type="text" class="search-box" id="nu-search" placeholder="Rechercher un numéro…" value="${escapeHtml(nuancierQuery)}" inputmode="numeric">
+      </div>
+    </div>
+    <div id="nu-results"></div>
+  `;
+  function refresh(){
+    const q = nuancierQuery.trim();
+    const list = q ? MADEIRA_COLORS.filter(c => c[0].includes(q)) : MADEIRA_COLORS;
+    document.getElementById('nu-results').innerHTML = `
+      <div class="hint" style="margin-bottom:12px;">${list.length} couleur(s)</div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:10px;">
+        ${list.map(c => `
+          <div style="display:flex; flex-direction:column; align-items:center; gap:5px;">
+            <div style="width:100%; aspect-ratio:1; border-radius:8px; border:1px solid var(--line, #ddd); background:${c[1]};"></div>
+            <div style="font-size:11px; font-weight:600;">${c[0]}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  document.getElementById('nu-search').addEventListener('input', e=>{ nuancierQuery = e.target.value; refresh(); });
+  refresh();
+}
+
+// ---------- Onglet Trouver couleur : dépose une image, chaque couleur dominante est numérotée
+// et associée au numéro Madeira le plus proche (regroupement par distance colorimétrique,
+// entièrement local, aucune donnée envoyée nulle part). ----------
+function tcHexToRgb(h){ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+function tcRgbDist2(a,b){ const dr=a[0]-b[0],dg=a[1]-b[1],db=a[2]-b[2]; return dr*dr+dg*dg+db*db; }
+function tcToHex(rgb){ return '#'+rgb.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('').toUpperCase(); }
+function tcNearestMadeira(rgb){
+  let best=null, bestD=Infinity;
+  for(const [num,hex] of MADEIRA_COLORS){
+    const d = tcRgbDist2(rgb, tcHexToRgb(hex));
+    if(d<bestD){ bestD=d; best=[num,hex]; }
+  }
+  return best;
+}
+function tcNearestName(rgb){
+  let best=null, bestD=Infinity;
+  for(const [name,hex] of NAMED_COLORS){
+    const d = tcRgbDist2(rgb, tcHexToRgb(hex));
+    if(d<bestD){ bestD=d; best=name; }
+  }
+  return best;
+}
+function tcKmeans(pixels, positions, k, iters){
+  let centers = [];
+  const used = new Set();
+  while(centers.length < k && centers.length < pixels.length){
+    const idx = Math.floor(Math.random()*pixels.length);
+    if(used.has(idx)) continue;
+    used.add(idx);
+    centers.push(pixels[idx].slice());
+  }
+  let assign = new Array(pixels.length).fill(0);
+  for(let it=0; it<iters; it++){
+    for(let i=0;i<pixels.length;i++){
+      let best=0, bestD=Infinity;
+      for(let c=0;c<centers.length;c++){
+        const d = tcRgbDist2(pixels[i], centers[c]);
+        if(d<bestD){ bestD=d; best=c; }
+      }
+      assign[i]=best;
+    }
+    const sums = centers.map(()=>[0,0,0,0]);
+    for(let i=0;i<pixels.length;i++){
+      const c=assign[i];
+      sums[c][0]+=pixels[i][0]; sums[c][1]+=pixels[i][1]; sums[c][2]+=pixels[i][2]; sums[c][3]++;
+    }
+    for(let c=0;c<centers.length;c++){
+      if(sums[c][3]>0) centers[c]=[sums[c][0]/sums[c][3], sums[c][1]/sums[c][3], sums[c][2]/sums[c][3]];
+    }
+  }
+  const counts = new Array(centers.length).fill(0);
+  for(const a of assign) counts[a]++;
+  // Position du pixel réel le plus proche du centre de chaque groupe — jamais une moyenne, qui
+  // peut retomber dans une zone vide ou d'une AUTRE couleur quand celle-ci apparaît en
+  // plusieurs endroits disjoints de l'image.
+  const bestDist = new Array(centers.length).fill(Infinity);
+  const bestPos = centers.map(()=>[0.5,0.5]);
+  for(let i=0;i<pixels.length;i++){
+    const c = assign[i];
+    const d = tcRgbDist2(pixels[i], centers[c]);
+    if(d < bestDist[c]){ bestDist[c] = d; bestPos[c] = positions[i]; }
+  }
+  return centers.map((c,i)=>({ rgb:c, count:counts[i], pos: bestPos[i] }))
+    .filter(c=>c.count>0).sort((a,b)=>b.count-a.count);
+}
+function tcExtractPixels(img){
+  const canvas = document.createElement('canvas');
+  const size = 150;
+  const ratio = Math.min(size/img.naturalWidth, size/img.naturalHeight, 1);
+  canvas.width = Math.max(1, Math.round(img.naturalWidth*ratio));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight*ratio));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const data = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  const pixels = [];
+  const positions = [];
+  for(let i=0;i<data.length;i+=4){
+    if(data[i+3] < 200) continue;
+    pixels.push([data[i], data[i+1], data[i+2]]);
+    const p = i/4;
+    positions.push([(p % canvas.width) / canvas.width, Math.floor(p / canvas.width) / canvas.height]);
+  }
+  return { pixels, positions };
+}
+// Écarte les numéros trop proches les uns des autres (fréquent quand plusieurs couleurs se
+// superposent au même endroit de l'image, ex. formes translucides) : petite simulation de
+// répulsion, en tenant compte du ratio hauteur/largeur réel de l'image.
+function tcSeparateBadges(clusters, aspect, minDist, iterations){
+  // On part de la vraie position de chaque couleur (l'ancre) et on ne fait que la
+  // repousser localement en cas de conflit, avec un léger rappel vers l'ancre à chaque
+  // itération : sans ce rappel, la répulsion pure peut faire dériver un numéro loin de
+  // sa couleur réelle (voire l'entasser avec un autre au hasard, ou le sortir de la
+  // zone visible s'il ne trouve pas d'autre place).
+  const anchors = clusters.map(c => [c.pos[0], c.pos[1]*aspect]);
+  const pts = anchors.map(p => p.slice());
+  const pullBack = 0.08;
+  for(let iter=0; iter<iterations; iter++){
+    for(let i=0;i<pts.length;i++){
+      for(let j=i+1;j<pts.length;j++){
+        const dx = pts[j][0]-pts[i][0], dy = pts[j][1]-pts[i][1];
+        let dist = Math.sqrt(dx*dx+dy*dy);
+        if(dist < minDist){
+          if(dist < 1e-6){ dist = 1e-6; const a = Math.random()*Math.PI*2; pts[j][0]+=Math.cos(a)*1e-4; pts[j][1]+=Math.sin(a)*1e-4; }
+          const push = (minDist - dist) / 2;
+          const ux = dx/dist, uy = dy/dist;
+          pts[i][0] -= ux*push; pts[i][1] -= uy*push;
+          pts[j][0] += ux*push; pts[j][1] += uy*push;
+        }
+      }
+    }
+    for(let i=0;i<pts.length;i++){
+      pts[i][0] += (anchors[i][0]-pts[i][0]) * pullBack;
+      pts[i][1] += (anchors[i][1]-pts[i][1]) * pullBack;
+    }
+  }
+  return pts.map(p => [Math.min(0.97,Math.max(0.03,p[0])), Math.min(0.97,Math.max(0.03,p[1]/aspect))]);
+}
+
+let tcImg = null;
+let tcImgUrl = null;
+let tcK = 6;
+let tcZoom = 100;
+const TC_BASE_WIDTH = 260;
+let tcWindowListenersWired = false;
+let tcScrollEl = null;
+let tcPanning = false, tcPanStartX = 0, tcPanStartY = 0, tcPanScrollX = 0, tcPanScrollY = 0;
+let tcPipetteActive = false;
+let tcPipetteCanvas = null;
+function tcFullResCanvas(){
+  if(tcPipetteCanvas) return tcPipetteCanvas;
+  const c = document.createElement('canvas');
+  c.width = tcImg.naturalWidth;
+  c.height = tcImg.naturalHeight;
+  c.getContext('2d').drawImage(tcImg, 0, 0);
+  tcPipetteCanvas = c;
+  return c;
+}
+function renderTrouverCouleurPanel(){
+  const panel = document.getElementById('panel-trouver_couleur');
+  panel.innerHTML = `
+    <div class="form-card">
+      <h3>Trouver la couleur Madeira d'une image</h3>
+      <div class="hint">Dépose une image (logo, photo…) : chaque couleur dominante est numérotée et associée au numéro Madeira Polyneon le plus proche. Tout se passe dans l'appli, rien n'est envoyé nulle part.</div>
+      <div id="tc-dropzone" style="border:2px dashed var(--line,#ddd); border-radius:10px; padding:26px 16px; text-align:center; cursor:pointer; color:var(--muted,#888); font-size:.85rem;">
+        Glisse une image ici, ou clique pour en choisir une
+      </div>
+      <input type="file" id="tc-file" accept="image/*" style="display:none;">
+      <div id="tc-preview-scroll" style="display:${tcImgUrl?'block':'none'}; margin-top:12px; border:1px solid var(--line,#ddd); border-radius:8px; max-height:380px; overflow:auto; background:var(--card,#fff); cursor:grab; touch-action:none;">
+        <div id="tc-preview-wrap" style="position:relative; width:${Math.round(TC_BASE_WIDTH*tcZoom/100)}px; margin:0 auto;">
+          <img id="tc-preview" style="display:block; width:100%; height:auto;" src="${tcImgUrl||''}">
+        </div>
+      </div>
+      <div id="tc-controls" style="display:${tcImg?'flex':'none'}; align-items:center; gap:10px; margin-top:12px;">
+        <label style="font-size:.8rem; color:var(--muted,#888);">Nombre de couleurs</label>
+        <input type="range" id="tc-krange" min="2" max="14" value="${tcK}" step="1" style="flex:1;">
+        <span id="tc-kout" style="font-size:.8rem; font-weight:600; min-width:20px; text-align:center;">${tcK}</span>
+      </div>
+      <div id="tc-zoom-controls" style="display:${tcImg?'flex':'none'}; align-items:center; gap:10px; margin-top:10px;">
+        <label style="font-size:.8rem; color:var(--muted,#888);">Zoom</label>
+        <input type="range" id="tc-zoomrange" min="100" max="400" value="${tcZoom}" step="10" style="flex:1;">
+        <span id="tc-zoomout" style="font-size:.8rem; font-weight:600; min-width:32px; text-align:center;">${tcZoom}%</span>
+      </div>
+      <div id="tc-tools" style="display:${tcImg?'flex':'none'}; align-items:center; gap:10px; margin-top:10px;">
+        <button type="button" id="tc-pipette-btn" title="Choisir une couleur précise sur l'image">💧 Pipette</button>
+        <span id="tc-pipette-hint" style="display:none; font-size:.8rem; color:var(--muted,#888);">Clique maintenant sur l'image pour choisir la couleur…</span>
+      </div>
+      <div id="tc-pipette-result" style="display:none; align-items:center; gap:12px; margin-top:10px; padding:10px 12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); border-radius:8px;"></div>
+    </div>
+    <div id="tc-results" style="display:flex; flex-direction:column; gap:8px; margin-top:14px;"></div>
+  `;
+
+  function runAnalysis(){
+    if(!tcImg) return;
+    const { pixels, positions } = tcExtractPixels(tcImg);
+    const results = document.getElementById('tc-results');
+    if(!pixels.length){ results.innerHTML = ''; return; }
+    const clusters = tcKmeans(pixels, positions, tcK, 8);
+    const aspect = tcImg.naturalHeight / tcImg.naturalWidth;
+    const spread = tcSeparateBadges(clusters, aspect, 0.11, 40);
+    clusters.forEach((c,i) => { c.labelPos = spread[i]; });
+    const total = pixels.length;
+    results.innerHTML = clusters.map((c,i) => {
+      const hex = tcToHex(c.rgb);
+      const [madNum, madHex] = tcNearestMadeira(c.rgb);
+      const name = tcNearestName(c.rgb);
+      const pct = Math.round(c.count/total*100);
+      return `
+        <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); border-radius:8px;">
+          <div style="font-weight:700; font-size:.8rem; width:20px; text-align:center; color:var(--muted,#888);">${i+1}</div>
+          <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${hex};"></div>
+          <div style="flex:1; font-size:.83rem; font-weight:600;">${escapeHtml(name)}<div style="font-size:.7rem; color:var(--muted,#888); font-weight:400;">${pct}% de l'image</div></div>
+          <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${madHex};"></div>
+          <div style="font-size:.8rem; font-weight:700; padding:4px 10px; border-radius:20px; background:var(--bg,#f5f5f5); border:1px solid var(--line,#ddd); white-space:nowrap;">Madeira ${madNum}</div>
+        </div>
+      `;
+    }).join('');
+    const wrap = document.getElementById('tc-preview-wrap');
+    wrap.querySelectorAll('.tc-num-badge, .tc-num-line').forEach(el => el.remove());
+    clusters.forEach((c,i) => {
+      const [lx,ly] = c.labelPos;
+      const [tx,ty] = c.pos;
+      const line = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      line.setAttribute('class','tc-num-line');
+      line.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; pointer-events:none;';
+      line.innerHTML = `<line x1="${tx*100}%" y1="${ty*100}%" x2="${lx*100}%" y2="${ly*100}%" stroke="#000" stroke-width="1.5" stroke-opacity="0.55"/>`;
+      wrap.appendChild(line);
+      const badge = document.createElement('div');
+      badge.className = 'tc-num-badge';
+      badge.textContent = i+1;
+      badge.style.cssText = 'position:absolute; transform:translate(-50%,-50%); width:22px; height:22px; border-radius:50%; background:#000; color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.4);';
+      badge.style.left = (lx*100) + '%';
+      badge.style.top = (ly*100) + '%';
+      wrap.appendChild(badge);
+    });
+  }
+
+  function loadFile(file){
+    if(!file || !file.type.startsWith('image/')) return;
+    tcImgUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      tcImg = img;
+      tcZoom = 100;
+      tcPipetteCanvas = null;
+      tcPipetteActive = false;
+      document.getElementById('tc-preview').src = tcImgUrl;
+      document.getElementById('tc-preview-scroll').style.display = 'block';
+      document.getElementById('tc-preview-wrap').style.width = TC_BASE_WIDTH + 'px';
+      document.getElementById('tc-controls').style.display = 'flex';
+      document.getElementById('tc-zoom-controls').style.display = 'flex';
+      document.getElementById('tc-zoomrange').value = 100;
+      document.getElementById('tc-zoomout').textContent = '100%';
+      runAnalysis();
+    };
+    img.src = tcImgUrl;
+  }
+
+  const dropzone = document.getElementById('tc-dropzone');
+  const fileInput = document.getElementById('tc-file');
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => loadFile(fileInput.files[0]));
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--accent,#c99a00)'; });
+  dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = ''; });
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.style.borderColor = '';
+    loadFile(e.dataTransfer.files[0]);
+  });
+  document.getElementById('tc-krange').addEventListener('input', e => {
+    tcK = parseInt(e.target.value, 10);
+    document.getElementById('tc-kout').textContent = tcK;
+    runAnalysis();
+  });
+  function tcSetZoom(zoom){
+    tcZoom = Math.min(400, Math.max(100, zoom));
+    document.getElementById('tc-zoomrange').value = tcZoom;
+    document.getElementById('tc-zoomout').textContent = tcZoom + '%';
+    document.getElementById('tc-preview-wrap').style.width = Math.round(TC_BASE_WIDTH * tcZoom / 100) + 'px';
+  }
+  document.getElementById('tc-zoomrange').addEventListener('input', e => tcSetZoom(parseInt(e.target.value, 10)));
+
+  const pipetteBtn = document.getElementById('tc-pipette-btn');
+  const pipetteHint = document.getElementById('tc-pipette-hint');
+  pipetteBtn.classList.toggle('primary', tcPipetteActive);
+  pipetteHint.style.display = tcPipetteActive ? 'inline' : 'none';
+  pipetteBtn.addEventListener('click', () => {
+    tcPipetteActive = !tcPipetteActive;
+    pipetteBtn.classList.toggle('primary', tcPipetteActive);
+    pipetteHint.style.display = tcPipetteActive ? 'inline' : 'none';
+    document.getElementById('tc-preview').style.cursor = tcPipetteActive ? 'crosshair' : '';
+  });
+  document.getElementById('tc-preview').addEventListener('click', e => {
+    if(!tcPipetteActive || !tcImg) return;
+    e.stopPropagation();
+    const rect = e.target.getBoundingClientRect();
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+    const px = Math.min(tcImg.naturalWidth - 1, Math.max(0, Math.floor(fx * tcImg.naturalWidth)));
+    const py = Math.min(tcImg.naturalHeight - 1, Math.max(0, Math.floor(fy * tcImg.naturalHeight)));
+    const data = tcFullResCanvas().getContext('2d').getImageData(px, py, 1, 1).data;
+    const rgb = [data[0], data[1], data[2]];
+    const hex = tcToHex(rgb);
+    const [madNum, madHex] = tcNearestMadeira(rgb);
+    const name = tcNearestName(rgb);
+    const resultEl = document.getElementById('tc-pipette-result');
+    resultEl.style.display = 'flex';
+    resultEl.innerHTML = `
+      <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${hex};"></div>
+      <div style="flex:1; font-size:.83rem; font-weight:600;">${escapeHtml(name)}<div style="font-size:.7rem; color:var(--muted,#888); font-weight:400;">${hex.toUpperCase()}</div></div>
+      <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${madHex};"></div>
+      <div style="font-size:.8rem; font-weight:700; padding:4px 10px; border-radius:20px; background:var(--bg,#f5f5f5); border:1px solid var(--line,#ddd); white-space:nowrap;">Madeira ${madNum}</div>
+    `;
+    tcPipetteActive = false;
+    pipetteBtn.classList.remove('primary');
+    pipetteHint.style.display = 'none';
+    e.target.style.cursor = '';
+  });
+
+  tcScrollEl = document.getElementById('tc-preview-scroll');
+  tcScrollEl.addEventListener('wheel', e => {
+    if(!tcImg) return;
+    e.preventDefault();
+    tcSetZoom(tcZoom + (e.deltaY < 0 ? 20 : -20));
+  }, { passive:false });
+  tcScrollEl.addEventListener('mousedown', e => {
+    if(!tcImg) return;
+    tcPanning = true;
+    tcPanStartX = e.clientX; tcPanStartY = e.clientY;
+    tcPanScrollX = tcScrollEl.scrollLeft; tcPanScrollY = tcScrollEl.scrollTop;
+    tcScrollEl.style.cursor = 'grabbing';
+  });
+  // Écouteurs posés sur window (pas sur tc-preview-scroll) pour continuer le glisser même si la
+  // souris sort du cadre — attachés une seule fois (le panneau est reconstruit à chaque visite
+  // de l'onglet : ils lisent tcScrollEl, mis à jour à chaque rendu, plutôt que de capturer une
+  // référence figée à l'ancien élément).
+  if(!tcWindowListenersWired){
+    tcWindowListenersWired = true;
+    window.addEventListener('mousemove', e => {
+      if(!tcPanning || !tcScrollEl) return;
+      tcScrollEl.scrollLeft = tcPanScrollX - (e.clientX - tcPanStartX);
+      tcScrollEl.scrollTop = tcPanScrollY - (e.clientY - tcPanStartY);
+    });
+    window.addEventListener('mouseup', () => { tcPanning = false; if(tcScrollEl) tcScrollEl.style.cursor = 'grab'; });
+  }
+
+  if(tcImg) runAnalysis();
 }
 
 function renderMouvementsPanel(){

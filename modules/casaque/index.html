@@ -410,15 +410,6 @@
     font-family:sans-serif; font-size:.8rem; letter-spacing:.04em;
   }
 
-  footer{
-    font-family:sans-serif; font-size:.72rem; color:var(--muted); text-align:center;
-    padding:30px 20px 50px; line-height:1.7;
-  }
-  footer .api-note{
-    display:inline-block; margin-top:10px; padding:10px 18px; border:1.5px dashed var(--line);
-    border-radius:8px; color:var(--muted);
-  }
-
   .settings-panel{
     display:none; margin-top:14px; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
     background:var(--white); font-family:sans-serif; font-size:.78rem;
@@ -1281,11 +1272,6 @@
   </div>
 </div>
 
-<footer>
-  Suivi/envoyé stockés dans PocketBase (base partagée) quand configuré ; sinon dans ce navigateur (localStorage).<br>
-  <span class="api-note">🔒 Prochaine étape : bouton « Créer l'étiquette » relié à l'API Colissimo (Cloudflare Worker), pour générer le suivi automatiquement.</span>
-</footer>
-
 </div><!-- /#envoiPane -->
 
 <div id="fabricationPane" class="top-pane">
@@ -1390,6 +1376,10 @@
       <input type="text" id="outName" value="MONTAGE" maxlength="16" style="width:160px;">
       <button id="btnChooseSaveDir" class="ghost" type="button" title="Ne fonctionne que pour un dossier sur le disque local de ce PC — Chrome/Edge bloque cette fonction pour tout dossier réseau (même via un lecteur mappé P:\...)">📁 Choisir le dossier d'enregistrement…</button>
       <span id="saveDirStatus" class="muted"></span>
+    </div>
+    <div class="row">
+      <button id="btnChooseTrousseSaveDir" class="ghost" type="button" title="Dossier séparé pour les programmes _TROUSSE — laisse vide pour utiliser le même dossier que ci-dessus. Ne fonctionne que pour un dossier sur le disque local de ce PC.">📁 Choisir le dossier d'enregistrement (trousses)…</button>
+      <span id="trousseSaveDirStatus" class="muted"></span>
     </div>
 
     <div class="gen-step">
@@ -6825,12 +6815,13 @@ async function generateTrousseProgram(outName) {
   const url = URL.createObjectURL(blob);
   const fname = trousseName + '.DST';
   const verify = decodeDst(dstBytes);
-  const savedDirectly = await trySaveToChosenDir(fname, dstBytes);
+  const savedDirectly = await trySaveToChosenDir(fname, dstBytes, 'trousse');
+  const usedHandle = saveDirHandles.trousse || saveDirHandles.main;
 
   if (container) {
     container.innerHTML =
       (savedDirectly
-        ? '<div class="muted" style="margin-top:10px;">✅ Enregistré : ' + escapeHtml(fname) + ' dans 📂 ' + escapeHtml(genSaveDirHandle.name) + ' · ' + verify.header.stitchCount + ' points · ' + verify.header.colorCount + ' changement(s) de couleur</div>'
+        ? '<div class="muted" style="margin-top:10px;">✅ Enregistré : ' + escapeHtml(fname) + ' dans 📂 ' + escapeHtml(usedHandle.name) + ' · ' + verify.header.stitchCount + ' points · ' + verify.header.colorCount + ' changement(s) de couleur</div>'
         : '<div class="row" style="margin-top:10px;">' +
             '<a href="' + url + '" download="' + fname + '"><button class="primary">⬇ Télécharger ' + fname + '</button></a>' +
             '<span class="muted">' + verify.header.stitchCount + ' points · ' + verify.header.colorCount + ' changement(s) de couleur' + '</span>' +
@@ -6873,9 +6864,9 @@ async function generateProgram() {
       '</div>';
     document.getElementById('colorSheetResult').innerHTML = buildColorSheetHtml();
 
-    const savedDirectly = await trySaveToChosenDir(fname, dstBytes);
+    const savedDirectly = await trySaveToChosenDir(fname, dstBytes, 'main');
     document.getElementById('genResult').innerHTML = savedDirectly
-      ? '<div class="muted" style="margin-top:10px;">✅ Enregistré : ' + escapeHtml(fname) + ' dans 📂 ' + escapeHtml(genSaveDirHandle.name) + '</div>'
+      ? '<div class="muted" style="margin-top:10px;">✅ Enregistré : ' + escapeHtml(fname) + ' dans 📂 ' + escapeHtml(saveDirHandles.main.name) + '</div>'
       : '<div style="margin-top:10px;"><a href="' + url + '" download="' + fname + '"><button class="primary">⬇ Télécharger ' + fname + '</button></a></div>';
 
     const copyEtapesResult = document.getElementById('copyEtapesResult');
@@ -6953,7 +6944,14 @@ let lastGeneratedName = 'MONTAGE';
 // quel) pour ne pas avoir à le rechoisir à chaque session — sauf si le
 // navigateur ne confirme plus l'accès, auquel cas on l'indique et on
 // redemande, à chaque arrivée sur l'onglet Génération.
-let genSaveDirHandle = null;
+// Deux dossiers indépendants : "main" pour le programme principal, "trousse" pour le
+// programme _TROUSSE (utile quand les deux ne sont pas envoyés à la même machine/opérateur).
+// Si aucun dossier "trousse" n'a été choisi, on se replie sur le dossier "main".
+const SAVE_DIR_KINDS = {
+  main:    { storeKey: 'genSaveDir',        btnId: 'btnChooseSaveDir',        statusId: 'saveDirStatus' },
+  trousse: { storeKey: 'genTrousseSaveDir', btnId: 'btnChooseTrousseSaveDir', statusId: 'trousseSaveDirStatus' }
+};
+const saveDirHandles = { main: null, trousse: null };
 const FAB_SAVEDIR_DB_NAME = 'csb_fab_savedir';
 const FAB_SAVEDIR_STORE = 'handles';
 function openFabSaveDirDB(){
@@ -6964,32 +6962,33 @@ function openFabSaveDirDB(){
     req.onerror = () => reject(req.error);
   });
 }
-async function idbGetSaveDir(){
+async function idbGetSaveDir(storeKey){
   try{
     const db = await openFabSaveDirDB();
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(FAB_SAVEDIR_STORE, 'readonly');
-      const req = tx.objectStore(FAB_SAVEDIR_STORE).get('genSaveDir');
+      const req = tx.objectStore(FAB_SAVEDIR_STORE).get(storeKey);
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => reject(req.error);
     });
   }catch(e){ return null; }
 }
-async function idbSetSaveDir(handle){
+async function idbSetSaveDir(storeKey, handle){
   try{
     const db = await openFabSaveDirDB();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(FAB_SAVEDIR_STORE, 'readwrite');
-      tx.objectStore(FAB_SAVEDIR_STORE).put(handle, 'genSaveDir');
+      tx.objectStore(FAB_SAVEDIR_STORE).put(handle, storeKey);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
   }catch(e){ console.warn('IndexedDB : échec mémorisation du dossier', e); }
 }
 
-function initGenSaveDir() {
-  const btn = document.getElementById('btnChooseSaveDir');
-  const status = document.getElementById('saveDirStatus');
+function initGenSaveDir(kind) {
+  const cfg = SAVE_DIR_KINDS[kind];
+  const btn = document.getElementById(cfg.btnId);
+  const status = document.getElementById(cfg.statusId);
   if (!window.showDirectoryPicker) {
     btn.disabled = true;
     btn.title = 'Non disponible dans ce navigateur (fonctionne sur Chrome ou Edge)';
@@ -6999,9 +6998,9 @@ function initGenSaveDir() {
   btn.addEventListener('click', async () => {
     try {
       const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      genSaveDirHandle = handle;
+      saveDirHandles[kind] = handle;
       status.textContent = '📂 ' + handle.name;
-      await idbSetSaveDir(handle);
+      await idbSetSaveDir(cfg.storeKey, handle);
     } catch (e) {
       if (e && e.name === 'AbortError') return; // annulé par l'utilisateur, rien à signaler
       // Erreur réelle (ex. chemin réseau \\serveur\... non pris en charge par
@@ -7018,20 +7017,21 @@ function initGenSaveDir() {
 // permission silencieusement (impossible sans geste utilisateur) : si
 // l'accès n'est plus confirmé, on l'indique clairement et il faut recliquer
 // "Choisir le dossier" pour le reconfirmer (ou en choisir un autre).
-async function checkGenSaveDirOnArrival() {
-  const status = document.getElementById('saveDirStatus');
+async function checkGenSaveDirOnArrival(kind) {
+  const cfg = SAVE_DIR_KINDS[kind];
+  const status = document.getElementById(cfg.statusId);
   if (!status || !window.showDirectoryPicker) return;
   try {
-    if (genSaveDirHandle) {
-      const perm = await genSaveDirHandle.queryPermission({ mode: 'readwrite' }).catch(() => 'denied');
-      if (perm === 'granted') { status.textContent = '📂 ' + genSaveDirHandle.name; return; }
-      genSaveDirHandle = null;
+    if (saveDirHandles[kind]) {
+      const perm = await saveDirHandles[kind].queryPermission({ mode: 'readwrite' }).catch(() => 'denied');
+      if (perm === 'granted') { status.textContent = '📂 ' + saveDirHandles[kind].name; return; }
+      saveDirHandles[kind] = null;
     }
-    const stored = await idbGetSaveDir();
-    if (!stored) { status.textContent = 'Aucun dossier mémorisé — choisis-en un.'; return; }
+    const stored = await idbGetSaveDir(cfg.storeKey);
+    if (!stored) { status.textContent = kind === 'trousse' ? 'Aucun dossier séparé — utilise le même dossier que le programme principal.' : 'Aucun dossier mémorisé — choisis-en un.'; return; }
     const perm = await stored.queryPermission({ mode: 'readwrite' }).catch(() => 'denied');
     if (perm === 'granted') {
-      genSaveDirHandle = stored;
+      saveDirHandles[kind] = stored;
       status.textContent = '📂 ' + stored.name;
     } else {
       status.textContent = '⚠️ Dossier « ' + stored.name + ' » mémorisé, mais accès non confirmé — reclique « Choisir le dossier ».';
@@ -7041,7 +7041,7 @@ async function checkGenSaveDirOnArrival() {
     // peut lever une erreur au lieu de simplement rejeter sa promesse — sans
     // ce filet, le statut restait muet indéfiniment, sans aucun indice.
     console.error('Vérification du dossier mémorisé : échec', e);
-    genSaveDirHandle = null;
+    saveDirHandles[kind] = null;
     status.textContent = '⚠️ Dossier mémorisé illisible (' + (e && e.name ? e.name : 'erreur') + ') — reclique « Choisir le dossier ».';
   }
 }
@@ -7049,11 +7049,13 @@ async function checkGenSaveDirOnArrival() {
 // Tente d'écrire directement le fichier dans le dossier choisi. Renvoie
 // true en cas de succès, false sinon (aucun dossier choisi, ou échec —
 // dans les deux cas l'appelant doit se replier sur le lien de
-// téléchargement classique).
-async function trySaveToChosenDir(filename, bytes) {
-  if (!genSaveDirHandle) return false;
+// téléchargement classique). kind='trousse' se replie sur le dossier "main"
+// si aucun dossier "trousse" dédié n'a été choisi.
+async function trySaveToChosenDir(filename, bytes, kind) {
+  const handle = saveDirHandles[kind || 'main'] || (kind === 'trousse' ? saveDirHandles.main : null);
+  if (!handle) return false;
   try {
-    const fileHandle = await genSaveDirHandle.getFileHandle(filename, { create: true });
+    const fileHandle = await handle.getFileHandle(filename, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(bytes);
     await writable.close();
@@ -7307,7 +7309,7 @@ function initTabs() {
     panels.forEach(p => p.classList.toggle('active', p.dataset.tab === tab));
     try { localStorage.setItem(KEY, tab); } catch (e) { /* ignore */ }
     if (tab === 'atelier' && typeof setLibSection === 'function') setLibSection('base');
-    if (tab === 'gen' && typeof checkGenSaveDirOnArrival === 'function') checkGenSaveDirOnArrival();
+    if (tab === 'gen' && typeof checkGenSaveDirOnArrival === 'function') { checkGenSaveDirOnArrival('main'); checkGenSaveDirOnArrival('trousse'); }
   }
   buttons.forEach(b => b.addEventListener('click', () => activate(b.dataset.tab)));
   let initial = 'atelier';
@@ -8006,7 +8008,8 @@ function init() {
   initSectionsUI();
   initPreviewInteraction();
   initVisualiseur();
-  initGenSaveDir();
+  initGenSaveDir('main');
+  initGenSaveDir('trousse');
   document.getElementById('btnTestPb').addEventListener('click', pbTestConnection);
   document.getElementById('btnRefreshLib').addEventListener('click', refreshLibrary);
   document.getElementById('btnGenerate').addEventListener('click', generateProgram);

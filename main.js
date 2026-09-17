@@ -46,6 +46,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 680,
+    show: false, // évite un flash à la taille par défaut avant le maximize() ci-dessous
     backgroundColor: '#faf7f0',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -58,6 +59,10 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'shell', 'index.html'));
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
+    mainWindow.show();
+  });
 
   const LEVELS = ['log', 'warn', 'error', 'debug'];
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
@@ -120,6 +125,43 @@ autoUpdater.on('update-not-available', () => sendUpdateStatus('none'));
 autoUpdater.on('download-progress', (p) => sendUpdateStatus('downloading', { percent: Math.round(p.percent) }));
 autoUpdater.on('update-downloaded', (info) => sendUpdateStatus('downloaded', { version: info.version }));
 autoUpdater.on('error', (err) => sendUpdateStatus('error', { message: err.message }));
+
+// ---------- Menu clic-droit dans les webviews (ex: onglet Axonaut) ----------
+// Electron n'affiche aucun menu contextuel par défaut dans une <webview> (contrairement à un
+// vrai navigateur) : il faut l'assembler et l'afficher soi-même, ici, dans le processus
+// principal (une webview crée son propre WebContents "guest", capté via web-contents-created).
+app.on('web-contents-created', (_event, contents) => {
+  if (contents.getType() !== 'webview') return;
+  // Un lien qui s'ouvrirait normalement dans une nouvelle fenêtre/onglet (target="_blank",
+  // window.open() côté page) est plutôt relayé à l'embarqueur (shell.js) pour ouvrir un nouvel
+  // onglet interne, au lieu d'ouvrir une fenêtre Electron nue ou d'échouer silencieusement.
+  contents.setWindowOpenHandler(({ url }) => {
+    contents.hostWebContents.send('csb:webview-open-tab', url);
+    return { action: 'deny' };
+  });
+  contents.on('context-menu', (_e, params) => {
+    const items = [];
+    if (params.linkURL) {
+      items.push({ label: 'Ouvrir le lien dans un nouvel onglet', click: () => contents.hostWebContents.send('csb:webview-open-tab', params.linkURL) });
+      items.push({ label: 'Ouvrir le lien dans le navigateur', click: () => shell.openExternal(params.linkURL) });
+      items.push({ label: "Copier l'adresse du lien", click: () => require('electron').clipboard.writeText(params.linkURL) });
+      items.push({ type: 'separator' });
+    }
+    if (params.isEditable) {
+      items.push({ label: 'Couper', role: 'cut', enabled: !!params.selectionText });
+      items.push({ label: 'Copier', role: 'copy', enabled: !!params.selectionText });
+      items.push({ label: 'Coller', role: 'paste' });
+      items.push({ type: 'separator' });
+    } else if (params.selectionText) {
+      items.push({ label: 'Copier', role: 'copy' });
+      items.push({ type: 'separator' });
+    }
+    items.push({ label: 'Recharger', click: () => contents.reload() });
+    items.push({ label: 'Précédent', enabled: contents.navigationHistory.canGoBack(), click: () => contents.navigationHistory.goBack() });
+    items.push({ label: 'Suivant', enabled: contents.navigationHistory.canGoForward(), click: () => contents.navigationHistory.goForward() });
+    Menu.buildFromTemplate(items).popup();
+  });
+});
 
 app.whenReady().then(() => {
   createWindow();
@@ -272,21 +314,58 @@ ipcMain.handle('csb:email-move-to-trash', async (_event, { uid, mailbox }) => {
   }
 });
 
-ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox }) => {
+// Glisser-déposer un mail sur un dossier de la colonne de gauche : déplace vers ce dossier.
+ipcMain.handle('csb:email-move-to-folder', async (_event, { uid, mailbox, targetPath }) => {
+  const client = await getImapClient();
+  const lock = await client.getMailboxLock(mailbox || 'INBOX');
+  try {
+    await client.messageMove({ uid: String(uid) }, targetPath, { uid: true });
+    return { ok: true };
+  } finally {
+    lock.release();
+  }
+});
+
+ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset }) => {
   const client = await getImapClient();
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
   try {
     const max = limit || 40;
-    let uids;
+    const off = offset || 0;
+    let targetUids;
+    let hasMore;
     if (query && query.trim()) {
-      uids = await client.search(
+      // Une recherche explicite couvre tout le dossier, sans limite de date.
+      const uids = await client.search(
         { or: [{ subject: query }, { from: query }, { body: query }] },
         { uid: true }
       );
+      // uids est trié du plus ancien au plus récent : on prend une tranche en partant de la fin,
+      // "offset" mails déjà chargés plus loin.
+      const end = uids.length - off;
+      const start = Math.max(0, end - max);
+      targetUids = uids.slice(start, end).reverse();
+      hasMore = start > 0;
     } else {
-      uids = await client.search({ all: true }, { uid: true });
+      // Navigation par défaut (sans recherche) : tous les mails des 30 derniers jours sont
+      // chargés d'un coup (pas de limite de 40 sur cette fenêtre) ; "Charger plus" (offset) ne
+      // sert qu'à remonter au-delà de ces 30 jours, par lots de "max".
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const recentUids = await client.search({ since: thirtyDaysAgo }, { uid: true });
+      if (off === 0) {
+        const olderUids = await client.search({ before: thirtyDaysAgo }, { uid: true });
+        targetUids = recentUids.slice().reverse();
+        hasMore = olderUids.length > 0;
+      } else {
+        const olderUids = await client.search({ before: thirtyDaysAgo }, { uid: true });
+        const olderOffset = Math.max(0, off - recentUids.length);
+        const end = olderUids.length - olderOffset;
+        const start = Math.max(0, end - max);
+        targetUids = olderUids.slice(start, end).reverse();
+        hasMore = start > 0;
+      }
     }
-    const targetUids = uids.slice(-max).reverse();
     const results = [];
     if (targetUids.length) {
       for await (const msg of client.fetch(targetUids, { envelope: true, flags: true, bodyStructure: true }, { uid: true })) {
@@ -302,6 +381,32 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox }) => {
       }
     }
     results.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return { items: results, hasMore };
+  } finally {
+    lock.release();
+  }
+});
+
+// Récupère le résumé (expéditeur/objet/date/lu) de mails précis par UID, sans les marquer comme
+// lus — utilisé pour ré-afficher un mail épinglé qui n'est plus dans les 40 derniers mails
+// chargés (ou hors du filtre de recherche en cours), sans le rouvrir pour de vrai.
+ipcMain.handle('csb:email-get-by-uids', async (_event, { uids, mailbox }) => {
+  if (!uids || !uids.length) return [];
+  const client = await getImapClient();
+  const lock = await client.getMailboxLock(mailbox || 'INBOX');
+  try {
+    const results = [];
+    for await (const msg of client.fetch(uids.map(String), { envelope: true, flags: true, bodyStructure: true }, { uid: true })) {
+      const from = (msg.envelope.from && msg.envelope.from[0]) || {};
+      results.push({
+        uid: msg.uid,
+        subject: msg.envelope.subject || '(sans objet)',
+        from: { name: from.name || from.address || '', email: from.address || '' },
+        date: msg.envelope.date ? new Date(msg.envelope.date).toISOString() : null,
+        unread: !(msg.flags && msg.flags.has('\\Seen')),
+        hasAttachment: bodyStructureHasAttachment(msg.bodyStructure)
+      });
+    }
     return results;
   } finally {
     lock.release();

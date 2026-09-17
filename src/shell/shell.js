@@ -3,10 +3,12 @@
     { id: 'axonaut', label: 'Gestion Commande', icon: '📦', path: '../../modules/axonaut/index.html', perms: [
       { key: 'devis', label: 'Onglet Devis' },
       { key: 'commandes', label: 'Onglet Commande' },
+      { key: 'facture', label: 'Onglet Facture' },
       { key: 'etiquettes', label: 'Gestion des étiquettes' },
       { key: 'devis_pdf', label: 'Voir le PDF du devis' },
       { key: 'settings', label: 'Réglages (⚙︎)' },
-      { key: 'addressbook', label: "Carnet d'adresses" }
+      { key: 'addressbook', label: "Carnet d'adresses" },
+      { key: 'photos_supprimer', label: 'Supprimer une photo de commande' }
     ] },
     { id: 'casaque', label: 'Gestion Casaque', icon: '🏇', path: '../../modules/casaque/index.html', perms: [
       { key: 'coussin_trousse', label: 'Modifier Coussin / Trousse' },
@@ -26,13 +28,19 @@
       { key: 'stock', label: 'Onglet État du stock' },
       { key: 'mouvements', label: 'Onglet Mouvements' },
       { key: 'recherche', label: 'Onglet Recherche' },
+      { key: 'nuancier', label: 'Onglet Nuancier' },
+      { key: 'trouver_couleur', label: 'Onglet Trouver couleur' },
       { key: 'parametres', label: 'Onglet Paramètres' },
       { key: 'export', label: 'Exporter une sauvegarde' },
       { key: 'import', label: 'Importer une sauvegarde' }
     ] },
     { id: 'prospection', label: 'Prospection', icon: '📍', path: '../../modules/prospection/index.html', perms: [] },
     { id: 'pointage', label: 'Pointage', icon: '🕒', path: '../../modules/pointage/index.html', perms: [] },
-    { id: 'email', label: 'Email', icon: '✉️', path: '../../modules/email/index.html', perms: [] }
+    { id: 'email', label: 'Email', icon: '✉️', path: '../../modules/email/index.html', perms: [] },
+    // Axonaut lui-même (le vrai site, via une webview) — pour les écrans que notre intégration
+    // API ne couvre pas encore. Session de connexion propre à cet onglet, indépendante de
+    // notre appli (comme un onglet de navigateur classique).
+    { id: 'axonaut_web', label: 'Axonaut', icon: '🌐', type: 'webview', url: 'https://axonaut.com/dashboard/index', perms: [] }
   ];
 
   const loginOverlay = document.getElementById('loginOverlay');
@@ -148,12 +156,104 @@
     });
 
     if (!moduleFrames[mod.id]) {
-      const iframe = document.createElement('iframe');
-      iframe.src = mod.path;
-      iframe.title = mod.label;
-      main.appendChild(iframe);
-      moduleFrames[mod.id] = iframe;
+      let el;
+      if (mod.type === 'webview') {
+        el = createWebviewShell(mod);
+      } else {
+        el = document.createElement('iframe');
+        el.src = mod.path;
+        el.title = mod.label;
+      }
+      main.appendChild(el);
+      moduleFrames[mod.id] = el;
     }
+  }
+
+  // ---------- Onglets internes pour les modules webview (ex: Axonaut) ----------
+  // Une webview seule ne propose ni onglets ni "ouvrir dans un nouvel onglet" (comportement de
+  // navigateur classique) : on le reconstruit ici. webviewTabsState[mod.id] garde la liste des
+  // onglets ouverts pour ce module et lequel est actif.
+  const webviewTabsState = {};
+  function createWebviewShell(mod) {
+    const wrap = document.createElement('div');
+    wrap.className = 'webview-shell';
+    wrap.title = mod.label;
+    const tabbar = document.createElement('div');
+    tabbar.className = 'webview-tabbar';
+    const pages = document.createElement('div');
+    pages.className = 'webview-pages';
+    wrap.appendChild(tabbar);
+    wrap.appendChild(pages);
+    webviewTabsState[mod.id] = { tabs: [], activeId: null, tabbar, pages, nextId: 1 };
+    createWebviewTab(mod.id, mod.url, mod.label);
+    return wrap;
+  }
+  function createWebviewTab(modId, url, label) {
+    const state = webviewTabsState[modId];
+    if (!state) return;
+    const tabId = state.nextId++;
+    const webview = document.createElement('webview');
+    // Le partitionnement doit être posé AVANT src et avant l'attache au DOM : une fois la
+    // navigation démarrée, Electron ne peut plus changer la session de la webview (sinon elle
+    // repart sur une session en mémoire non persistée, perdue à chaque redémarrage de l'appli).
+    webview.setAttribute('partition', 'persist:' + modId);
+    webview.setAttribute('src', url);
+    webview.addEventListener('page-title-updated', (e) => {
+      tabBtnLabel.textContent = e.title || label;
+      tabBtnLabel.title = e.title || label;
+    });
+    state.pages.appendChild(webview);
+
+    const tabBtn = document.createElement('div');
+    tabBtn.className = 'webview-tab';
+    const tabBtnLabel = document.createElement('span');
+    tabBtnLabel.className = 'webview-tab-label';
+    tabBtnLabel.textContent = label;
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'webview-tab-close';
+    closeBtn.textContent = '✕';
+    closeBtn.title = "Fermer l'onglet";
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWebviewTab(modId, tabId); });
+    tabBtn.appendChild(tabBtnLabel);
+    tabBtn.appendChild(closeBtn);
+    tabBtn.addEventListener('click', () => activateWebviewTab(modId, tabId));
+    state.tabbar.appendChild(tabBtn);
+
+    state.tabs.push({ id: tabId, webview, tabBtn });
+    activateWebviewTab(modId, tabId);
+  }
+  function activateWebviewTab(modId, tabId) {
+    const state = webviewTabsState[modId];
+    if (!state) return;
+    state.activeId = tabId;
+    state.tabs.forEach((t) => {
+      const active = t.id === tabId;
+      t.webview.style.display = active ? 'flex' : 'none';
+      t.tabBtn.classList.toggle('active', active);
+    });
+  }
+  function closeWebviewTab(modId, tabId) {
+    const state = webviewTabsState[modId];
+    if (!state) return;
+    if (state.tabs.length <= 1) return; // toujours garder au moins un onglet ouvert
+    const idx = state.tabs.findIndex((t) => t.id === tabId);
+    if (idx === -1) return;
+    const [closed] = state.tabs.splice(idx, 1);
+    closed.webview.remove();
+    closed.tabBtn.remove();
+    if (state.activeId === tabId) {
+      const next = state.tabs[idx] || state.tabs[idx - 1] || state.tabs[0];
+      activateWebviewTab(modId, next.id);
+    }
+  }
+  // Un lien ouvert "dans un nouvel onglet" depuis n'importe quelle webview (menu clic-droit,
+  // target="_blank") arrive ici — toujours ajouté au module actuellement actif s'il gère des
+  // onglets (aujourd'hui, uniquement Axonaut), sinon ignoré silencieusement.
+  if (window.csbHost && window.csbHost.onWebviewOpenTab) {
+    window.csbHost.onWebviewOpenTab((url) => {
+      const modId = Object.keys(webviewTabsState).find((id) => moduleFrames[id] && moduleFrames[id].style.display !== 'none') || Object.keys(webviewTabsState)[0];
+      if (modId) createWebviewTab(modId, url, url);
+    });
   }
 
   function renderUserMenu() {
@@ -368,6 +468,29 @@
       updateBanner.style.display = 'flex';
     });
   }
+
+  // ================== Numéro de version + historique ==================
+  const appVersionBadge = document.getElementById('appVersionBadge');
+  if (window.csbHost && window.csbHost.getAppVersion) {
+    window.csbHost.getAppVersion().then((v) => { appVersionBadge.textContent = 'v' + v; });
+  }
+  appVersionBadge.addEventListener('click', () => {
+    const body = document.getElementById('versionHistoryBody');
+    const history = (typeof APP_VERSION_HISTORY !== 'undefined') ? APP_VERSION_HISTORY : [];
+    body.innerHTML = history.map((entry) => `
+      <div class="version-entry">
+        <div class="version-entry-title">v${entry.v}</div>
+        <ul>${entry.items.map((it) => `<li>${escapeHtml(it)}</li>`).join('')}</ul>
+      </div>
+    `).join('') || '<p class="hint">Historique indisponible.</p>';
+    document.getElementById('versionHistoryOverlay').classList.add('show');
+  });
+  document.getElementById('versionHistoryClose').addEventListener('click', () => {
+    document.getElementById('versionHistoryOverlay').classList.remove('show');
+  });
+  document.getElementById('versionHistoryOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'versionHistoryOverlay') e.target.classList.remove('show');
+  });
 
   // ================== Relais vectorisation (VTracer, moteur Node côté principal) ==================
   // Le module Vectorisation tourne dans un iframe sandboxé sans accès à Node ; le moteur VTracer,

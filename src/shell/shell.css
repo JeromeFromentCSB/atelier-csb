@@ -74,6 +74,27 @@ input:focus{outline:2px solid var(--spool-gold); outline-offset:1px;}
   color:var(--ink-soft); background:var(--paper-dim); padding:1px 5px; border-radius:10px;
 }
 
+#appVersionBadge{
+  align-self:center; font-size:11px; font-weight:700; color:var(--ink-soft);
+  background:var(--paper-dim); border:1px solid var(--line); border-radius:20px;
+  padding:3px 10px; margin-right:8px;
+}
+#appVersionBadge:hover{color:var(--ink); border-color:var(--ink-soft);}
+#versionHistoryOverlay{
+  display:none; position:fixed; inset:0; background:rgba(42,38,34,.55); z-index:150;
+  align-items:center; justify-content:center; padding:24px;
+}
+#versionHistoryOverlay.show{display:flex;}
+#versionHistoryModal{
+  width:min(440px,100%); max-height:80vh; background:#fff; border-radius:12px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35); display:flex; flex-direction:column; overflow:hidden;
+}
+.version-entry{margin-bottom:16px;}
+.version-entry:last-child{margin-bottom:0;}
+.version-entry-title{font-family:Georgia,serif; font-weight:700; font-size:14px; color:var(--ink); margin-bottom:4px;}
+.version-entry ul{margin:0; padding-left:18px;}
+.version-entry li{font-size:12.5px; color:var(--ink-soft); margin-bottom:3px; line-height:1.4;}
+
 #userMenuWrap{position:relative; display:flex; align-items:center;}
 #userMenuBtn{
   display:flex; align-items:center; gap:7px; height:100%; padding:0 10px;
@@ -106,6 +127,24 @@ input:focus{outline:2px solid var(--spool-gold); outline-offset:1px;}
 
 #main{flex:1; min-width:0; position:relative; background:var(--paper-dim);}
 #main iframe{width:100%; height:100%; border:none; background:#fff;}
+
+/* ---------- Onglets internes pour les modules webview (ex: Axonaut) ---------- */
+.webview-shell{display:flex; flex-direction:column; width:100%; height:100%;}
+.webview-tabbar{display:flex; align-items:stretch; gap:2px; padding:0 6px; background:var(--paper-dim); border-bottom:1px solid var(--line); flex:none; overflow-x:auto;}
+.webview-tab{
+  display:flex; align-items:center; gap:8px; padding:7px 8px 7px 12px; cursor:pointer;
+  font-size:12px; color:var(--ink-soft); border-bottom:2px solid transparent; white-space:nowrap; max-width:220px;
+}
+.webview-tab:hover{color:var(--ink);}
+.webview-tab.active{color:var(--ink); background:#fff; border-bottom-color:var(--thread); font-weight:600;}
+.webview-tab-label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px;}
+.webview-tab-close{
+  border:none; background:transparent; color:var(--ink-soft); padding:0 3px; font-size:11px;
+  border-radius:4px; line-height:1;
+}
+.webview-tab-close:hover{background:var(--paper-dim); color:var(--rouge);}
+.webview-pages{position:relative; flex:1; min-height:0; display:flex; flex-direction:column;}
+.webview-pages webview{flex:1; width:100%; min-height:0; border:none; background:#fff;}
 .main-placeholder{
   height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:10px; color:var(--ink-soft); text-align:center; padding:40px;

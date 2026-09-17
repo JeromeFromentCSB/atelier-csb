@@ -17,9 +17,16 @@ contextBridge.exposeInMainWorld('csbHost', {
   emailStatus: () => ipcRenderer.invoke('csb:email-status'),
   emailDisconnect: () => ipcRenderer.invoke('csb:email-disconnect'),
   emailTestConnection: () => ipcRenderer.invoke('csb:email-test-connection'),
-  emailList: (query, limit, mailbox) => ipcRenderer.invoke('csb:email-list', { query, limit, mailbox }),
+  emailList: (query, limit, mailbox, offset) => ipcRenderer.invoke('csb:email-list', { query, limit, mailbox, offset }),
+  emailGetByUids: (uids, mailbox) => ipcRenderer.invoke('csb:email-get-by-uids', { uids, mailbox }),
   emailGetMessage: (uid, mailbox) => ipcRenderer.invoke('csb:email-get-message', { uid, mailbox }),
   emailListFolders: () => ipcRenderer.invoke('csb:email-list-folders'),
   emailSetFlags: (uid, mailbox, addFlags, removeFlags) => ipcRenderer.invoke('csb:email-set-flags', { uid, mailbox, addFlags, removeFlags }),
-  emailMoveToTrash: (uid, mailbox) => ipcRenderer.invoke('csb:email-move-to-trash', { uid, mailbox })
+  emailMoveToTrash: (uid, mailbox) => ipcRenderer.invoke('csb:email-move-to-trash', { uid, mailbox }),
+  emailMoveToFolder: (uid, mailbox, targetPath) => ipcRenderer.invoke('csb:email-move-to-folder', { uid, mailbox, targetPath }),
+  onWebviewOpenTab: (callback) => {
+    const listener = (_event, url) => callback(url);
+    ipcRenderer.on('csb:webview-open-tab', listener);
+    return () => ipcRenderer.removeListener('csb:webview-open-tab', listener);
+  }
 });

@@ -12,6 +12,7 @@
     <div class="brand" title="Atelier CSB"><div class="spool"></div></div>
     <nav id="moduleNav"></nav>
     <div class="spacer"></div>
+    <button id="appVersionBadge" class="ghost" title="Voir l'historique des versions"></button>
     <div id="userMenuWrap" style="display:none;">
       <button id="userMenuBtn">
         <span id="userMenuName"></span>
@@ -67,6 +68,16 @@
   </div>
 </div>
 
+<div id="versionHistoryOverlay">
+  <div id="versionHistoryModal">
+    <div class="modal-head">
+      <h3>Historique des versions</h3>
+      <button class="ghost icon" id="versionHistoryClose">✕</button>
+    </div>
+    <div class="modal-body" id="versionHistoryBody"></div>
+  </div>
+</div>
+
 <div id="usersOverlay">
   <div id="usersModal">
     <div class="modal-head">
@@ -112,6 +123,7 @@
 
 <script src="../shared/vendor/pocketbase.umd.js"></script>
 <script src="../shared/csb-auth.js"></script>
+<script src="version-history.js"></script>
 <script src="shell.js"></script>
 </body>
 </html>

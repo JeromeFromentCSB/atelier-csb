@@ -42,6 +42,7 @@
   .btn:disabled{ opacity:.5; cursor:default; transform:none; box-shadow:none; }
   .btn.primary{ background:var(--ink); color:var(--paper); }
   .btn.ghost{ border-color:var(--line); color:var(--muted); }
+  .btn.ghost.active{ background:var(--poste-yellow, #ffe082); border-color:var(--poste-yellow-dark); color:var(--ink); }
   .btn.icon{ padding:6px 10px; }
   .search{
     font-family:sans-serif; font-size:.85rem; padding:7px 14px;
@@ -84,6 +85,13 @@
   .folder-item.active{ background:var(--white); border-left-color:var(--poste-yellow-dark); font-weight:700; }
   .folder-item .ic{ flex-shrink:0; font-size:.9rem; }
   .folder-item .nm{ overflow:hidden; text-overflow:ellipsis; }
+  .folder-item.drop-target{ background:var(--poste-yellow, #ffe082); border-left-color:var(--poste-yellow-dark); }
+  .msg-row.dragging{ opacity:.4; }
+  .thread-row{ cursor:pointer; }
+  .thread-row .thread-chev{ width:14px; flex-shrink:0; text-align:center; color:var(--muted); font-size:.75rem; }
+  .thread-row .thread-count{ display:inline-block; min-width:16px; padding:0 5px; border-radius:9px; background:var(--muted,#888); color:#fff; font-size:.68rem; font-weight:700; text-align:center; }
+  .thread-messages{ background:#faf7ee; }
+  .thread-messages .msg-row{ padding-left:34px; }
   #listPane{ width:340px; flex-shrink:0; overflow-y:auto; border-right:2px solid var(--ink); background:var(--white); }
   .pane-resizer{
     width:8px; margin:0 -4px; flex-shrink:0; cursor:col-resize; position:relative; z-index:6; background:transparent;
@@ -97,12 +105,13 @@
   #previewPane{ width:420px; flex-shrink:0; overflow:hidden; border-left:2px solid var(--ink); background:var(--paper-2); display:flex; flex-direction:column; }
 
   .msg-row{
-    display:flex; flex-direction:column; gap:3px; padding:10px 16px; cursor:pointer;
+    display:flex; align-items:flex-start; gap:9px; padding:9px 14px; cursor:pointer;
     border-bottom:1px solid var(--line); font-family:sans-serif;
   }
   .msg-row:hover{ background:#fbf9f3; }
   .msg-row.selected{ background:#fdf3d0; box-shadow:inset 3px 0 0 var(--poste-yellow-dark); }
   .msg-row.unread .msg-subject, .msg-row.unread .msg-from{ font-weight:800; }
+  .msg-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
   .msg-top{ display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
   .msg-from{ font-size:.8rem; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .msg-date{ font-size:.65rem; color:var(--muted); flex-shrink:0; }
@@ -110,6 +119,33 @@
   .msg-snippet{ font-size:.72rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .msg-snippet:empty{ display:none; }
   .msg-attach-icon{ font-size:.68rem; }
+  .msg-dot{
+    flex-shrink:0; width:9px; height:9px; border-radius:50%; margin-top:7px; cursor:pointer;
+    background:transparent; border:1.5px solid var(--line);
+  }
+  .msg-dot.unread{ background:#2b7fd6; border-color:#2b7fd6; }
+  .msg-dot:hover{ border-color:var(--poste-yellow-dark); }
+  .msg-avatar{
+    flex-shrink:0; width:28px; height:28px; border-radius:50%; color:#fff; font-size:.72rem; font-weight:700;
+    display:flex; align-items:center; justify-content:center; font-family:sans-serif; margin-top:1px;
+  }
+  .msg-pin{
+    flex-shrink:0; font-size:.72rem; opacity:0; cursor:pointer; margin-top:6px; filter:grayscale(1);
+  }
+  .msg-row:hover .msg-pin{ opacity:.45; }
+  .msg-pin:hover{ opacity:.8 !important; }
+  .msg-pin.pinned{ opacity:1; filter:none; }
+  .msg-section-head{
+    display:flex; align-items:center; gap:6px; padding:9px 14px 5px; font-family:sans-serif;
+    font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+    background:var(--paper-2); border-bottom:1px solid var(--line); cursor:pointer;
+  }
+  .msg-section-head:hover{ color:var(--ink); }
+  .msg-section-head.plain{ text-transform:none; font-size:.72rem; letter-spacing:0; padding-top:12px; cursor:default; }
+  .msg-section-head.plain:hover{ color:var(--muted); }
+  .msg-section-head .ic{ font-size:.85rem; }
+  .msg-section-head .cnt{ color:var(--ink); font-weight:700; }
+  .msg-section-head .chev{ font-size:.62rem; width:10px; display:inline-block; }
 
   .empty{ text-align:center; padding:80px 20px; color:var(--muted); font-family:sans-serif; }
   .empty .flag-big{
@@ -164,6 +200,7 @@
     <div class="toolbar">
       <input type="text" class="search" id="searchInput" placeholder="Rechercher (objet, expéditeur…)">
       <button class="btn primary" id="refreshBtn">↻ Actualiser</button>
+      <button class="btn ghost" id="threadToggleBtn" title="Regrouper les mails d'un même échange">🧵 Conversations</button>
       <div class="status-pill" id="statusPill">
         <span class="status-dot" id="statusDot"></span>
         <span id="statusLabel">Non connecté</span>
@@ -216,6 +253,7 @@
       <p>Ouvre les réglages (⚙︎) pour renseigner ton adresse et ton mot de passe d'application, puis clique sur « Actualiser ».</p>
     </div>
     <div id="msgList" style="display:none;"></div>
+    <button id="loadMoreBtn" class="btn ghost" style="display:none; width:calc(100% - 28px); margin:10px 14px;">Charger plus</button>
   </div>
   <div class="pane-resizer" id="listResizer" title="Glisser pour redimensionner"></div>
   <div id="detailPane">
@@ -332,6 +370,98 @@ let currentAttachments = [];
 let currentPreviewUrl = null;
 let currentMailbox = 'INBOX';
 let folders = [];
+let loadedCount = 0;
+let hasMoreMessages = false;
+
+// ---------- Regroupement de la liste (Épinglés / Notifications / Newsletters / Invitations) ----------
+// L'IMAP standard n'expose pas de catégorisation Gmail-like : "Épinglés" est un marquage local
+// (stocké dans ce navigateur, comme une étoile personnelle) ; les 3 autres catégories sont
+// devinées par heuristique (expéditeur/objet) — approximatif par nature, pas une vraie
+// catégorisation Gmail.
+const PINNED_KEY = 'csb_email_pinned_uids';
+function loadPinned(){ try{ return new Set(JSON.parse(localStorage.getItem(PINNED_KEY)) || []); }catch(e){ return new Set(); } }
+function savePinned(){ try{ localStorage.setItem(PINNED_KEY, JSON.stringify([...pinnedIds])); }catch(e){} }
+let pinnedIds = loadPinned();
+
+const NOTIF_PATTERN = /noreply|no-reply|notification|mailer-daemon|@google\.com|@openai\.com|@anthropic\.com|@microsoft\.com|@apple\.com|@sendcloud\./i;
+const NEWSLETTER_PATTERN = /newsletter|no-?reply@|news@|info@|marketing@|@pinterest\.|@cloudflare\.|@dpd|@embroidize|fireflies\.ai/i;
+const INVITATION_PATTERN = /invitation|rendez-vous|convocation|consult[ée]/i;
+const CATEGORY_DEFS = {
+  epingles: { label: 'Épinglés', icon: '📌' },
+  notifications: { label: 'Notifications', icon: '🔔' },
+  newsletters: { label: 'Newsletters', icon: '📰' },
+  invitations: { label: 'Invitations', icon: '❓' },
+};
+const CATEGORY_ORDER = ['epingles', 'notifications', 'newsletters', 'invitations'];
+const CATS_COLLAPSED_KEY = 'csb_email_collapsed_cats';
+function loadCollapsedCats(){ try{ return new Set(JSON.parse(localStorage.getItem(CATS_COLLAPSED_KEY)) || []); }catch(e){ return new Set(); } }
+function saveCollapsedCats(){ try{ localStorage.setItem(CATS_COLLAPSED_KEY, JSON.stringify([...collapsedCats])); }catch(e){} }
+let collapsedCats = loadCollapsedCats();
+
+// Regroupement optionnel « Conversations » : rassemble les mails d'un même échange (objet
+// normalisé, sans les préfixes Re:/Tr:/Fwd:) sous une seule ligne dépliable, comme l'historique
+// d'une discussion.
+const THREADING_KEY = 'csb_email_threading_enabled';
+function loadThreading(){ try{ return localStorage.getItem(THREADING_KEY) === '1'; }catch(e){ return false; } }
+function saveThreading(v){ try{ localStorage.setItem(THREADING_KEY, v ? '1' : '0'); }catch(e){} }
+let threadingEnabled = loadThreading();
+let expandedThreads = new Set();
+function normalizeSubject(subj){
+  return (subj || '')
+    .replace(/^\s*(re|tr|fwd?|rép)\s*:\s*/i, '')
+    .replace(/^\s*(re|tr|fwd?|rép)\s*:\s*/i, '')
+    .trim()
+    .toLowerCase() || '(sans objet)';
+}
+function buildThreads(list){
+  const byKey = new Map();
+  list.forEach(m => {
+    const key = normalizeSubject(m.subject);
+    if(!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(m);
+  });
+  const threads = [...byKey.entries()].map(([key, msgs]) => {
+    msgs.sort((a,b) => (b.date ? b.date.getTime() : 0) - (a.date ? a.date.getTime() : 0));
+    return {
+      key,
+      messages: msgs,
+      latest: msgs[0],
+      unread: msgs.some(m => m.unread),
+      pinned: msgs.some(m => pinnedIds.has(m.id))
+    };
+  });
+  threads.sort((a,b) => (b.latest.date ? b.latest.date.getTime() : 0) - (a.latest.date ? a.latest.date.getTime() : 0));
+  return threads;
+}
+function categoryFor(m){
+  if(pinnedIds.has(m.id)) return 'epingles';
+  const addr = (m.from && m.from.email || '').toLowerCase();
+  const subj = (m.subject || '').toLowerCase();
+  if(INVITATION_PATTERN.test(subj)) return 'invitations';
+  if(NOTIF_PATTERN.test(addr)) return 'notifications';
+  if(NEWSLETTER_PATTERN.test(addr) || NEWSLETTER_PATTERN.test(subj)) return 'newsletters';
+  return null;
+}
+function dateGroupLabel(d){
+  if(!d) return 'Sans date';
+  const now = new Date();
+  const startOfDay = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if(diffDays === 0) return "Aujourd'hui";
+  if(diffDays === 1) return 'Hier';
+  return d.toLocaleDateString('fr-FR', { day:'numeric', month:'long', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+const AVATAR_COLORS = ['#B33A3A','#C99A00','#3D7A57','#2D6B8F','#7A4FB5','#B54F8C','#4A7A3D','#8F5A2D'];
+function avatarColorFor(name){
+  let h = 0;
+  const s = name || '?';
+  for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+function initialFor(name){
+  const s = (name || '?').trim();
+  return s ? s[0].toUpperCase() : '?';
+}
 
 const FOLDER_ICONS = {
   '\\Inbox': '📥', '\\Sent': '📤', '\\Drafts': '📝', '\\Trash': '🗑️',
@@ -370,17 +500,57 @@ function renderFolders(){
       document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l\'afficher ici.</div>';
       loadMessages();
     });
+    item.addEventListener('dragover', (e) => {
+      if(item.dataset.path === currentMailbox) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      item.classList.add('drop-target');
+    });
+    item.addEventListener('dragleave', () => item.classList.remove('drop-target'));
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      item.classList.remove('drop-target');
+      const id = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      if(!id || item.dataset.path === currentMailbox) return;
+      moveMessageToFolder(id, item.dataset.path);
+    });
   });
 }
 
-async function loadMessages(){
+async function moveMessageToFolder(id, targetPath){
+  const row = document.querySelector(`.msg-row[data-id="${id}"]`);
+  if(row) row.style.opacity = '.4';
+  try{
+    await requireCsbHost().emailMoveToFolder(id, currentMailbox, targetPath);
+    messages = messages.filter(m => m.id !== id);
+    if(selectedMessageId === id){
+      selectedMessageId = null;
+      closePreview();
+      document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l\'afficher ici.</div>';
+    }
+    renderList();
+  }catch(e){
+    if(row) row.style.opacity = '';
+    alert('Impossible de déplacer ce mail : ' + e.message);
+  }
+}
+
+async function loadMessages(append){
   const q = document.getElementById('searchInput').value.trim();
   const btn = document.getElementById('refreshBtn');
-  btn.disabled = true;
-  btn.textContent = '↻ Chargement…';
+  const moreBtn = document.getElementById('loadMoreBtn');
+  if(append){
+    moreBtn.disabled = true;
+    moreBtn.textContent = 'Chargement…';
+  }else{
+    btn.disabled = true;
+    btn.textContent = '↻ Chargement…';
+  }
   try{
-    const list = await requireCsbHost().emailList(q, 40, currentMailbox);
-    messages = list.map(m => ({
+    const res = await requireCsbHost().emailList(q, 40, currentMailbox, append ? loadedCount : 0);
+    const items = Array.isArray(res) ? res : (res.items || []);
+    hasMoreMessages = Array.isArray(res) ? false : !!res.hasMore;
+    const mapped = items.map(m => ({
       id: m.uid,
       snippet: '',
       unread: m.unread,
@@ -389,21 +559,154 @@ async function loadMessages(){
       date: m.date ? new Date(m.date) : null,
       hasAttachment: m.hasAttachment
     }));
+    if(append){
+      const existingIds = new Set(messages.map(m => m.id));
+      mapped.forEach(m => { if(!existingIds.has(m.id)) messages.push(m); });
+    }else{
+      messages = mapped;
+    }
+    loadedCount += items.length;
+    // Un mail épinglé doit rester visible même s'il sort des mails chargés (ou du filtre de
+    // recherche en cours) : on va chercher les épinglés manquants séparément, sans les marquer
+    // comme lus (contrairement à l'ouverture normale d'un mail).
+    const missingPinned = [...pinnedIds].filter(id => !messages.some(m => m.id === id));
+    if(missingPinned.length && requireCsbHost().emailGetByUids){
+      try{
+        const extra = await requireCsbHost().emailGetByUids(missingPinned, currentMailbox);
+        extra.forEach(m => {
+          messages.push({
+            id: m.uid, snippet: '', unread: m.unread, from: m.from, subject: m.subject,
+            date: m.date ? new Date(m.date) : null, hasAttachment: m.hasAttachment
+          });
+        });
+      }catch(e){ console.warn('Impossible de récupérer certains mails épinglés', e); }
+    }
   }catch(e){
     document.getElementById('msgList').innerHTML = `<div class="hint" style="padding:16px; color:var(--silk-red); font-family:sans-serif;">Erreur : ${escapeHtml(e.message)}</div>`;
     document.getElementById('listEmpty').style.display = 'none';
     document.getElementById('msgList').style.display = 'block';
     btn.disabled = false;
     btn.textContent = '↻ Actualiser';
+    moreBtn.disabled = false;
+    moreBtn.textContent = 'Charger plus';
     return;
   }
   renderList();
   btn.disabled = false;
   btn.textContent = '↻ Actualiser';
+  moreBtn.disabled = false;
+  moreBtn.textContent = 'Charger plus';
+  moreBtn.style.display = hasMoreMessages ? 'block' : 'none';
 }
-document.getElementById('refreshBtn').addEventListener('click', loadMessages);
-document.getElementById('searchInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') loadMessages(); });
+document.getElementById('refreshBtn').addEventListener('click', () => loadMessages(false));
+document.getElementById('loadMoreBtn').addEventListener('click', () => loadMessages(true));
+document.getElementById('searchInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') loadMessages(false); });
 
+const threadToggleBtn = document.getElementById('threadToggleBtn');
+threadToggleBtn.classList.toggle('active', threadingEnabled);
+threadToggleBtn.addEventListener('click', () => {
+  threadingEnabled = !threadingEnabled;
+  saveThreading(threadingEnabled);
+  threadToggleBtn.classList.toggle('active', threadingEnabled);
+  renderList();
+});
+
+function msgRowHtml(m){
+  const initial = initialFor(m.from.name || m.from.email);
+  const color = avatarColorFor(m.from.name || m.from.email || String(m.id));
+  const pinned = pinnedIds.has(m.id);
+  return `
+    <div class="msg-row ${m.unread ? 'unread' : ''} ${m.id === selectedMessageId ? 'selected' : ''}" data-id="${m.id}" draggable="true">
+      <span class="msg-dot ${m.unread ? 'unread' : ''}" data-action="toggle-read" data-id="${m.id}" title="${m.unread ? 'Marquer comme lu' : 'Marquer comme non lu'}"></span>
+      <span class="msg-avatar" style="background:${color};">${escapeHtml(initial)}</span>
+      <div class="msg-main">
+        <div class="msg-top">
+          <span class="msg-from">${escapeHtml(m.from.name)}</span>
+          <span class="msg-date">${m.hasAttachment ? '<span class="msg-attach-icon" title="Contient une pièce jointe">📎</span> ' : ''}${formatDate(m.date)}</span>
+        </div>
+        <div class="msg-subject">${escapeHtml(m.subject)}</div>
+        <div class="msg-snippet">${escapeHtml(m.snippet)}</div>
+      </div>
+      <span class="msg-pin ${pinned ? 'pinned' : ''}" data-action="toggle-pin" data-id="${m.id}" title="${pinned ? 'Désépingler' : 'Épingler'}">📌</span>
+    </div>
+  `;
+}
+function threadRowHtml(thread){
+  const expanded = expandedThreads.has(thread.key);
+  const m = thread.latest;
+  const initial = initialFor(m.from.name || m.from.email);
+  const color = avatarColorFor(m.from.name || m.from.email || String(m.id));
+  const count = thread.messages.length;
+  const names = [...new Set(thread.messages.map(x => x.from.name || x.from.email))];
+  const fromLabel = count > 1 ? names.slice(0,2).join(', ') + (names.length > 2 ? '…' : '') : (m.from.name || m.from.email);
+  let html = `
+    <div class="msg-row thread-row ${thread.unread ? 'unread' : ''}" data-thread="${escapeHtml(thread.key)}" data-action="toggle-thread">
+      <span class="chev thread-chev">${count > 1 ? (expanded ? '▾' : '▸') : ''}</span>
+      <span class="msg-avatar" style="background:${color};">${escapeHtml(initial)}</span>
+      <div class="msg-main">
+        <div class="msg-top">
+          <span class="msg-from">${escapeHtml(fromLabel)}</span>
+          <span class="msg-date">${count > 1 ? `<span class="thread-count">${count}</span> ` : ''}${formatDate(m.date)}</span>
+        </div>
+        <div class="msg-subject">${escapeHtml(m.subject)}</div>
+      </div>
+      <span class="msg-pin ${thread.pinned ? 'pinned' : ''}">${thread.pinned ? '📌' : ''}</span>
+    </div>
+  `;
+  if(count > 1 && expanded){
+    html += `<div class="thread-messages">${thread.messages.map(msgRowHtml).join('')}</div>`;
+  }
+  return html;
+}
+
+function wireMsgRows(listEl){
+  listEl.querySelectorAll('.msg-row:not(.thread-row)').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if(e.target.closest('[data-action]')) return;
+      openMessage(parseInt(row.dataset.id, 10));
+    });
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', row.dataset.id);
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragend', () => row.classList.remove('dragging'));
+  });
+  listEl.querySelectorAll('[data-action="toggle-read"]').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); toggleReadStatus(parseInt(el.dataset.id, 10)); });
+  });
+  listEl.querySelectorAll('[data-action="toggle-pin"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = parseInt(el.dataset.id, 10);
+      if(pinnedIds.has(id)) pinnedIds.delete(id); else pinnedIds.add(id);
+      savePinned();
+      renderList();
+    });
+  });
+  listEl.querySelectorAll('[data-action="toggle-cat"]').forEach(el => {
+    el.addEventListener('click', () => {
+      const cat = el.dataset.cat;
+      if(collapsedCats.has(cat)) collapsedCats.delete(cat); else collapsedCats.add(cat);
+      saveCollapsedCats();
+      renderList();
+    });
+  });
+  listEl.querySelectorAll('[data-action="toggle-thread"]').forEach(el => {
+    el.addEventListener('click', () => {
+      const key = el.dataset.thread;
+      const thread = currentThreads.find(t => t.key === key);
+      if(thread && thread.messages.length === 1){
+        openMessage(thread.messages[0].id);
+        return;
+      }
+      if(expandedThreads.has(key)) expandedThreads.delete(key); else expandedThreads.add(key);
+      renderList();
+    });
+  });
+}
+
+let currentThreads = [];
 function renderList(){
   const listEl = document.getElementById('msgList');
   const emptyEl = document.getElementById('listEmpty');
@@ -414,19 +717,48 @@ function renderList(){
   }
   emptyEl.style.display = 'none';
   listEl.style.display = 'block';
-  listEl.innerHTML = messages.map(m => `
-    <div class="msg-row ${m.unread ? 'unread' : ''} ${m.id === selectedMessageId ? 'selected' : ''}" data-id="${m.id}">
-      <div class="msg-top">
-        <span class="msg-from">${escapeHtml(m.from.name)}</span>
-        <span class="msg-date">${m.hasAttachment ? '<span class="msg-attach-icon" title="Contient une pièce jointe">📎</span> ' : ''}${formatDate(m.date)}</span>
-      </div>
-      <div class="msg-subject">${escapeHtml(m.subject)}</div>
-      <div class="msg-snippet">${escapeHtml(m.snippet)}</div>
-    </div>
-  `).join('');
-  listEl.querySelectorAll('.msg-row').forEach(row => {
-    row.addEventListener('click', () => openMessage(parseInt(row.dataset.id, 10)));
+
+  if(threadingEnabled){
+    currentThreads = buildThreads(messages);
+    listEl.innerHTML = currentThreads.map(threadRowHtml).join('');
+    wireMsgRows(listEl);
+    return;
+  }
+
+  const byCategory = { epingles:[], notifications:[], newsletters:[], invitations:[] };
+  const rest = [];
+  messages.forEach(m => {
+    const cat = categoryFor(m);
+    if(cat) byCategory[cat].push(m); else rest.push(m);
   });
+
+  let html = '';
+  CATEGORY_ORDER.forEach(catId => {
+    const list = byCategory[catId];
+    if(!list.length) return;
+    const def = CATEGORY_DEFS[catId];
+    const collapsed = collapsedCats.has(catId);
+    html += `<div class="msg-section-head" data-action="toggle-cat" data-cat="${catId}">
+      <span class="chev">${collapsed ? '▸' : '▾'}</span>
+      <span class="ic">${def.icon}</span>${escapeHtml(def.label)}<span class="cnt">${list.length}</span>
+    </div>`;
+    if(!collapsed) html += list.map(msgRowHtml).join('');
+  });
+
+  const byDate = {};
+  const order = [];
+  rest.forEach(m => {
+    const label = dateGroupLabel(m.date);
+    if(!byDate[label]){ byDate[label] = []; order.push(label); }
+    byDate[label].push(m);
+  });
+  order.forEach(label => {
+    html += `<div class="msg-section-head plain">${escapeHtml(label)}</div>`;
+    html += byDate[label].map(msgRowHtml).join('');
+  });
+
+  listEl.innerHTML = html;
+  wireMsgRows(listEl);
 }
 
 let bodyResizeObserver = null;

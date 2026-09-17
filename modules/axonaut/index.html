@@ -140,6 +140,10 @@
   .empty p{ font-size:.85rem; max-width:420px; margin:0 auto; line-height:1.6; }
 
   .table-scroll{ overflow:auto; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--white); box-shadow:var(--shadow); max-height:calc(100vh - var(--header-h) - 36px); }
+  /* Le tableau des devis est cadré par son propre en-tête (--devis-header-h), pas celui de
+     l'onglet Commande (--header-h) : sinon la hauteur dispo était fausse dès que les deux
+     en-têtes n'ont pas la même taille. */
+  #devisListScroll.table-scroll{ max-height:none; }
   table{ border-collapse:collapse; font-size:.76rem; width:100%; }
   thead th{
     font-family:sans-serif; text-transform:uppercase; font-size:.6rem; letter-spacing:.08em;
@@ -154,14 +158,22 @@
   tbody tr.sent:hover{ background:#e9f2ea; }
   tbody tr.noinfo{ background:var(--silk-red-bg); }
   tbody tr.noinfo:hover{ background:#f8d7d1; }
+  .status-icon{
+    display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px;
+    border-radius:6px; border:2px solid transparent; cursor:help; font-size:.85rem; line-height:1;
+  }
+  .status-icon.s1{ border-color:var(--silk-red); }
+  .status-icon.s2{ border-color:#d98c1f; }
+  .status-icon.s3{ border-color:var(--silk-green); }
+  .status-icon.s4{ border-color:var(--ink); }
   tbody tr.selected{ background:#fdf3d0 !important; box-shadow:inset 3px 0 0 var(--poste-yellow-dark); }
   #columnPickerOverlay{
     display:none; position:fixed; inset:0; background:rgba(28,26,23,.6); z-index:220;
     align-items:center; justify-content:center; padding:20px;
   }
   #columnPickerOverlay.show{ display:flex; }
-  #tableHeadRow th{ position:relative; user-select:none; }
-  #tableHeadRow th.drag-over{ background:#e8dfc8; }
+  #tableHeadRow th, #devisTableHeadRow th{ position:relative; user-select:none; }
+  #tableHeadRow th.drag-over, #devisTableHeadRow th.drag-over{ background:#e8dfc8; }
   .col-resize-handle{
     position:absolute; top:0; right:0; width:6px; height:100%; cursor:col-resize; z-index:2;
   }
@@ -331,7 +343,7 @@
   #devisStats .stat.warn .n{ color:var(--poste-yellow-dark); }
 
   #devisBody{ display:flex; gap:0; height:calc(100vh - 45px - var(--devis-header-h, 130px)); }
-  #devisLeftPane{ width:46%; flex-shrink:0; overflow-y:auto; background:var(--white); }
+  #devisLeftPane{ width:46%; flex-shrink:0; overflow-y:auto; padding:22px 26px; }
   .pane-resizer{
     width:8px; margin:0 -4px; flex-shrink:0; cursor:col-resize; position:relative; z-index:6; background:transparent;
   }
@@ -368,8 +380,8 @@
   .devis-subtab-btn.active{ color:var(--ink); border-bottom-color:var(--poste-yellow-dark); }
   .devis-subtab-btn:hover{ color:var(--ink); }
   .devis-dot.warn{ background:var(--poste-yellow-dark); }
-  .devis-row .devis-number{ font-weight:600; flex:1; }
-  .devis-row .devis-amount{ font-family:"SF Mono",monospace; font-size:.78rem; color:var(--muted); }
+  .devis-number{ font-weight:600; margin-left:8px; }
+  .devis-amount{ font-family:"SF Mono",monospace; font-size:.78rem; color:var(--muted); }
   .devis-line-item{ background:var(--white); border:1.5px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
   .devis-line-item .title{ font-weight:700; margin-bottom:4px; }
   .devis-line-item .meta{ font-size:.78rem; color:var(--muted); margin-bottom:6px; }
@@ -380,6 +392,7 @@
 <div id="tabBar">
   <button class="tab-btn" data-tab="devis" id="tabBtnDevis">📑 Devis</button>
   <button class="tab-btn active" data-tab="commande" id="tabBtnCommande">📦 Commande</button>
+  <button class="tab-btn" data-tab="facture" id="tabBtnFacture">🧾 Facture</button>
   <span id="versionBadge" title="Voir l'historique des versions">v1.59</span>
   <button class="tabbar-icon-btn" id="settingsBtn" title="Réglages">⚙︎</button>
 </div>
@@ -418,8 +431,12 @@
   </div>
   <div id="devisBody">
     <div id="devisLeftPane">
-      <div id="devisSortBar"></div>
-      <div id="devisListScroll"></div>
+      <div class="table-scroll" id="devisListScroll">
+        <table>
+          <thead><tr id="devisTableHeadRow"></tr></thead>
+          <tbody id="devisTbody"></tbody>
+        </table>
+      </div>
     </div>
     <div class="pane-resizer" id="devisResizer" title="Glisser pour redimensionner"></div>
     <div id="devisRightPane">
@@ -722,9 +739,13 @@
         <h2 style="font-family:'Iowan Old Style',Georgia,serif; font-size:1.2rem; margin:0 0 4px;">Bon de livraison</h2>
         <div class="sub" id="blModalSub" style="font-family:sans-serif; font-size:.8rem; color:var(--muted); margin-bottom:10px;"></div>
         <div id="blAddressBlock" style="font-family:sans-serif; font-size:.85rem; color:var(--ink); margin-bottom:14px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;"></div>
-        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn ghost" id="blViewQuoteBtn" style="display:none;">📄 Voir le devis</button>
           <button class="btn ghost" id="blFabricationBtn" style="display:none;">🏭 Bon de fabrication</button>
+          <span id="blTrackingLabel" style="font-family:sans-serif; font-size:.8rem; color:var(--muted);"></span>
+          <button class="btn ghost" id="blEtiquetteBtn" style="display:none;"></button>
+          <span id="blEtiquetteExtraBtns" style="display:inline-flex; gap:4px;"></span>
+          <button class="iconbtn iconbtn-delete" id="blEtiquetteDeleteBtn" style="display:none;" title="Supprimer l'étiquette et repasser à « à traiter »">🗑</button>
         </div>
         <div id="blLinesList"></div>
         <div class="col-result" id="blResult" style="margin-top:12px;"></div>
@@ -895,6 +916,70 @@
 </div>
 
 </div><!-- /tabPanelCommande -->
+
+<div id="tabPanelFacture" class="tab-panel">
+  <div id="factureHeader">
+    <div class="headrow">
+      <div class="toolbar">
+        <input type="text" class="search" id="factureSearchInput" placeholder="Rechercher une commande, un client…">
+        <div class="filters" id="factureFilterRadios" style="display:flex; gap:10px; align-items:center;">
+          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
+            <input type="radio" name="factureFilter" value="all" checked style="cursor:pointer;"> Toutes
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
+            <input type="radio" name="factureFilter" value="non_facturees" style="cursor:pointer;"> Non facturées
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
+            <input type="radio" name="factureFilter" value="non_reglees" style="cursor:pointer;"> Facturées — non réglées
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
+            <input type="radio" name="factureFilter" value="reglees" style="cursor:pointer;"> Réglées
+          </label>
+        </div>
+        <button class="btn ghost" id="factureRefreshBtn">↻ Actualiser</button>
+      </div>
+    </div>
+  </div>
+  <div id="factureBody" style="display:flex; height:calc(100vh - var(--header-h,160px));">
+    <div style="flex:1; overflow:auto; padding:22px 26px; min-width:0;">
+      <div class="empty" id="factureEmptyState">
+        <span class="flag-big"></span>
+        <h2>Aucune commande</h2>
+        <p>Ouvre l'onglet Commande et clique sur « ↻ Actualiser », puis reviens ici.</p>
+      </div>
+      <div class="table-scroll" id="factureTableWrap" style="display:none; max-height:none;">
+        <table>
+          <thead><tr>
+            <th style="width:36px;"></th>
+            <th>Commande</th>
+            <th>Client</th>
+            <th style="text-align:right;">Montant HT</th>
+            <th>Statut</th>
+          </tr></thead>
+          <tbody id="factureTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div id="factureActionBar" style="display:none; position:sticky; bottom:0; background:var(--paper); border-top:1.5px solid var(--line); padding:12px 26px; display:flex; align-items:center; gap:12px;">
+    <span id="factureSelectionCount" style="font-family:sans-serif; font-size:.85rem; color:var(--muted);"></span>
+    <button class="btn primary" id="factureGenerateBtn" style="margin-left:auto;">🧾 Générer une facture groupée</button>
+  </div>
+</div><!-- /tabPanelFacture -->
+
+<div id="invoicePreviewOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:24px;">
+  <div style="width:min(720px,100%); max-height:88vh; background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.35); display:flex; flex-direction:column; overflow:hidden;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1.5px solid var(--line);">
+      <h3 style="margin:0; font-family:Georgia,serif; font-size:17px;">Aperçu de la facture groupée</h3>
+      <button class="btn ghost" id="invoicePreviewClose">✕</button>
+    </div>
+    <div style="padding:18px 22px; overflow:auto;" id="invoicePreviewBody"></div>
+    <div style="display:flex; gap:10px; justify-content:flex-end; padding:14px 20px; border-top:1.5px solid var(--line);">
+      <button class="btn ghost" id="invoicePreviewCancelBtn">Annuler</button>
+      <button class="btn primary" id="invoicePreviewConfirmBtn">✔ Créer la facture dans Axonaut</button>
+    </div>
+  </div>
+</div>
 
 <div id="carrierChoiceOverlay" style="display:none; position:fixed; inset:0; background:rgba(28,26,23,.6); z-index:225; align-items:center; justify-content:center; padding:20px;">
   <div class="addr-modal" style="width:min(360px,100%);">
@@ -1083,11 +1168,34 @@ async function loadBlPhotos(contractId){
     const items = (await res.json()).items || [];
     if(!items.length){ box.innerHTML = '<div class="hint" style="font-size:.78rem;">Aucune photo pour cette commande.</div>'; return; }
     const cfg = getConfig();
+    const canDeletePhoto = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'photos_supprimer');
     box.innerHTML = items.map(it => {
       const url = cfg.url.replace(/\/+$/,'') + `/api/files/${it.collectionId}/${it.id}/${it.photo}`;
-      return `<a href="${url}" target="_blank"><img src="${url}?thumb=140x140" style="width:70px; height:70px; object-fit:cover; border-radius:6px; border:1px solid var(--line);"></a>`;
+      return `
+        <div class="bl-photo-item" style="position:relative; width:70px; height:70px;">
+          <a href="${url}" target="_blank"><img src="${url}?thumb=140x140" style="width:70px; height:70px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block;"></a>
+          ${canDeletePhoto ? `<button type="button" class="bl-photo-delete" data-photo-id="${it.id}" data-contract-id="${contractId}" title="Supprimer cette photo" style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--silk-red,#c0392b); color:#fff; border:2px solid #fff; font-size:12px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">✕</button>` : ''}
+        </div>
+      `;
     }).join('');
+    box.querySelectorAll('.bl-photo-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if(!confirm('Supprimer définitivement cette photo ?')) return;
+        btn.disabled = true;
+        try{
+          await deleteBlPhoto(btn.dataset.photoId);
+          await loadBlPhotos(btn.dataset.contractId);
+        }catch(e){
+          alert('Impossible de supprimer cette photo : ' + e.message);
+          btn.disabled = false;
+        }
+      });
+    });
   }catch(e){ box.innerHTML = `<div class="hint" style="color:var(--silk-red); font-size:.78rem;">Erreur : ${escapeHtml(e.message)}</div>`; }
+}
+async function deleteBlPhoto(photoId){
+  const res = await fetch(commandePhotosBase() + '/' + encodeURIComponent(photoId), { method: 'DELETE' });
+  if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
 }
 function dlBase(){
   const cfg = getConfig();
@@ -1275,6 +1383,18 @@ async function setAxConfig(patch){
 }
 
 // ---------- Appel Axonaut via le Worker (?path=/... + en-tête x-axonaut-key) ----------
+// Construit une date RFC3339 stricte (pas de millisecondes, décalage horaire explicite en
+// +HH:MM/-HH:MM) telle qu'exigée par le validateur Axonaut — new Date().toISOString() est
+// refusée (suffixe Z + millisecondes) malgré sa conformité RFC3339.
+function toAxonautRfc3339(localDateTimeStr){
+  const d = new Date(localDateTimeStr);
+  const pad = n => String(n).padStart(2, '0');
+  const offsetMin = -d.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const offH = pad(Math.floor(Math.abs(offsetMin) / 60));
+  const offM = pad(Math.abs(offsetMin) % 60);
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${sign}${offH}:${offM}`;
+}
 async function callAxonaut(path, method, body){
   const cfg = await getColConfig();
   const axCfg = await getAxConfig();
@@ -2700,6 +2820,17 @@ function updateHeaderHeight(){
 window.addEventListener('resize', updateHeaderHeight);
 new ResizeObserver(updateHeaderHeight).observe(document.getElementById('pageHeader'));
 
+// Même mécanique que updateHeaderHeight(), mais pour l'en-tête propre de l'onglet Devis
+// (--devis-header-h n'était jamais calculée : le tableau des devis restait cadré sur une
+// valeur de repli fixe de 130px, fausse dès que l'en-tête Devis change de hauteur).
+function updateDevisHeaderHeight(){
+  const el = document.getElementById('devisHeader');
+  if(!el) return;
+  document.documentElement.style.setProperty('--devis-header-h', el.offsetHeight + 'px');
+}
+window.addEventListener('resize', updateDevisHeaderHeight);
+new ResizeObserver(updateDevisHeaderHeight).observe(document.getElementById('devisHeader'));
+
 // ---------- Colonnes redimensionnables (glisser la ligne entre les deux volets) ----------
 function initPaneResizer(opts){
   const resizer = document.getElementById(opts.resizerId);
@@ -3299,6 +3430,44 @@ async function openBlModal(r){
     updateFabricationBtnLabel(r.contractId);
   };
 
+  const trackingLabel = document.getElementById('blTrackingLabel');
+  trackingLabel.textContent = (r.labelGenerated && r.tracking) ? ('N° de suivi : ' + r.tracking) : '';
+  document.getElementById('blEtiquetteExtraBtns').innerHTML = '';
+  if(r.labelGenerated) loadBlEtiquetteExtraBtns(r);
+  const etiquetteBtn = document.getElementById('blEtiquetteBtn');
+  const etiquetteDeleteBtn = document.getElementById('blEtiquetteDeleteBtn');
+  const canEtiquettes = isAdminUser() && typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'etiquettes');
+  if(!canEtiquettes){
+    etiquetteBtn.style.display = 'none';
+    etiquetteDeleteBtn.style.display = 'none';
+  }else if(!r.blReady && !r.labelGenerated){
+    etiquetteBtn.style.display = 'inline-flex';
+    etiquetteBtn.disabled = true;
+    etiquetteBtn.textContent = 'BL à valider avant étiquette';
+    etiquetteDeleteBtn.style.display = 'none';
+  }else{
+    etiquetteBtn.style.display = 'inline-flex';
+    etiquetteBtn.disabled = false;
+    etiquetteBtn.textContent = (r.labelGenerated ? '✉ Refaire' : '✉ Étiquette');
+    etiquetteBtn.onclick = () => openCarrierChoice(r);
+    etiquetteDeleteBtn.style.display = r.labelGenerated ? 'inline-flex' : 'none';
+    etiquetteDeleteBtn.onclick = async () => {
+      if(!confirm(`Supprimer l'étiquette de la commande « ${r.numeroCommande} » ?\n\nLe numéro de suivi ${r.tracking || ''} et le PDF seront supprimés. La commande repassera à « à traiter ».`)) return;
+      etiquetteDeleteBtn.disabled = true;
+      try{
+        if(r._pbId) await pbDeleteShipment(r._pbId);
+        await idbDeleteLabel(labelKeyFor(r));
+        r._pbId = null; r.tracking = ''; r.labelGenerated = false; r.pbLabelPdf = '';
+        setSyncStatus('on', `Étiquette de « ${r.numeroCommande} » supprimée.`);
+        render();
+        openBlModal(r);
+      }catch(e){
+        alert('Erreur lors de la suppression : ' + e.message);
+        etiquetteDeleteBtn.disabled = false;
+      }
+    };
+  }
+
   try{
     // On relit le contrat en direct pour être sûr d'avoir l'id du devis lié (pas garanti présent
     // dans la liste initiale), puis on va chercher les lignes du devis lui-même.
@@ -3464,26 +3633,21 @@ function buildAddrCellHtml(r){
   return `<span class="addr-text">${nameLines ? nameLines + '<br>' : ''}${escapeHtml(r.adresse)}<br><span class="muted">${escapeHtml(r.cp)} ${escapeHtml(r.ville)}${r.pays ? ' — ' + escapeHtml(r.pays) : ''}</span>${r.tel ? `<br><span class="muted">☎ ${escapeHtml(r.tel)}</span>` : ''}</span>
      <button class="iconbtn addr-copy-btn" data-action="copy-addr" data-id="${r.contractId}" title="Copier l'adresse">📋</button>`;
 }
+// 4 états de suivi d'une commande, résumés par une seule icône (survolée pour le détail) :
+// 1) rien fait, 2) BL validé (toutes les lignes cochées) mais pas envoyé/facturé,
+// 3) BL validé + étiquette envoyée mais pas facturé, 4) tout fait, facturé.
 function buildStatusCellHtml(r){
+  const facture = isContractInvoiced(r.contractId);
+  if(r.labelGenerated && facture){
+    return `<span class="status-icon s4" title="État 4 — BL validé, étiquette envoyée, facturé">🧾</span>`;
+  }
   if(r.labelGenerated){
-    return `<span class="badge track">${escapeHtml(r.tracking || '—')}</span>` +
-      (r.blReady ? `<br><span class="badge ok" style="margin-top:4px;" title="Toutes les lignes du BL sont cochées">🧾 Prêt à facturer</span>` : '');
+    return `<span class="status-icon s3" title="État 3 — BL validé, étiquette envoyée, pas encore facturé">📦</span>`;
   }
   if(r.blReady){
-    return `<span class="badge ok" title="Toutes les lignes du BL sont cochées">🧾 Prêt à facturer</span>`;
+    return `<span class="status-icon s2" title="État 2 — Toutes les lignes du BL sont validées, pas encore envoyé ni facturé">📋</span>`;
   }
-  return `<span class="badge warn">À traiter</span>`;
-}
-function buildActionsCellHtml(r){
-  if(!isAdminUser()) return '';
-  const canEtiquettes = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'etiquettes');
-  const labelBtn = !canEtiquettes
-    ? `<span class="badge warn" title="Accès non autorisé pour cet utilisateur">Étiquette non autorisée</span>`
-    : (r.labelGenerated || r.blReady)
-      ? `<button class="btn ${r.labelGenerated ? 'ghost' : 'primary'}" data-action="prepare" data-id="${r.contractId}">✉ ${r.labelGenerated ? 'Refaire' : 'Étiquette'}</button>`
-      : `<span class="badge warn" title="Coche toutes les lignes du BL avant de pouvoir générer l'étiquette">BL à valider</span>`;
-  return `${labelBtn}
-    ${r.labelGenerated ? `<button class="iconbtn iconbtn-delete" data-action="delete" data-id="${r.contractId}" title="Supprimer l'étiquette et repasser à « à traiter »">🗑</button>` : ''}`;
+  return `<span class="status-icon s1" title="État 1 — Rien n'est fait">📄</span>`;
 }
 function updateSortArrows(){
   document.querySelectorAll('#tableHeadRow .sort-arrow').forEach(el => {
@@ -3493,17 +3657,18 @@ function updateSortArrows(){
 }
 
 // ---------- Colonnes configurables (ordre, largeur, visibilité) ----------
-const ADMIN_ONLY_COLUMNS = new Set(['montant', 'actions']);
+const ADMIN_ONLY_COLUMNS = new Set(['montant']);
 const COLUMN_DEFS = {
-  commande: { label:'Commande', defaultWidth:170, cellClass:'name', render:r => escapeHtml(r.numeroCommande) },
+  commande: { label:'Commande', defaultWidth:170, cellClass:'name', required:true, render:r => r.quotationId
+    ? `<span class="commande-devis-link" data-quotation-id="${r.quotationId}" title="Voir le devis correspondant" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(r.numeroCommande)}</span>`
+    : escapeHtml(r.numeroCommande) },
   date: { label:'Date commande', defaultWidth:110, sortable:'date', render:r => formatDateFR(r.startDate) },
   montant: { label:'Montant HT', defaultWidth:110, sortable:'montant', align:'right', render:r => formatMontant(r.montant) },
   projet: { label:'N° Projet', defaultWidth:90, render:r => escapeHtml(r.projectNumber || '—') },
   client: { label:'Client', defaultWidth:160, render:r => `${escapeHtml(r.nomSoc || r.clientCompany)}${r.nomSoc && r.clientCompany ? `<span class="co">${escapeHtml(r.clientCompany)}</span>` : ''}` },
   statut: { label:'Statut', defaultWidth:150, render: buildStatusCellHtml },
-  actions: { label:'Actions', defaultWidth:240, cellClass:'actions', required:true, render: buildActionsCellHtml },
 };
-const DEFAULT_COLUMN_ORDER = ['commande','date','montant','projet','client','statut','actions'];
+const DEFAULT_COLUMN_ORDER = ['commande','date','montant','projet','client','statut'];
 const COLUMN_STATE_KEY = 'csb_envoi_axonaut_columns_v1';
 function defaultColumnState(){
   return DEFAULT_COLUMN_ORDER.map(id => ({ id, width: COLUMN_DEFS[id].defaultWidth, visible:true }));
@@ -3816,7 +3981,7 @@ function render(){
         </td>
       </tr>`;
     const bodyRows = expanded ? rows.map(r => {
-      const rowClass = (r.labelGenerated ? 'sent' : (!r.hasDeliveryInfo ? 'noinfo' : '')) + (currentBlRecord && currentBlRecord.contractId === r.contractId ? ' selected' : '');
+      const rowClass = (currentBlRecord && currentBlRecord.contractId === r.contractId ? 'selected' : '');
       const cells = cols.map(c => {
         const def = COLUMN_DEFS[c.id];
         const classes = [def.cellClass, ADMIN_ONLY_COLUMNS.has(c.id) ? 'admin-only' : ''].filter(Boolean).join(' ');
@@ -3837,19 +4002,17 @@ function render(){
     });
   });
 
-  tbody.querySelectorAll('[data-action="prepare"]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const r = contracts.find(c => c.contractId === parseInt(btn.dataset.id, 10));
-      if(r) openCarrierChoice(r);
-    });
-  });
-
   tbody.querySelectorAll('tr[data-id]').forEach(row => {
     row.addEventListener('click', (e) => {
-      if(e.target.closest('button')) return;
+      if(e.target.closest('button') || e.target.closest('.commande-devis-link')) return;
       const r = contracts.find(c => c.contractId === parseInt(row.dataset.id, 10));
       if(r) openBlModal(r);
+    });
+  });
+  tbody.querySelectorAll('.commande-devis-link').forEach(link => {
+    link.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await jumpToDevis(parseInt(link.dataset.quotationId, 10));
     });
   });
 
@@ -3870,50 +4033,32 @@ function render(){
     });
   });
 
-  tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const r = contracts.find(c => c.contractId === parseInt(btn.dataset.id, 10));
-      if(!r) return;
-      if(!confirm(`Supprimer l'étiquette de la commande « ${r.numeroCommande} » ?\n\nLe numéro de suivi ${r.tracking || ''} et le PDF seront supprimés. La commande repassera à « à traiter ».`)) return;
-      btn.disabled = true;
-      try{
-        if(r._pbId) await pbDeleteShipment(r._pbId);
-        await idbDeleteLabel(labelKeyFor(r));
-        r._pbId = null; r.tracking = ''; r.labelGenerated = false; r.pbLabelPdf = '';
-        setSyncStatus('on', `Étiquette de « ${r.numeroCommande} » supprimée.`);
-        render();
-      }catch(e){
-        alert('Erreur lors de la suppression : ' + e.message);
-        btn.disabled = false;
-      }
-    });
-  });
-
-  // Boutons de téléchargement (étiquette / douane / facture) ajoutés dynamiquement si un fichier existe.
-  list.forEach(async (r) => {
-    let lbl = await idbGetLabel(labelKeyFor(r));
-    if(!lbl && r.pbLabelPdf){ lbl = { base64: r.pbLabelPdf, contentType: 'application/pdf' }; }
-    if(!lbl) return;
-    const row = tbody.querySelector(`tr[data-id="${r.contractId}"] td.actions`);
-    if(!row || row.querySelector('.iconbtn-download')) return;
-    const safeName = (r.numeroCommande || 'etiquette').replace(/[^a-z0-9]+/gi, '_');
-    const dlBtn = document.createElement('button');
-    dlBtn.className = 'iconbtn iconbtn-download'; dlBtn.title = "Ouvrir l'étiquette (impression)"; dlBtn.textContent = '🖨️';
-    dlBtn.addEventListener('click', () => openPdfInNewTab(lbl.base64, lbl.contentType || 'application/pdf'));
-    row.insertBefore(dlBtn, row.querySelector('.iconbtn-delete') || null);
-    if(lbl.cn23Base64){
-      const cn23Btn = document.createElement('button');
-      cn23Btn.className = 'iconbtn'; cn23Btn.title = 'Télécharger le CN23 (douane)'; cn23Btn.textContent = '🛃';
-      cn23Btn.addEventListener('click', () => downloadBase64(lbl.cn23Base64, lbl.cn23ContentType || 'application/pdf', safeName + '_cn23.pdf'));
-      row.insertBefore(cn23Btn, row.querySelector('.iconbtn-delete') || null);
-    }
-    if(lbl.proformaBase64){
-      const invBtn = document.createElement('button');
-      invBtn.className = 'iconbtn'; invBtn.title = 'Ouvrir la facture proforma'; invBtn.textContent = '🧾';
-      invBtn.addEventListener('click', () => openPdfInNewTab(lbl.proformaBase64, lbl.proformaContentType || 'application/pdf'));
-      row.insertBefore(invBtn, row.querySelector('.iconbtn-delete') || null);
-    }
-  });
+}
+// Boutons de téléchargement (étiquette / douane / facture) du panneau bon de livraison,
+// ajoutés dynamiquement si un fichier existe pour cette commande. Appelé depuis openBlModal.
+async function loadBlEtiquetteExtraBtns(r){
+  const box = document.getElementById('blEtiquetteExtraBtns');
+  box.innerHTML = '';
+  let lbl = await idbGetLabel(labelKeyFor(r));
+  if(!lbl && r.pbLabelPdf){ lbl = { base64: r.pbLabelPdf, contentType: 'application/pdf' }; }
+  if(!lbl || currentBlRecord !== r) return; // la sélection a changé entre-temps
+  const safeName = (r.numeroCommande || 'etiquette').replace(/[^a-z0-9]+/gi, '_');
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'iconbtn iconbtn-download'; dlBtn.title = "Ouvrir l'étiquette (impression)"; dlBtn.textContent = '🖨️';
+  dlBtn.addEventListener('click', () => openPdfInNewTab(lbl.base64, lbl.contentType || 'application/pdf'));
+  box.appendChild(dlBtn);
+  if(lbl.cn23Base64){
+    const cn23Btn = document.createElement('button');
+    cn23Btn.className = 'iconbtn'; cn23Btn.title = 'Télécharger le CN23 (douane)'; cn23Btn.textContent = '🛃';
+    cn23Btn.addEventListener('click', () => downloadBase64(lbl.cn23Base64, lbl.cn23ContentType || 'application/pdf', safeName + '_cn23.pdf'));
+    box.appendChild(cn23Btn);
+  }
+  if(lbl.proformaBase64){
+    const invBtn = document.createElement('button');
+    invBtn.className = 'iconbtn'; invBtn.title = 'Ouvrir la facture proforma'; invBtn.textContent = '🧾';
+    invBtn.addEventListener('click', () => openPdfInNewTab(lbl.proformaBase64, lbl.proformaContentType || 'application/pdf'));
+    box.appendChild(invBtn);
+  }
 }
 
 // ---------- Historique des versions ----------
@@ -4175,13 +4320,46 @@ function setAdminMode(on){
 
 // ---------- Onglets ----------
 const ACTIVE_TAB_KEY = 'csb_envoi_axonaut_active_tab';
+const TAB_SUFFIX = { devis:'Devis', commande:'Commande', facture:'Facture' };
 function activateTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('tabBtn' + (tab === 'devis' ? 'Devis' : 'Commande')).classList.add('active');
-  document.getElementById('tabPanel' + (tab === 'devis' ? 'Devis' : 'Commande')).classList.add('active');
+  document.getElementById('tabBtn' + TAB_SUFFIX[tab]).classList.add('active');
+  document.getElementById('tabPanel' + TAB_SUFFIX[tab]).classList.add('active');
   try{ localStorage.setItem(ACTIVE_TAB_KEY, tab); }catch(e){}
   if(tab === 'devis' && !quotations.length) refreshQuotations();
+  if(tab === 'facture') refreshFactureTab();
+}
+
+// ---------- Navigation croisée Commande <-> Devis ----------
+async function jumpToDevis(quotationId){
+  if(!quotationId){ alert('Aucun devis lié à cette commande.'); return; }
+  if(!quotations.length) await refreshQuotations();
+  activateTab('devis');
+  const q = quotations.find(x => x.id === quotationId);
+  if(!q){ alert("Devis introuvable — clique sur « ↻ Actualiser » dans l'onglet Devis puis réessaie."); return; }
+  const client = q.company_name || 'Sans client';
+  expandedClients.add(client);
+  saveExpandedClients();
+  selectedQuotationId = q.id;
+  renderDevisTab();
+  renderDevisDetail(q);
+  const row = document.querySelector(`.devis-row[data-qid="${q.id}"]`);
+  if(row) row.scrollIntoView({ block:'center', behavior:'smooth' });
+}
+async function jumpToCommande(contractId){
+  if(!contractId){ alert('Aucune commande liée à ce devis.'); return; }
+  if(!contracts.length) await refreshAll();
+  activateTab('commande');
+  const r = contracts.find(x => x.contractId === contractId);
+  if(!r){ alert("Commande introuvable — clique sur « ↻ Actualiser » dans l'onglet Commande puis réessaie."); return; }
+  const client = r.clientCompany || r.nomSoc || 'Sans client';
+  expandedCommandeClients.add(client);
+  saveExpandedCommandeClients();
+  render();
+  openBlModal(r);
+  const row = document.querySelector(`tr[data-id="${r.contractId}"]`);
+  if(row) row.scrollIntoView({ block:'center', behavior:'smooth' });
 }
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab));
@@ -4206,6 +4384,306 @@ function isContractInvoiced(contractId){
   const c = contracts.find(x => x.contractId === contractId);
   return c ? c.invoicesId.length > 0 : null;
 }
+
+// ==================== Onglet Facture ====================
+// Regroupe plusieurs commandes (devis) du même client en une seule facture Axonaut.
+// L'API Axonaut n'a pas de notion de facture liée à plusieurs commandes à la fois (une facture
+// n'a qu'un seul contract_id optionnel) : on fusionne donc les lignes de chaque devis sélectionné
+// dans une facture unique, et on trace les commandes d'origine dans le champ "order_number".
+let invoicesByContract = {}; // contractId (string) -> { paid, outstanding, number, id }
+let selectedFactureContracts = new Set();
+let factureSearch = '';
+const FACTURE_FILTER_KEY = 'csb_envoi_axonaut_facture_filter';
+let factureFilter = (() => { try{ return localStorage.getItem(FACTURE_FILTER_KEY) || 'all'; }catch(e){ return 'all'; } })();
+const FACTURE_EXPANDED_KEY = 'csb_envoi_axonaut_facture_expanded';
+let expandedFactureClients = (() => { try{ return new Set(JSON.parse(localStorage.getItem(FACTURE_EXPANDED_KEY)) || []); }catch(e){ return new Set(); } })();
+function saveExpandedFactureClients(){ try{ localStorage.setItem(FACTURE_EXPANDED_KEY, JSON.stringify([...expandedFactureClients])); }catch(e){} }
+
+async function fetchAllInvoices(){
+  let all = [], page = 1;
+  while(true){
+    const res = await callAxonaut(`/invoices?page=${page}`);
+    if(!res.ok) throw new Error('Axonaut HTTP ' + res.status + (res.text ? ' — ' + res.text.slice(0,300) : ''));
+    const arr = Array.isArray(res.parsed) ? res.parsed : (res.parsed && Array.isArray(res.parsed.data) ? res.parsed.data : []);
+    if(!arr.length) break;
+    all = all.concat(arr);
+    if(arr.length < 50) break; // page manifestement incomplète : dernière page
+    page++;
+    if(page > 40) break;
+  }
+  return all;
+}
+async function refreshFactureTab(){
+  const wrap = document.getElementById('factureTableWrap');
+  const empty = document.getElementById('factureEmptyState');
+  if(!contracts.length){
+    empty.style.display = 'block'; wrap.style.display = 'none';
+    return;
+  }
+  try{
+    const invoices = await fetchAllInvoices();
+    invoicesByContract = {};
+    invoices.forEach(inv => {
+      if(!inv.contract_id) return;
+      const key = String(inv.contract_id);
+      const paid = (typeof inv.outstanding_amount === 'number' ? inv.outstanding_amount <= 0.001 : !!inv.paid_date);
+      // En cas de plusieurs factures pour une même commande, on garde la moins avancée (non réglée prioritaire).
+      if(!invoicesByContract[key] || (invoicesByContract[key].paid && !paid)){
+        invoicesByContract[key] = { paid, outstanding: inv.outstanding_amount, number: inv.number, id: inv.id };
+      }
+    });
+  }catch(e){
+    console.warn('Chargement des factures Axonaut impossible', e);
+  }
+  renderFactureTab();
+}
+function factureStatusFor(r){
+  const inv = invoicesByContract[String(r.contractId)];
+  if(!inv) return { key:'non_facturee', label:'Non facturée', badge:'warn' };
+  if(inv.paid) return { key:'reglee', label:`Réglée (${escapeHtml(inv.number||'')})`, badge:'ok' };
+  return { key:'non_reglee', label:`Facturée — non réglée (${escapeHtml(inv.number||'')})`, badge:'track' };
+}
+function renderFactureTab(){
+  const wrap = document.getElementById('factureTableWrap');
+  const empty = document.getElementById('factureEmptyState');
+  const tbody = document.getElementById('factureTbody');
+  let list = contracts.filter(r => r.quotationId); // seules les commandes avec devis sont facturables ici
+  const st = factureSearch;
+  if(st){
+    list = list.filter(r => (r.numeroCommande||'').toLowerCase().includes(st) || (r.clientCompany||'').toLowerCase().includes(st) || (r.nomSoc||'').toLowerCase().includes(st));
+  }
+  list = list.filter(r => {
+    const s = factureStatusFor(r).key;
+    if(factureFilter === 'non_facturees') return s === 'non_facturee';
+    if(factureFilter === 'non_reglees') return s === 'non_reglee';
+    if(factureFilter === 'reglees') return s === 'reglee';
+    return true;
+  });
+  if(!list.length){
+    empty.style.display = 'block'; wrap.style.display = 'none';
+    document.getElementById('factureActionBar').style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none'; wrap.style.display = 'block';
+
+  const byClient = {};
+  list.forEach(r => {
+    const key = r.clientCompany || r.nomSoc || 'Sans client';
+    if(!byClient[key]) byClient[key] = [];
+    byClient[key].push(r);
+  });
+  const clientNames = Object.keys(byClient).sort((a,b) => a.localeCompare(b));
+
+  tbody.innerHTML = clientNames.map(client => {
+    const rows = byClient[client];
+    const expanded = expandedFactureClients.has(client);
+    const color = colorForClient(client);
+    const headerRow = `
+      <tr class="commande-group-header" data-client="${escapeHtml(client)}" style="cursor:pointer; border-left:5px solid ${color};">
+        <td colspan="5" style="padding:8px 16px; background:var(--paper-2); border-bottom:1px solid var(--line); border-top:1px solid var(--line);">
+          <span style="font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-family:sans-serif;"><span style="display:inline-block; width:14px;">${expanded ? '▾' : '▸'}</span>${escapeHtml(client)} (${rows.length})</span>
+        </td>
+      </tr>`;
+    const bodyRows = expanded ? rows.map(r => {
+      const status = factureStatusFor(r);
+      const selectable = status.key === 'non_facturee';
+      const checked = selectedFactureContracts.has(r.contractId);
+      return `<tr data-id="${r.contractId}" style="border-left:5px solid ${color};">
+        <td><input type="checkbox" class="factureCheck" data-id="${r.contractId}" ${checked?'checked':''} ${selectable?'':'disabled'} title="${selectable?'':'Déjà facturée'}"></td>
+        <td class="name">${escapeHtml(r.numeroCommande)}</td>
+        <td>${escapeHtml(r.clientCompany || r.nomSoc)}</td>
+        <td style="text-align:right;">${formatMontant(r.montant)}</td>
+        <td><span class="badge ${status.badge}">${status.label}</span></td>
+      </tr>`;
+    }).join('') : '';
+    return headerRow + bodyRows;
+  }).join('');
+
+  tbody.querySelectorAll('.commande-group-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const client = header.dataset.client;
+      if(expandedFactureClients.has(client)) expandedFactureClients.delete(client);
+      else expandedFactureClients.add(client);
+      saveExpandedFactureClients();
+      renderFactureTab();
+    });
+  });
+  tbody.querySelectorAll('.factureCheck').forEach(cb => {
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', () => {
+      const id = parseInt(cb.dataset.id, 10);
+      if(cb.checked) selectedFactureContracts.add(id); else selectedFactureContracts.delete(id);
+      updateFactureActionBar();
+    });
+  });
+  updateFactureActionBar();
+}
+function updateFactureActionBar(){
+  const bar = document.getElementById('factureActionBar');
+  const n = selectedFactureContracts.size;
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  document.getElementById('factureSelectionCount').textContent = n + ' commande(s) sélectionnée(s)';
+}
+document.getElementById('factureSearchInput').addEventListener('input', (e) => {
+  factureSearch = e.target.value.trim().toLowerCase();
+  renderFactureTab();
+});
+document.querySelectorAll('#factureFilterRadios input[type="radio"]').forEach(radio => {
+  radio.checked = (radio.value === factureFilter);
+  radio.addEventListener('change', () => {
+    factureFilter = radio.value;
+    try{ localStorage.setItem(FACTURE_FILTER_KEY, factureFilter); }catch(e){}
+    renderFactureTab();
+  });
+});
+document.getElementById('factureRefreshBtn').addEventListener('click', refreshFactureTab);
+
+// ---------- Aperçu + création de la facture groupée ----------
+let invoicePreviewLines = [];
+let invoicePreviewCompanyId = null;
+document.getElementById('factureGenerateBtn').addEventListener('click', async () => {
+  const selected = contracts.filter(r => selectedFactureContracts.has(r.contractId));
+  if(!selected.length) return;
+  const companyIds = new Set(selected.map(r => r.companyId).filter(Boolean));
+  if(companyIds.size > 1){
+    alert("Les commandes sélectionnées n'appartiennent pas toutes au même client dans Axonaut — impossible de les regrouper sur une seule facture. Sélectionne des commandes d'un seul et même client.");
+    return;
+  }
+  if(companyIds.size === 0){
+    alert("Impossible de déterminer le client Axonaut de ces commandes (aucun company_id trouvé).");
+    return;
+  }
+  invoicePreviewCompanyId = [...companyIds][0];
+  const body = document.getElementById('invoicePreviewBody');
+  body.innerHTML = '<div class="hint">Chargement des lignes des devis…</div>';
+  document.getElementById('invoicePreviewOverlay').style.display = 'flex';
+  try{
+    invoicePreviewLines = [];
+    const groupingText = 'Commandes regroupées : ' + selected.map(x => x.numeroCommande).join(', ');
+    for(const r of selected){
+      const qRes = await callAxonaut('/quotations/' + r.quotationId);
+      if(!qRes.ok) throw new Error(`Devis introuvable pour ${r.numeroCommande} (Axonaut HTTP ${qRes.status})`);
+      const lines = (qRes.parsed && qRes.parsed.quotation_lines) || [];
+      // Reprend la structure du devis telle quelle : chaque ligne garde SON propre en-tête de
+      // section (un devis peut avoir plusieurs chapitres) ; seules les lignes sans en-tête
+      // propre se rattachent au texte de regroupement, pour rester repérables sur la facture.
+      lines.forEach(l => {
+        const ownChapter = stripHtmlToText(l.chapter || '');
+        invoicePreviewLines.push({
+          productId: l.product_id || null,
+          productInternalId: l.product_internal_id || '',
+          orderRef: r.numeroCommande,
+          name: l.title || l.product_name || '',
+          description: stripHtmlToText(l.details || ''),
+          quantity: l.quantity || 0,
+          unit: l.unit || '',
+          price: (typeof l.price === 'number') ? l.price : 0,
+          tax_rate: (l.tax_rates && l.tax_rates[0] && typeof l.tax_rates[0].rate === 'number') ? l.tax_rates[0].rate : 20,
+          product_code: l.product_code || '',
+          chapter: ownChapter || groupingText
+        });
+      });
+    }
+    renderInvoicePreview(selected);
+  }catch(e){
+    body.innerHTML = `<div class="hint" style="color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+});
+function renderInvoicePreview(selected){
+  const total = invoicePreviewLines.reduce((sum, l) => sum + (l.price * l.quantity), 0);
+  const client = selected[0].clientCompany || selected[0].nomSoc || '';
+  const body = document.getElementById('invoicePreviewBody');
+  body.innerHTML = `
+    <div style="font-family:sans-serif; margin-bottom:14px;">
+      <div style="font-weight:700; font-size:1.05rem;">${escapeHtml(client)}</div>
+      <div class="hint">Commandes regroupées : ${selected.map(r => escapeHtml(r.numeroCommande)).join(', ')}</div>
+    </div>
+    <div class="row" style="margin-bottom:10px;">
+      <label style="min-width:140px;">Date de facture</label>
+      <input type="date" id="invoiceDateInput" value="${new Date().toISOString().slice(0,10)}">
+    </div>
+    <div class="table-scroll" style="max-height:40vh;">
+      <table>
+        <thead><tr><th>Description</th><th style="text-align:right;">Qté</th><th style="text-align:right;">PU HT</th><th style="text-align:right;">Total HT</th></tr></thead>
+        <tbody>
+          ${(() => {
+            // Reproduit la structure finale telle qu'elle sera envoyée à Axonaut : une ligne
+            // d'en-tête par chapitre (dès qu'il change), pas une colonne "Commande" à part.
+            let html = '', lastChapter = null;
+            invoicePreviewLines.forEach(l => {
+              if(l.chapter !== lastChapter){
+                lastChapter = l.chapter;
+                html += `<tr><td colspan="4" style="background:var(--paper-2); font-weight:700; font-family:sans-serif; font-size:.85rem; padding:8px 10px; border-top:1.5px solid var(--line);">${escapeHtml(l.chapter)}</td></tr>`;
+              }
+              html += `<tr>
+                <td>${escapeHtml(l.name)}${l.description ? `<br><span class="hint" style="font-size:.75rem;">${escapeHtml(l.description)}</span>` : ''}<br><span class="hint" style="font-size:.72rem;">Commande : ${escapeHtml(l.orderRef)}</span></td>
+                <td style="text-align:right;">${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}</td>
+                <td style="text-align:right;">${l.price.toFixed(2).replace('.', ',')} €</td>
+                <td style="text-align:right;">${(l.price*l.quantity).toFixed(2).replace('.', ',')} €</td>
+              </tr>`;
+            });
+            return html;
+          })()}
+        </tbody>
+      </table>
+    </div>
+    <div style="text-align:right; margin-top:12px; font-weight:700; font-family:sans-serif;">Total HT : ${total.toFixed(2).replace('.', ',')} €</div>
+    <div id="invoiceCreateResult" class="col-result" style="margin-top:12px;"></div>
+  `;
+}
+document.getElementById('invoicePreviewClose').addEventListener('click', () => { document.getElementById('invoicePreviewOverlay').style.display = 'none'; });
+document.getElementById('invoicePreviewCancelBtn').addEventListener('click', () => { document.getElementById('invoicePreviewOverlay').style.display = 'none'; });
+document.getElementById('invoicePreviewConfirmBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('invoicePreviewConfirmBtn');
+  const resultBox = document.getElementById('invoiceCreateResult');
+  const dateInput = document.getElementById('invoiceDateInput');
+  if(!invoicePreviewLines.length) return;
+  const selected = contracts.filter(r => selectedFactureContracts.has(r.contractId));
+  const orderNumber = selected.map(r => r.numeroCommande).join(', ');
+  const dateVal = dateInput ? dateInput.value : ''; // yyyy-mm-dd (input type=date)
+  // L'API attend une date ISO8601/RFC3339 complète avec décalage horaire explicite, sans
+  // millisecondes (ex: 2022-05-28T18:05:35+02:00) — Date#toISOString() (suffixe Z + ms) est
+  // rejetée par le validateur Axonaut malgré la conformité RFC3339.
+  const isoDate = dateVal ? toAxonautRfc3339(dateVal + 'T12:00:00') : undefined;
+  const payload = {
+    company_id: invoicePreviewCompanyId,
+    // Axonaut ne permet de lier qu'UNE seule commande à la facture (colonne "Commande" de la
+    // liste des factures) : on y met la première commande sélectionnée. La liste complète des
+    // commandes regroupées reste tracée dans order_number (affiché à côté du n° de facture).
+    contract_id: selected[0].contractId,
+    date: isoDate,
+    order_number: orderNumber,
+    products: invoicePreviewLines.map(l => ({
+      id: l.productId || undefined, internal_id: l.productInternalId || undefined,
+      name: l.name, description: l.description, quantity: l.quantity, unit: l.unit,
+      price: l.price, tax_rate: l.tax_rate, product_code: l.product_code || undefined, chapter: l.chapter
+    }))
+  };
+  btn.disabled = true;
+  resultBox.className = 'col-result';
+  resultBox.textContent = 'Création de la facture dans Axonaut…';
+  try{
+    const res = await callAxonaut('/invoices', 'POST', payload);
+    if(!res.ok) throw new Error('Axonaut HTTP ' + res.status + (res.text ? ' — ' + res.text.slice(0,400) : ''));
+    const inv = res.parsed;
+    resultBox.className = 'col-result ok';
+    resultBox.textContent = `✔ Facture ${inv.number || ''} créée dans Axonaut.` + (inv.public_path ? ' Lien : ' + inv.public_path : '');
+    if(selected.length > 1){
+      resultBox.textContent += `\n⚠ Seule la commande « ${selected[0].numeroCommande} » sera visible comme liée à cette facture dans Axonaut (limite de la plateforme : une facture ne peut être rattachée qu'à une seule commande). Les commandes d'origine restent toutes listées dans la référence de la facture (order_number).`;
+    }
+    selected.forEach(r => { invoicesByContract[String(r.contractId)] = { paid:false, outstanding: null, number: inv.number, id: inv.id }; });
+    selectedFactureContracts.clear();
+
+    setTimeout(() => {
+      document.getElementById('invoicePreviewOverlay').style.display = 'none';
+      renderFactureTab();
+    }, 3000);
+  }catch(e){
+    resultBox.className = 'col-result err';
+    resultBox.textContent = '✘ ' + e.message;
+  }
+  btn.disabled = false;
+});
 
 document.querySelectorAll('#devisFilterRadios input[type="radio"]').forEach(radio => {
   radio.addEventListener('change', () => {
@@ -4240,7 +4718,7 @@ async function refreshQuotations(){
     quotations = q;
     contracts = rawContracts.map(contractToRecord);
   }catch(e){
-    document.getElementById('devisListScroll').innerHTML = `<div class="hint" style="padding:16px; color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
+    document.getElementById('devisTbody').innerHTML = `<tr><td class="hint" style="padding:16px; color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</td></tr>`;
   }
   btn.disabled = false;
   btn.textContent = '↻ Actualiser';
@@ -4277,17 +4755,112 @@ let devisSortDir = -1;
     if(saved){ devisSortColumn = saved.col || 'date'; devisSortDir = saved.dir || -1; }
   }catch(e){}
 })();
-function renderDevisSortBar(){
-  const cols = [['date','Date'], ['montant','Montant'], ['number','N° devis']];
-  document.getElementById('devisSortBar').innerHTML =
-    '<span style="color:var(--ink); text-transform:none; font-weight:400; cursor:default;">Trier par :</span>' +
-    cols.map(([id, label]) => `<span data-devissort="${id}">${label} ${devisSortColumn === id ? (devisSortDir === 1 ? '▲' : '▼') : ''}</span>`).join('');
-  document.querySelectorAll('#devisSortBar [data-devissort]').forEach(el => {
-    el.addEventListener('click', () => {
-      const col = el.dataset.devissort;
-      if(devisSortColumn === col) devisSortDir *= -1; else { devisSortColumn = col; devisSortDir = -1; }
-      try{ localStorage.setItem(DEVIS_SORT_KEY, JSON.stringify({ col: devisSortColumn, dir: devisSortDir })); }catch(e){}
+
+// ---------- Onglet Devis : colonnes configurables (ordre, largeur), même mécanique que l'onglet Commande ----------
+const DEVIS_ADMIN_ONLY_COLUMNS = new Set(['montant']);
+const DEVIS_COLUMN_DEFS = {
+  number: { label:'N° devis', defaultWidth:150, cellClass:'name', required:true, sortable:'number', render: q => `
+    <span class="devis-dot ${q.status === 'accepted' ? 'ok' : 'warn'}" title="${q.status === 'accepted' ? 'Validé' : 'Non validé'}"></span>
+    <span class="devis-number${q.contract_id ? ' commande-link' : ''}" ${q.contract_id ? `data-contract-id="${q.contract_id}" title="Voir la commande correspondante" style="cursor:pointer; text-decoration:underline dotted;"` : ''}>${escapeHtml(q.number || ('#' + q.id))}</span>
+  ` },
+  date: { label:'Date', defaultWidth:95, sortable:'date', render: q => formatDateFR((q.date||'').slice(0,10)) },
+  montant: { label:'Montant HT', defaultWidth:100, align:'right', sortable:'montant', render: q => `<span class="devis-amount">${(q.pre_tax_amount||0).toFixed(2).replace('.', ',')} €</span>` },
+};
+const DEVIS_DEFAULT_COLUMN_ORDER = ['number','date','montant'];
+const DEVIS_COLUMN_STATE_KEY = 'csb_envoi_axonaut_devis_columns_v1';
+function devisDefaultColumnState(){
+  return DEVIS_DEFAULT_COLUMN_ORDER.map(id => ({ id, width: DEVIS_COLUMN_DEFS[id].defaultWidth, visible:true }));
+}
+function loadDevisColumnState(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(DEVIS_COLUMN_STATE_KEY)); }catch(e){}
+  if(!Array.isArray(saved)) return devisDefaultColumnState();
+  const validIds = Object.keys(DEVIS_COLUMN_DEFS);
+  saved = saved.filter(c => c && validIds.includes(c.id));
+  validIds.forEach(id => { if(!saved.find(c => c.id === id)) saved.push({ id, width: DEVIS_COLUMN_DEFS[id].defaultWidth, visible:true }); });
+  return saved;
+}
+function saveDevisColumnState(){ try{ localStorage.setItem(DEVIS_COLUMN_STATE_KEY, JSON.stringify(devisColumnState)); }catch(e){} }
+let devisColumnState = loadDevisColumnState();
+function devisVisibleColumns(){
+  return devisColumnState.filter(c => {
+    const def = DEVIS_COLUMN_DEFS[c.id];
+    if(!def) return false;
+    if(DEVIS_ADMIN_ONLY_COLUMNS.has(c.id) && !isAdminUser()) return false;
+    return c.visible || def.required;
+  });
+}
+function updateDevisSortArrows(){
+  document.querySelectorAll('#devisTableHeadRow .sort-arrow').forEach(el => {
+    const key = el.dataset.sort;
+    el.textContent = devisSortColumn === key ? (devisSortDir === 1 ? '▲' : '▼') : '';
+  });
+}
+function renderDevisTableHead(){
+  const cols = devisVisibleColumns();
+  document.getElementById('devisTableHeadRow').innerHTML = cols.map(c => {
+    const def = DEVIS_COLUMN_DEFS[c.id];
+    const sortArrow = def.sortable ? ` <span class="sort-arrow" data-sort="${def.sortable}"></span>` : '';
+    return `<th data-col="${c.id}" draggable="true" style="width:${c.width}px; ${def.align==='right'?'text-align:right;':''} ${def.sortable?'cursor:pointer;':''}">
+      <span class="th-label">${escapeHtml(def.label)}${sortArrow}</span>
+      <span class="col-resize-handle" data-col="${c.id}"></span>
+    </th>`;
+  }).join('');
+  updateDevisSortArrows();
+  wireDevisTableHeadInteractions();
+}
+let devisDragColId = null;
+function wireDevisTableHeadInteractions(){
+  document.querySelectorAll('#devisTableHeadRow th').forEach(th => {
+    const colId = th.dataset.col;
+    const def = DEVIS_COLUMN_DEFS[colId];
+    th.addEventListener('dragstart', () => { devisDragColId = colId; });
+    th.addEventListener('dragover', (e) => { e.preventDefault(); th.classList.add('drag-over'); });
+    th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
+    th.addEventListener('drop', (e) => {
+      e.preventDefault();
+      th.classList.remove('drag-over');
+      if(!devisDragColId || devisDragColId === colId) return;
+      const fromIdx = devisColumnState.findIndex(c => c.id === devisDragColId);
+      const toIdx = devisColumnState.findIndex(c => c.id === colId);
+      const [moved] = devisColumnState.splice(fromIdx, 1);
+      devisColumnState.splice(toIdx, 0, moved);
+      saveDevisColumnState();
       renderDevisTab();
+    });
+    if(def.sortable){
+      th.querySelector('.th-label').addEventListener('click', (e) => {
+        if(e.target.closest('.col-resize-handle')) return;
+        if(devisSortColumn === def.sortable) devisSortDir *= -1; else { devisSortColumn = def.sortable; devisSortDir = -1; }
+        try{ localStorage.setItem(DEVIS_SORT_KEY, JSON.stringify({ col: devisSortColumn, dir: devisSortDir })); }catch(e){}
+        renderDevisTab();
+      });
+    }
+  });
+  document.querySelectorAll('#devisTableHeadRow .col-resize-handle').forEach(handle => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const colId = handle.dataset.col;
+      const th = handle.closest('th');
+      th.draggable = false;
+      const startX = e.clientX;
+      const startWidth = th.offsetWidth;
+      function onMove(ev){
+        const newWidth = Math.max(50, startWidth + (ev.clientX - startX));
+        th.style.width = newWidth + 'px';
+      }
+      function onUp(ev){
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        th.draggable = true;
+        const newWidth = Math.max(50, startWidth + (ev.clientX - startX));
+        const state = devisColumnState.find(c => c.id === colId);
+        if(state) state.width = newWidth;
+        saveDevisColumnState();
+        renderDevisTab();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
   });
 }
@@ -4323,13 +4896,14 @@ function renderDevisTab(){
   });
   const clients = Object.keys(byClient).sort((a,b) => a.localeCompare(b));
 
-  const pane = document.getElementById('devisListScroll');
-  renderDevisSortBar();
+  const tbody = document.getElementById('devisTbody');
+  renderDevisTableHead();
+  const cols = devisVisibleColumns();
   if(!clients.length){
-    pane.innerHTML = `<div class="hint" style="padding:16px;">${quotations.length ? 'Aucun résultat pour ce filtre / cette recherche.' : 'Clique sur « ↻ Actualiser » pour charger les devis.'}</div>`;
+    tbody.innerHTML = `<tr><td colspan="${cols.length}" class="hint" style="padding:16px;">${quotations.length ? 'Aucun résultat pour ce filtre / cette recherche.' : 'Clique sur « ↻ Actualiser » pour charger les devis.'}</td></tr>`;
     return;
   }
-  pane.innerHTML = clients.map(client => {
+  tbody.innerHTML = clients.map(client => {
     const qs = byClient[client].sort((a,b) => {
       if(devisSortColumn === 'montant') return devisSortDir * ((a.pre_tax_amount||0) - (b.pre_tax_amount||0));
       if(devisSortColumn === 'number') return devisSortDir * (a.number||'').localeCompare(b.number||'');
@@ -4338,23 +4912,26 @@ function renderDevisTab(){
     const expanded = expandedClients.has(client);
     const clientTotal = qs.reduce((sum, q) => sum + (typeof q.pre_tax_amount === 'number' ? q.pre_tax_amount : 0), 0);
     const color = colorForClient(client);
-    return `
-      <div class="devis-group-header" data-client="${escapeHtml(client)}" style="cursor:pointer; border-left:5px solid ${color}; display:flex; justify-content:space-between; align-items:center;">
-        <span><span style="display:inline-block; width:14px;">${expanded ? '▾' : '▸'}</span>${escapeHtml(client)} (${qs.length})</span>
-        ${isAdminUser() ? `<span style="font-family:'SF Mono',monospace; font-weight:600;">${clientTotal.toFixed(2).replace('.', ',')} €</span>` : ''}
-      </div>
-      ${expanded ? qs.map(q => `
-        <div class="devis-row ${q.id === selectedQuotationId ? 'selected' : ''}" data-qid="${q.id}" style="border-left:5px solid ${color};">
-          <span class="devis-dot ${q.status === 'accepted' ? 'ok' : 'warn'}" title="${q.status === 'accepted' ? 'Validé' : 'Non validé'}"></span>
-          <span class="devis-number">${escapeHtml(q.number || ('#' + q.id))}</span>
-          <span style="color:var(--muted); font-size:.75rem;">${formatDateFR((q.date||'').slice(0,10))}</span>
-          ${isAdminUser() ? `<span class="devis-amount">${(q.pre_tax_amount||0).toFixed(2).replace('.', ',')} €</span>` : ''}
-        </div>
-      `).join('') : ''}
-    `;
+    const headerRow = `
+      <tr class="devis-group-header-tr" data-client="${escapeHtml(client)}" style="cursor:pointer; border-left:5px solid ${color};">
+        <td colspan="${cols.length}" style="padding:8px 16px; background:var(--paper-2); border-bottom:1px solid var(--line); border-top:1px solid var(--line);">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-family:sans-serif;">
+            <span style="font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);"><span style="display:inline-block; width:14px;">${expanded ? '▾' : '▸'}</span>${escapeHtml(client)} (${qs.length})</span>
+            ${isAdminUser() ? `<span style="font-family:'SF Mono',monospace; font-weight:600; font-size:.78rem;">${clientTotal.toFixed(2).replace('.', ',')} €</span>` : ''}
+          </div>
+        </td>
+      </tr>`;
+    const bodyRows = expanded ? qs.map(q => {
+      const cells = cols.map(c => {
+        const def = DEVIS_COLUMN_DEFS[c.id];
+        return `<td style="width:${c.width}px; ${def.align==='right'?'text-align:right;':''}">${def.render(q)}</td>`;
+      }).join('');
+      return `<tr class="devis-row-tr ${q.id === selectedQuotationId ? 'selected' : ''}" data-qid="${q.id}" style="border-left:5px solid ${color};">${cells}</tr>`;
+    }).join('') : '';
+    return headerRow + bodyRows;
   }).join('');
 
-  pane.querySelectorAll('.devis-group-header').forEach(header => {
+  tbody.querySelectorAll('.devis-group-header-tr').forEach(header => {
     header.addEventListener('click', () => {
       const client = header.dataset.client;
       if(expandedClients.has(client)) expandedClients.delete(client);
@@ -4364,11 +4941,18 @@ function renderDevisTab(){
     });
   });
 
-  pane.querySelectorAll('.devis-row').forEach(row => {
-    row.addEventListener('click', () => {
+  tbody.querySelectorAll('.devis-row-tr').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if(e.target.closest('.commande-link')) return;
       selectedQuotationId = parseInt(row.dataset.qid, 10);
       renderDevisTab();
       renderDevisDetail(quotations.find(q => q.id === selectedQuotationId));
+    });
+  });
+  tbody.querySelectorAll('.commande-link').forEach(link => {
+    link.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await jumpToCommande(parseInt(link.dataset.contractId, 10));
     });
   });
 }
@@ -4828,10 +5412,13 @@ async function openDevisDocument(filename, category){
 function applyPermissions(){
   const canDevis = CSBAuth.can('axonaut', 'devis');
   const canCommandes = CSBAuth.can('axonaut', 'commandes');
+  const canFacture = CSBAuth.can('axonaut', 'facture');
   document.getElementById('tabBtnDevis').style.display = canDevis ? '' : 'none';
   document.getElementById('tabBtnCommande').style.display = canCommandes ? '' : 'none';
+  document.getElementById('tabBtnFacture').style.display = canFacture ? '' : 'none';
   if(!canDevis && document.getElementById('tabBtnDevis').classList.contains('active')) activateTab('commande');
   if(!canCommandes && document.getElementById('tabBtnCommande').classList.contains('active')) activateTab('devis');
+  if(!canFacture && document.getElementById('tabBtnFacture').classList.contains('active')) activateTab('commande');
   setAdminMode(CSBAuth.isAdmin());
   if(contracts.length) render();
   const user = CSBAuth.currentUser();
