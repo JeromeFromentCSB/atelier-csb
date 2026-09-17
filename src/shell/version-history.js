@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.6', items: [
+    "Gestion Casaque : correction de la facture douane imprimée — la signature ne saute plus sur une page à part et se trouve juste sous la dernière ligne",
+  ]},
   { v: '0.2.5', items: [
     "Email : affichage des mails des 30 derniers jours en un seul chargement, bouton « Charger plus » pour remonter au-delà",
     "Email : glisser-déposer un mail vers un dossier de la colonne de gauche pour le déplacer",
