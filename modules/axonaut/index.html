@@ -1069,6 +1069,21 @@
 // du socle commun (CSBAuth.getPbUrl()) — les autres collections propres à ce module restent
 // configurables ici si besoin.
 const CFG_KEY = 'csb_envoi_axonaut_pb_config';
+// Réglages persistés à la fois dans le fichier de config de l'appli (survit aux mises à jour
+// et aux réinstallations, contrairement au localStorage qui peut être perdu) et en localStorage
+// (pour un accès synchrone immédiat, ex. avant que csbHost ait répondu). Si une valeur n'existe
+// qu'en localStorage (ancienne sauvegarde faite avant l'ajout de cette persistance disque, ou
+// localStorage reconstitué après une perte), elle est automatiquement remontée vers le fichier
+// disque dès qu'on la relit, pour ne plus jamais la reperdre.
+let pbAppCfgCache = null;
+async function loadPbAppConfig(){
+  if(pbAppCfgCache) return pbAppCfgCache;
+  if(window.csbHost){
+    try{ pbAppCfgCache = (await window.csbHost.getConfig()) || {}; }
+    catch(e){ pbAppCfgCache = {}; }
+  } else pbAppCfgCache = {};
+  return pbAppCfgCache;
+}
 function getConfig(){
   let saved = {};
   try{
@@ -1077,9 +1092,26 @@ function getConfig(){
   }catch(e){}
   const defaults = { collection:'envoi_axonaut', addressCollection:'carnet_adresses', blCollection:'bl_axonaut', docsCollection:'devis_documents', devisLinesCollection:'devis_lignes_etat' };
   const pbUrl = (typeof CSBAuth !== 'undefined') ? CSBAuth.getPbUrl() : 'http://192.168.1.142:8090';
+  if(pbAppCfgCache && pbAppCfgCache[CFG_KEY]) saved = { ...pbAppCfgCache[CFG_KEY], ...saved };
   return { url: saved.url || pbUrl, ...defaults, ...saved };
 }
-function setConfig(cfg){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){} }
+function setConfig(cfg){
+  try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
+  if(window.csbHost){
+    pbAppCfgCache = Object.assign(pbAppCfgCache || {}, { [CFG_KEY]: cfg });
+    window.csbHost.setConfig({ [CFG_KEY]: cfg }).catch(()=>{});
+  }
+}
+loadPbAppConfig().then(appCfg => {
+  // Migration ponctuelle : si le fichier disque n'a pas encore cette clé mais que le
+  // localStorage courant en a une, on la pousse tout de suite vers le disque.
+  if(!(appCfg && appCfg[CFG_KEY])){
+    try{
+      const raw = localStorage.getItem(CFG_KEY);
+      if(raw) setConfig(JSON.parse(raw));
+    }catch(e){}
+  }
+});
 function pbBase(){
   const cfg = getConfig();
   return cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.collection) + '/records';
@@ -1305,7 +1337,14 @@ async function getColConfig(){
   }
   try{
     const raw = JSON.parse(localStorage.getItem(COL_CFG_KEY));
-    if(raw) return Object.assign(defaults, raw);
+    if(raw){
+      const merged = Object.assign(defaults, raw);
+      // Trouvé seulement en localStorage (perdu du fichier disque persistant, ou jamais
+      // migré) : on le remonte tout de suite pour ne plus le reperdre à la prochaine mise
+      // à jour de l'appli.
+      if(window.csbHost) window.csbHost.setConfig({ [COL_CFG_KEY]: merged }).catch(()=>{});
+      return merged;
+    }
   }catch(e){}
   return defaults;
 }
@@ -1322,7 +1361,11 @@ async function getFeConfig(){
   }
   try{
     const raw = JSON.parse(localStorage.getItem(FE_CFG_KEY));
-    if(raw) return Object.assign(defaults, raw);
+    if(raw){
+      const merged = Object.assign(defaults, raw);
+      if(window.csbHost) window.csbHost.setConfig({ [FE_CFG_KEY]: merged }).catch(()=>{});
+      return merged;
+    }
   }catch(e){}
   return defaults;
 }
@@ -1364,7 +1407,11 @@ async function getAxConfig(){
   }
   try{
     const raw = JSON.parse(localStorage.getItem(AX_CFG_KEY));
-    if(raw) return Object.assign({ apiKey:'' }, raw);
+    if(raw){
+      const merged = Object.assign({ apiKey:'' }, raw);
+      if(window.csbHost) window.csbHost.setConfig({ [AX_CFG_KEY]: merged }).catch(()=>{});
+      return merged;
+    }
   }catch(e){}
   return { apiKey:'' };
 }

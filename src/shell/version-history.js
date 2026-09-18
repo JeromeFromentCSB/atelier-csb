@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.9', items: [
+    "Gestion Commande : les réglages Colissimo/France Express/PocketBase sont maintenant migrés automatiquement vers le fichier persistant de l'appli dès l'ouverture, pour ne plus se perdre à une mise à jour",
+  ]},
   { v: '0.2.8', items: [
     "Gestion Casaque : la signature de la facture douane imprimée ne disparaît plus (elle ne dépendait plus du réglage \"graphiques d'arrière-plan\" de l'imprimante)",
   ]},
