@@ -2,6 +2,11 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.10', items: [
+    "Possibilité d'ouvrir 2 fenêtres de l'appli en même temps",
+    "Réglages Colissimo et France Express désormais partagés entre tous les postes via PocketBase (compte Axonaut et email restent par poste)",
+    "Stock de Fil : bouton pour générer un PDF de l'état du stock (numéro, couleur, quantité), trié par numéro, caisses puis étagères",
+  ]},
   { v: '0.2.9', items: [
     "Gestion Commande : les réglages Colissimo/France Express/PocketBase sont maintenant migrés automatiquement vers le fichier persistant de l'appli dès l'ouverture, pour ne plus se perdre à une mise à jour",
   ]},

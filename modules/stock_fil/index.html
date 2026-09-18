@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stock de Fil — Atelier CSB</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <style>
   :root{
     --paper: #FAF6EF;
@@ -821,6 +822,86 @@ function attachSortHandlers(panel, onSort){
   });
 }
 
+// Génère un PDF listant tout le stock, trié par numéro dans chaque zone — les caisses
+// d'abord, puis les étagères (détecté par le nom de la zone), puis les éventuelles autres
+// zones et enfin les bobines sans zone définie.
+async function generateStockPdfReport(){
+  const stock = applyFilTypeFilter(computeStock(), stockFilTypeFilter);
+  const zoneRank = z => {
+    const s = z.toLowerCase();
+    if(s.includes('caisse')) return 0;
+    if(s.includes('etag') || s.includes('étag')) return 1;
+    return 2;
+  };
+  const orderedZones = [...state.zones].sort((a,b) => zoneRank(a) - zoneRank(b));
+
+  const sections = [];
+  orderedZones.forEach(zone => {
+    const rows = stock
+      .filter(r => (r.zones[zone] || 0) > 0)
+      .map(r => ({ reference: r.reference, teinte: r.teinte || '', qty: r.zones[zone] }))
+      .sort((a, b) => Number(a.reference) - Number(b.reference));
+    if(rows.length) sections.push({ label: zone, rows });
+  });
+  const nonDefRows = stock
+    .filter(r => (r.nonDefinie || 0) > 0)
+    .map(r => ({ reference: r.reference, teinte: r.teinte || '', qty: r.nonDefinie }))
+    .sort((a, b) => Number(a.reference) - Number(b.reference));
+  if(nonDefRows.length) sections.push({ label: 'Zone non définie', rows: nonDefRows });
+
+  if(!sections.length){ toast("Rien à exporter : le stock est vide."); return; }
+
+  const pdfDoc = await PDFLib.PDFDocument.create();
+  const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+  const pageW = 595.28, pageH = 841.89;
+  const left = 40, right = pageW - 40, top = pageH - 50, bottom = 50, rowH = 16;
+  const colX = [left, left + 90, left + 320];
+
+  let page, y;
+  function newPage(){
+    page = pdfDoc.addPage([pageW, pageH]);
+    y = top;
+    page.drawText('État du stock de fil', { x: left, y, size: 16, font: fontBold });
+    y -= 20;
+    page.drawText(new Date().toLocaleDateString('fr-FR'), { x: left, y, size: 9, font, color: PDFLib.rgb(0.4, 0.4, 0.4) });
+    y -= 26;
+  }
+  function drawTableHeader(){
+    page.drawRectangle({ x: left, y: y - 4, width: right - left, height: rowH, color: PDFLib.rgb(0.9, 0.9, 0.9) });
+    page.drawText('N°', { x: colX[0] + 4, y, size: 9, font: fontBold });
+    page.drawText('Couleur', { x: colX[1] + 4, y, size: 9, font: fontBold });
+    page.drawText('Quantité', { x: colX[2] + 4, y, size: 9, font: fontBold });
+    y -= rowH;
+  }
+
+  newPage();
+  sections.forEach(section => {
+    if(y < bottom + rowH * 4) newPage();
+    y -= 6;
+    page.drawText(section.label, { x: left, y, size: 12, font: fontBold });
+    y -= 18;
+    drawTableHeader();
+    section.rows.forEach(r => {
+      if(y < bottom + rowH){
+        newPage();
+        page.drawText(section.label + ' (suite)', { x: left, y, size: 12, font: fontBold });
+        y -= 18;
+        drawTableHeader();
+      }
+      page.drawText(String(r.reference), { x: colX[0] + 4, y, size: 9, font });
+      page.drawText(String(r.teinte), { x: colX[1] + 4, y, size: 9, font });
+      page.drawText(String(r.qty), { x: colX[2] + 4, y, size: 9, font });
+      y -= rowH;
+    });
+    y -= 10;
+  });
+
+  const bytes = await pdfDoc.save();
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  window.open(URL.createObjectURL(blob), '_blank');
+}
+
 function renderStockPanel(stock){
   const panel = document.getElementById('panel-stock');
   panel.innerHTML = `
@@ -828,9 +909,11 @@ function renderStockPanel(stock){
       <input type="text" class="search-box" id="stock-search" placeholder="Filtrer par référence ou teinte…" value="${escapeHtml(searchQuery)}">
       ${filTypeSelectHTML('stock-filtype', stockFilTypeFilter)}
       <button class="ghost" id="clear-search" style="${searchQuery ? '' : 'visibility:hidden;'}">Effacer</button>
+      <button class="ghost" id="stock-pdf-btn" style="margin-left:auto;">📄 Générer un PDF</button>
     </div>
     <div id="stock-results"></div>
   `;
+  document.getElementById('stock-pdf-btn').addEventListener('click', generateStockPdfReport);
   document.getElementById('stock-filtype').addEventListener('change', e=>{
     stockFilTypeFilter = e.target.value; renderStockResults();
   });

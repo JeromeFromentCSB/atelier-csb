@@ -1318,7 +1318,57 @@ async function pbFetchAllShipments(){
   return all;
 }
 
-// ---------- Réglages Axonaut / Colissimo (Worker partagé) ----------
+// ---------- Réglages partagés (PocketBase) : Colissimo, France Express ----------
+// Contrairement au compte Axonaut et à l'email (gardés par poste, car plus sensibles), ces
+// réglages sont utiles à tout le monde de la même façon : ils sont donc stockés dans
+// PocketBase (collection "app_settings", API publique comme le reste de l'appli) pour ne
+// jamais avoir à les ressaisir sur un autre poste ou une autre instance.
+function appSettingsBase(){
+  const cfg = getConfig();
+  return cfg.url.replace(/\/+$/,'') + '/api/collections/axonaut_settings/records';
+}
+async function fetchSharedSetting(key){
+  try{
+    const filter = encodeURIComponent(`settings_key='${key}'`);
+    const res = await fetch(appSettingsBase() + `?filter=(${filter})`);
+    if(!res.ok) return null;
+    const json = await res.json();
+    const rec = (json.items && json.items[0]) || null;
+    if(!rec) return null;
+    return JSON.parse(rec.settings_value);
+  }catch(e){ return null; }
+}
+async function saveSharedSetting(key, value){
+  try{
+    const filter = encodeURIComponent(`settings_key='${key}'`);
+    const res = await fetch(appSettingsBase() + `?filter=(${filter})`);
+    const json = res.ok ? await res.json() : { items: [] };
+    const rec = (json.items && json.items[0]) || null;
+    const body = { settings_key: key, settings_value: JSON.stringify(value) };
+    if(rec){
+      await fetch(appSettingsBase() + '/' + rec.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    } else {
+      await fetch(appSettingsBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    }
+  }catch(e){ console.warn('Impossible de sauvegarder le réglage partagé', key, e); }
+}
+// Reprend une éventuelle ancienne valeur locale (poste par poste, d'avant ce passage en base
+// partagée) pour ne rien perdre au premier lancement après la mise à jour — une seule fois,
+// tant que rien n'existe encore côté PocketBase pour cette clé.
+async function readLegacyLocalConfig(localKey){
+  if(window.csbHost){
+    try{
+      const appCfg = await window.csbHost.getConfig();
+      if(appCfg && appCfg[localKey]) return appCfg[localKey];
+    }catch(e){}
+  }
+  try{
+    const raw = JSON.parse(localStorage.getItem(localKey));
+    if(raw) return raw;
+  }catch(e){}
+  return null;
+}
+
 const COL_CFG_KEY = 'csb_envoi_axonaut_colissimo_config';
 async function getColConfig(){
   const defaults = {
@@ -1327,72 +1377,37 @@ async function getColConfig(){
     customsDesc:'Casaque de courses (textile)', customsValue:'50', customsCategory:'3', customsOrigin:'FR',
     customsHsCode:''
   };
-  if(window.csbHost){
-    try{
-      const appCfg = await window.csbHost.getConfig();
-      if(appCfg && appCfg[COL_CFG_KEY]){
-        return Object.assign(defaults, appCfg[COL_CFG_KEY]);
-      }
-    }catch(e){}
+  const shared = await fetchSharedSetting('colissimo');
+  if(shared) return Object.assign(defaults, shared);
+  const legacy = await readLegacyLocalConfig(COL_CFG_KEY);
+  if(legacy){
+    const merged = Object.assign(defaults, legacy);
+    saveSharedSetting('colissimo', merged).catch(()=>{});
+    return merged;
   }
-  try{
-    const raw = JSON.parse(localStorage.getItem(COL_CFG_KEY));
-    if(raw){
-      const merged = Object.assign(defaults, raw);
-      // Trouvé seulement en localStorage (perdu du fichier disque persistant, ou jamais
-      // migré) : on le remonte tout de suite pour ne plus le reperdre à la prochaine mise
-      // à jour de l'appli.
-      if(window.csbHost) window.csbHost.setConfig({ [COL_CFG_KEY]: merged }).catch(()=>{});
-      return merged;
-    }
-  }catch(e){}
   return defaults;
+}
+async function setColConfig(patch){
+  const cfg = Object.assign(await getColConfig(), patch);
+  await saveSharedSetting('colissimo', cfg);
+  return cfg;
 }
 const FE_CFG_KEY = 'csb_envoi_axonaut_fe_config';
 async function getFeConfig(){
   const defaults = { loginId:'', apiKey:'', codeSa:'', codeClient:'', workerUrl:'' };
-  if(window.csbHost){
-    try{
-      const appCfg = await window.csbHost.getConfig();
-      if(appCfg && appCfg[FE_CFG_KEY]){
-        return Object.assign(defaults, appCfg[FE_CFG_KEY]);
-      }
-    }catch(e){}
+  const shared = await fetchSharedSetting('france_express');
+  if(shared) return Object.assign(defaults, shared);
+  const legacy = await readLegacyLocalConfig(FE_CFG_KEY);
+  if(legacy){
+    const merged = Object.assign(defaults, legacy);
+    saveSharedSetting('france_express', merged).catch(()=>{});
+    return merged;
   }
-  try{
-    const raw = JSON.parse(localStorage.getItem(FE_CFG_KEY));
-    if(raw){
-      const merged = Object.assign(defaults, raw);
-      if(window.csbHost) window.csbHost.setConfig({ [FE_CFG_KEY]: merged }).catch(()=>{});
-      return merged;
-    }
-  }catch(e){}
   return defaults;
 }
 async function setFeConfig(patch){
   const cfg = Object.assign(await getFeConfig(), patch);
-  if(window.csbHost){
-    try{
-      await window.csbHost.setConfig({ [FE_CFG_KEY]: cfg });
-    }catch(e){
-      try{ localStorage.setItem(FE_CFG_KEY, JSON.stringify(cfg)); }catch(e2){}
-    }
-  } else {
-    try{ localStorage.setItem(FE_CFG_KEY, JSON.stringify(cfg)); }catch(e){}
-  }
-  return cfg;
-}
-async function setColConfig(patch){
-  const cfg = Object.assign(await getColConfig(), patch);
-  if(window.csbHost){
-    try{
-      await window.csbHost.setConfig({ [COL_CFG_KEY]: cfg });
-    }catch(e){
-      try{ localStorage.setItem(COL_CFG_KEY, JSON.stringify(cfg)); }catch(e2){}
-    }
-  } else {
-    try{ localStorage.setItem(COL_CFG_KEY, JSON.stringify(cfg)); }catch(e){}
-  }
+  await saveSharedSetting('france_express', cfg);
   return cfg;
 }
 const AX_CFG_KEY = 'csb_envoi_axonaut_api_config';

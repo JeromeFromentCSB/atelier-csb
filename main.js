@@ -4,21 +4,16 @@ const fs = require('node:fs');
 const { autoUpdater } = require('electron-updater');
 const vtracer = require('@visioncortex/vtracer');
 
-// Empêche deux instances de l'app de tourner en même temps : sans ça, deux processus qui
-// écrivent chacun leur propre copie en mémoire du fichier de config peuvent s'écraser l'un
-// l'autre au redémarrage et faire "disparaître" des réglages enregistrés entre-temps (vécu
-// avec les identifiants email).
+// Une deuxième instance peut désormais s'ouvrir en parallèle (ex. deux fenêtres pour
+// travailler sur deux écrans) : elle reçoit son propre dossier de données (config, email,
+// caches locaux) distinct de la première, pour ne jamais faire cohabiter deux processus sur
+// les mêmes fichiers — c'est ce partage qui, à l'origine, faisait "disparaître" des réglages
+// enregistrés entre-temps (identifiants email notamment) lorsque deux instances tournaient
+// sur le même dossier utilisateur.
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
-  app.quit();
-  process.exit(0);
+  app.setPath('userData', app.getPath('userData') + '-instance-' + process.pid);
 }
-app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
-});
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'csb-config.json');
 
