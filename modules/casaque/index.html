@@ -3098,7 +3098,7 @@ function pbBase(){
 }
 async function pbFetchAllForLot(lot){
   const url = pbBase() + '?perPage=200&filter=' + encodeURIComponent(`lot="${lot}"`);
-  const res = await fetch(url);
+  const res = await CSBAuth.authedFetch(url);
   if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
   const json = await res.json();
   return json.items || [];
@@ -3112,7 +3112,7 @@ async function pbFetchAll(){
   let page = 1;
   while(page <= 50){
     const url = pbBase() + '?perPage=200&page=' + page;
-    const res = await fetch(url);
+    const res = await CSBAuth.authedFetch(url);
     if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
     const json = await res.json();
     all.push(...(json.items || []));
@@ -3181,7 +3181,7 @@ async function pbCreate(r){
     casaque_vide: isCasaqueVide(r), couleurs_vide: r.coul1 === '', societe: !!r.societe,
     tracking: '', envoye: false, programme_genere: false, etiquette_generee: false
   };
-  const res = await fetch(pbBase(), {
+  const res = await CSBAuth.authedFetch(pbBase(), {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
   });
   if(!res.ok) throw new Error('PocketBase create HTTP ' + res.status);
@@ -3190,7 +3190,7 @@ async function pbCreate(r){
 async function pbPatch(id, patch){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.collection) + '/records/' + id;
-  const res = await fetch(url, {
+  const res = await CSBAuth.authedFetch(url, {
     method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)
   });
   if(!res.ok) throw new Error('PocketBase patch HTTP ' + res.status);
@@ -3199,7 +3199,7 @@ async function pbPatch(id, patch){
 async function pbDelete(id){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.collection) + '/records/' + id;
-  const res = await fetch(url, { method:'DELETE' });
+  const res = await CSBAuth.authedFetch(url, { method:'DELETE' });
   if(!res.ok && res.status !== 404) throw new Error('PocketBase delete HTTP ' + res.status);
 }
 // Supprime une fiche complètement : PocketBase, IndexedDB (vignette + étiquette), et le tableau local.
@@ -3218,7 +3218,7 @@ async function pbDeleteAllRecords(onProgress){
   let totalDeleted = 0;
   while(true){
     const url = pbBase() + '?perPage=200&page=1';
-    const res = await fetch(url);
+    const res = await CSBAuth.authedFetch(url);
     if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
     const json = await res.json();
     const items = json.items || [];
@@ -4336,7 +4336,7 @@ async function pbFetchFilColors(){
   const all = [];
   let page = 1;
   while(page <= 20){
-    const res = await fetch(pbFilColorsUrl() + '?perPage=200&page=' + page);
+    const res = await CSBAuth.authedFetch(pbFilColorsUrl() + '?perPage=200&page=' + page);
     if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
     const json = await res.json();
     all.push(...(json.items || []));
@@ -4346,7 +4346,7 @@ async function pbFetchFilColors(){
   return all;
 }
 async function pbCreateFilColor(couleur){
-  const res = await fetch(pbFilColorsUrl(), {
+  const res = await CSBAuth.authedFetch(pbFilColorsUrl(), {
     method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ couleur })
   });
   if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
@@ -5070,7 +5070,7 @@ async function pbTestConnection() {
   const msg = document.getElementById('pbMsg');
   const status = document.getElementById('status-pb');
   try {
-    const r = await fetch(pbUrl() + '/api/collections/' + COLLECTION + '/records?perPage=1', { cache: 'no-store' });
+    const r = await CSBAuth.authedFetch(pbUrl() + '/api/collections/' + COLLECTION + '/records?perPage=1', { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     status.className = 'ok'; status.textContent = 'PocketBase : connecté';
     msg.textContent = '';
@@ -5083,14 +5083,14 @@ async function pbTestConnection() {
 }
 
 async function pbListElements() {
-  const res = await fetch(pbUrl() + '/api/collections/' + COLLECTION + '/records?perPage=500&sort=nom', { cache: 'no-store' });
+  const res = await CSBAuth.authedFetch(pbUrl() + '/api/collections/' + COLLECTION + '/records?perPage=500&sort=nom', { cache: 'no-store' });
   if (!res.ok) throw new Error('Erreur PocketBase (' + res.status + ')');
   const data = await res.json();
   return data.items || [];
 }
 
 async function pbCreateElement(formData) {
-  const res = await fetch(pbUrl() + '/api/collections/' + COLLECTION + '/records', { method: 'POST', body: formData });
+  const res = await CSBAuth.authedFetch(pbUrl() + '/api/collections/' + COLLECTION + '/records', { method: 'POST', body: formData });
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     throw new Error('Échec import PocketBase (' + res.status + ') ' + t);
@@ -5099,19 +5099,19 @@ async function pbCreateElement(formData) {
 }
 
 async function pbDeleteElement(id) {
-  const res = await fetch(pbUrl() + '/api/collections/' + COLLECTION + '/records/' + id, { method: 'DELETE' });
+  const res = await CSBAuth.authedFetch(pbUrl() + '/api/collections/' + COLLECTION + '/records/' + id, { method: 'DELETE' });
   if (!res.ok) throw new Error('Échec suppression (' + res.status + ')');
 }
 
 async function pbRenameElement(id, nom) {
-  const res = await fetch(pbUrl() + '/api/collections/' + COLLECTION + '/records/' + id, {
+  const res = await CSBAuth.authedFetch(pbUrl() + '/api/collections/' + COLLECTION + '/records/' + id, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nom }),
   });
   if (!res.ok) throw new Error('Échec renommage (' + res.status + ')');
 }
 
 async function pbUpdateFields(id, fields) {
-  const res = await fetch(pbUrl() + '/api/collections/' + COLLECTION + '/records/' + id, {
+  const res = await CSBAuth.authedFetch(pbUrl() + '/api/collections/' + COLLECTION + '/records/' + id, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields),
   });
   if (!res.ok) {
@@ -5479,7 +5479,7 @@ async function decomposeLibraryItem(item) {
   if (!confirm('Décomposer "' + r.nom + '" en programmes distincts (un par couleur) ?\nL\'entrée originale sera supprimée.')) return;
   try {
     const url = fileUrl(r, 'fichier');
-    const buf = new Uint8Array(await (await fetch(url, { cache: 'no-store' })).arrayBuffer());
+    const buf = new Uint8Array(await (await CSBAuth.authedFetch(url, { cache: 'no-store' })).arrayBuffer());
     const decoded = decodeDst(buf);
     const blocks = splitDstIntoBlocks(decoded);
     const groupeId = blocks.length > 1 ? makeGroupId() : '';
@@ -5993,7 +5993,7 @@ async function ensureDecoded(item) {
   const r = item.record;
   if (r.type === 'dst') {
     const url = fileUrl(r, 'fichier');
-    const buf = new Uint8Array(await (await fetch(url, { cache: 'no-store' })).arrayBuffer());
+    const buf = new Uint8Array(await (await CSBAuth.authedFetch(url, { cache: 'no-store' })).arrayBuffer());
     item.decoded = decodeDst(buf);
   }
   return item.decoded;
@@ -8095,7 +8095,7 @@ function casaqueLinksUrl(){
 
 async function pbFetchCasaqueLinks(){
   try{
-    const res = await fetch(casaqueLinksUrl() + '?perPage=500', { cache: 'no-store' });
+    const res = await CSBAuth.authedFetch(casaqueLinksUrl() + '?perPage=500', { cache: 'no-store' });
     if(!res.ok){
       const detail = await res.text().catch(() => '');
       throw new Error('HTTP ' + res.status + ' ' + detail);
@@ -8117,7 +8117,7 @@ async function pbFetchCasaqueLinks(){
 }
 
 async function pbCreateCasaqueLink(ficheCle, ficheNom){
-  const res = await fetch(casaqueLinksUrl(), {
+  const res = await CSBAuth.authedFetch(casaqueLinksUrl(), {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ fiche_cle: ficheCle, fiche_nom: ficheNom || '' })
   });
@@ -8129,7 +8129,7 @@ async function pbCreateCasaqueLink(ficheCle, ficheNom){
 }
 
 async function pbPatchCasaqueLink(id, patch){
-  const res = await fetch(casaqueLinksUrl() + '/' + id, {
+  const res = await CSBAuth.authedFetch(casaqueLinksUrl() + '/' + id, {
     method:'PATCH', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(patch)
   });

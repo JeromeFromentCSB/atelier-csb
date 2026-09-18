@@ -1124,7 +1124,7 @@ async function addrFetchAll(){
   let page = 1, all = [];
   while(true){
     const url = addrBase() + `?perPage=200&page=${page}`;
-    const res = await fetch(url);
+    const res = await CSBAuth.authedFetch(url);
     if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
     const json = await res.json();
     const items = json.items || [];
@@ -1135,21 +1135,21 @@ async function addrFetchAll(){
   return all;
 }
 async function addrCreate(body){
-  const res = await fetch(addrBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const res = await CSBAuth.authedFetch(addrBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   if(!res.ok) throw new Error('PocketBase create HTTP ' + res.status + ' — ' + (await res.text()).slice(0,300));
   return await res.json();
 }
 async function addrPatch(id, patch){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.addressCollection || 'carnet_adresses') + '/records/' + id;
-  const res = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
+  const res = await CSBAuth.authedFetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
   if(!res.ok) throw new Error('PocketBase patch HTTP ' + res.status);
   return await res.json();
 }
 async function addrDelete(id){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.addressCollection || 'carnet_adresses') + '/records/' + id;
-  const res = await fetch(url, { method:'DELETE' });
+  const res = await CSBAuth.authedFetch(url, { method:'DELETE' });
   if(!res.ok && res.status !== 404) throw new Error('PocketBase delete HTTP ' + res.status);
 }
 function blBase(){
@@ -1171,7 +1171,7 @@ function commandePhotosBase(){
 // fond : une erreur ici ne doit jamais empêcher l'affichage des commandes dans l'onglet.
 async function syncCommandesIndex(list){
   try{
-    const res = await fetch(commandesIndexBase() + '?perPage=500');
+    const res = await CSBAuth.authedFetch(commandesIndexBase() + '?perPage=500');
     if(!res.ok) return; // collection absente ou PocketBase injoignable : on abandonne silencieusement
     const existing = (await res.json()).items || [];
     const byContract = {};
@@ -1182,9 +1182,9 @@ async function syncCommandesIndex(list){
       const facturee = Array.isArray(r.invoicesId) && r.invoicesId.length > 0;
       const body = { contract_id: key, numero_commande: r.numeroCommande || '', client: r.clientCompany || r.nomSoc || '', facturee };
       if(!found){
-        await fetch(commandesIndexBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
+        await CSBAuth.authedFetch(commandesIndexBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
       }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee){
-        await fetch(commandesIndexBase() + '/' + found.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
+        await CSBAuth.authedFetch(commandesIndexBase() + '/' + found.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
       }
     }
   }catch(e){ console.warn('Synchro index commandes (page mobile) impossible', e); }
@@ -1195,7 +1195,7 @@ async function loadBlPhotos(contractId){
   box.innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement des photos…</div>';
   try{
     const filter = encodeURIComponent(`contract_id='${contractId}'`);
-    const res = await fetch(commandePhotosBase() + `?filter=(${filter})&sort=-created&perPage=100`);
+    const res = await CSBAuth.authedFetch(commandePhotosBase() + `?filter=(${filter})&sort=-created&perPage=100`);
     if(!res.ok){ box.innerHTML = ''; return; }
     const items = (await res.json()).items || [];
     if(!items.length){ box.innerHTML = '<div class="hint" style="font-size:.78rem;">Aucune photo pour cette commande.</div>'; return; }
@@ -1226,7 +1226,7 @@ async function loadBlPhotos(contractId){
   }catch(e){ box.innerHTML = `<div class="hint" style="color:var(--silk-red); font-size:.78rem;">Erreur : ${escapeHtml(e.message)}</div>`; }
 }
 async function deleteBlPhoto(photoId){
-  const res = await fetch(commandePhotosBase() + '/' + encodeURIComponent(photoId), { method: 'DELETE' });
+  const res = await CSBAuth.authedFetch(commandePhotosBase() + '/' + encodeURIComponent(photoId), { method: 'DELETE' });
   if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
 }
 function dlBase(){
@@ -1235,39 +1235,39 @@ function dlBase(){
 }
 async function dlFetchByQuotation(quotationId){
   const filter = encodeURIComponent(`quotation_id='${quotationId}'`);
-  const res = await fetch(dlBase() + `?filter=(${filter})`);
+  const res = await CSBAuth.authedFetch(dlBase() + `?filter=(${filter})`);
   if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
   const json = await res.json();
   return (json.items && json.items[0]) || null;
 }
 async function dlCreate(body){
-  const res = await fetch(dlBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const res = await CSBAuth.authedFetch(dlBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   if(!res.ok) throw new Error('PocketBase create HTTP ' + res.status + ' — ' + (await res.text()).slice(0,300));
   return await res.json();
 }
 async function dlPatch(id, patch){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.devisLinesCollection || 'devis_lignes_etat') + '/records/' + id;
-  const res = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
+  const res = await CSBAuth.authedFetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
   if(!res.ok) throw new Error('PocketBase patch HTTP ' + res.status);
   return await res.json();
 }
 async function blFetchByContract(contractId){
   const filter = encodeURIComponent(`contract_id='${contractId}'`);
-  const res = await fetch(blBase() + `?filter=(${filter})`);
+  const res = await CSBAuth.authedFetch(blBase() + `?filter=(${filter})`);
   if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
   const json = await res.json();
   return (json.items && json.items[0]) || null;
 }
 async function blCreate(body){
-  const res = await fetch(blBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const res = await CSBAuth.authedFetch(blBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   if(!res.ok) throw new Error('PocketBase create HTTP ' + res.status + ' — ' + (await res.text()).slice(0,300));
   return await res.json();
 }
 async function blPatch(id, patch){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.blCollection || 'bl_axonaut') + '/records/' + id;
-  const res = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
+  const res = await CSBAuth.authedFetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
   if(!res.ok) throw new Error('PocketBase patch HTTP ' + res.status);
   return await res.json();
 }
@@ -1275,7 +1275,7 @@ async function blFetchAll(){
   let page = 1, all = [];
   while(true){
     const url = blBase() + `?perPage=200&page=${page}`;
-    const res = await fetch(url);
+    const res = await CSBAuth.authedFetch(url);
     if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
     const json = await res.json();
     const items = json.items || [];
@@ -1286,28 +1286,28 @@ async function blFetchAll(){
   return all;
 }
 async function pbCreate(body){
-  const res = await fetch(pbBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const res = await CSBAuth.authedFetch(pbBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   if(!res.ok) throw new Error('PocketBase create HTTP ' + res.status + ' — ' + (await res.text()).slice(0,300));
   return await res.json();
 }
 async function pbPatch(id, patch){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.collection) + '/records/' + id;
-  const res = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
+  const res = await CSBAuth.authedFetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) });
   if(!res.ok) throw new Error('PocketBase patch HTTP ' + res.status);
   return await res.json();
 }
 async function pbDeleteShipment(id){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.collection) + '/records/' + id;
-  const res = await fetch(url, { method:'DELETE' });
+  const res = await CSBAuth.authedFetch(url, { method:'DELETE' });
   if(!res.ok && res.status !== 404) throw new Error('PocketBase delete HTTP ' + res.status);
 }
 async function pbFetchAllShipments(){
   let page = 1, all = [];
   while(true){
     const url = pbBase() + `?perPage=200&page=${page}`;
-    const res = await fetch(url);
+    const res = await CSBAuth.authedFetch(url);
     if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
     const json = await res.json();
     const items = json.items || [];
@@ -1330,7 +1330,7 @@ function appSettingsBase(){
 async function fetchSharedSetting(key){
   try{
     const filter = encodeURIComponent(`settings_key='${key}'`);
-    const res = await fetch(appSettingsBase() + `?filter=(${filter})`);
+    const res = await CSBAuth.authedFetch(appSettingsBase() + `?filter=(${filter})`);
     if(!res.ok) return null;
     const json = await res.json();
     const rec = (json.items && json.items[0]) || null;
@@ -1341,14 +1341,14 @@ async function fetchSharedSetting(key){
 async function saveSharedSetting(key, value){
   try{
     const filter = encodeURIComponent(`settings_key='${key}'`);
-    const res = await fetch(appSettingsBase() + `?filter=(${filter})`);
+    const res = await CSBAuth.authedFetch(appSettingsBase() + `?filter=(${filter})`);
     const json = res.ok ? await res.json() : { items: [] };
     const rec = (json.items && json.items[0]) || null;
     const body = { settings_key: key, settings_value: JSON.stringify(value) };
     if(rec){
-      await fetch(appSettingsBase() + '/' + rec.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      await CSBAuth.authedFetch(appSettingsBase() + '/' + rec.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     } else {
-      await fetch(appSettingsBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      await CSBAuth.authedFetch(appSettingsBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     }
   }catch(e){ console.warn('Impossible de sauvegarder le réglage partagé', key, e); }
 }
@@ -5231,20 +5231,20 @@ function docBase(){
 }
 async function docFetchByQuotation(quotationId){
   const filter = encodeURIComponent(`quotation_id='${quotationId}'`);
-  const res = await fetch(docBase() + `?filter=(${filter})&sort=-created`);
+  const res = await CSBAuth.authedFetch(docBase() + `?filter=(${filter})&sort=-created`);
   if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
   const json = await res.json();
   return json.items || [];
 }
 async function docCreate(body){
-  const res = await fetch(docBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const res = await CSBAuth.authedFetch(docBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   if(!res.ok) throw new Error('PocketBase create HTTP ' + res.status + ' — ' + (await res.text()).slice(0,300));
   return await res.json();
 }
 async function docDelete(id){
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.docsCollection || 'devis_documents') + '/records/' + id;
-  const res = await fetch(url, { method:'DELETE' });
+  const res = await CSBAuth.authedFetch(url, { method:'DELETE' });
   if(!res.ok && res.status !== 404) throw new Error('PocketBase delete HTTP ' + res.status);
 }
 

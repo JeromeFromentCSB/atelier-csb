@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.11', items: [
+    "Sécurité : les données PocketBase (commandes, casaques, réglages…) exigent désormais un compte connecté, plus d'accès public",
+    "Accès à distance : bascule automatique sur Tailscale si le réseau local de l'atelier n'est pas joignable",
+  ]},
   { v: '0.2.10', items: [
     "Possibilité d'ouvrir 2 fenêtres de l'appli en même temps",
     "Réglages Colissimo et France Express désormais partagés entre tous les postes via PocketBase (compte Axonaut et email restent par poste)",

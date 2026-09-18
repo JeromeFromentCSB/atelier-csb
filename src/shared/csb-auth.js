@@ -21,19 +21,46 @@
 (function (global) {
   const PB_URL_KEY = 'csb_pb_url';
   const DEFAULT_PB_URL = 'http://192.168.1.142:8090';
+  // Adresse Tailscale du NAS : jointe même hors du réseau de l'atelier (4G, autre wifi…), sans
+  // ouvrir aucun port. N'est utilisée que si l'adresse locale ci-dessus ne répond pas.
+  const FALLBACK_PB_URL = 'http://100.126.231.122:8090';
   const USERS_COLLECTION = 'csb_users';
 
-  function getPbUrl() {
+  function getConfiguredPbUrl() {
     return localStorage.getItem(PB_URL_KEY) || DEFAULT_PB_URL;
   }
+  // Adresse effectivement utilisée par toute l'appli (shell + modules) : démarre sur l'adresse
+  // configurée (locale par défaut), puis bascule automatiquement sur l'adresse Tailscale si la
+  // première ne répond pas — pour ne pas avoir à changer manuellement de réglage entre le
+  // bureau et l'extérieur. Désactivé si l'utilisateur a lui-même saisi une URL personnalisée.
+  let effectivePbUrl = getConfiguredPbUrl();
+  function getPbUrl() {
+    return effectivePbUrl;
+  }
   function setPbUrl(url) {
-    localStorage.setItem(PB_URL_KEY, url.trim().replace(/\/+$/, ''));
+    const clean = url.trim().replace(/\/+$/, '');
+    localStorage.setItem(PB_URL_KEY, clean);
+    effectivePbUrl = clean;
+    pb.baseUrl = clean;
   }
 
-  const pb = new PocketBase(getPbUrl());
+  const pb = new PocketBase(effectivePbUrl);
   // Rafraîchit automatiquement le token tant qu'il reste valide, pour éviter
   // une déconnexion silencieuse en plein milieu d'une session de travail.
   pb.autoCancellation(false);
+
+  (async function ensureReachablePbUrl(){
+    if (localStorage.getItem(PB_URL_KEY)) return; // URL personnalisée : on ne touche à rien
+    try{
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 1200);
+      const res = await fetch(effectivePbUrl.replace(/\/+$/, '') + '/api/health', { signal: ctrl.signal });
+      clearTimeout(t);
+      if (res.ok) return;
+    }catch(e){}
+    effectivePbUrl = FALLBACK_PB_URL;
+    pb.baseUrl = FALLBACK_PB_URL;
+  })();
 
   function currentUser() {
     return pb.authStore.isValid ? pb.authStore.record : null;
@@ -79,6 +106,20 @@
     }
   }
 
+  // Remplacement direct de fetch() pour les appels REST manuels vers PocketBase (les modules
+  // qui n'utilisent pas le SDK pb.collection(...) construisent leurs URLs eux-mêmes) : ajoute
+  // l'en-tête d'authentification de la session en cours, indispensable dès qu'une collection
+  // PocketBase exige un compte connecté au lieu d'un accès public.
+  function authedFetch(url, options) {
+    const opts = Object.assign({}, options);
+    const headers = Object.assign({}, opts.headers);
+    if (pb.authStore.isValid && pb.authStore.token) {
+      headers['Authorization'] = pb.authStore.token;
+    }
+    opts.headers = headers;
+    return fetch(url, opts);
+  }
+
   global.CSBAuth = {
     pb,
     getPbUrl,
@@ -91,6 +132,7 @@
     isAdmin,
     can,
     hasModuleAccess,
+    authedFetch,
     USERS_COLLECTION
   };
 })(window);
