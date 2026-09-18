@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.12', items: [
+    "Correction : les réglages partagés (Colissimo, France Express…) ne se chargeaient pas depuis un poste à distance si la bascule automatique vers Tailscale n'avait pas eu le temps de se faire",
+  ]},
   { v: '0.2.11', items: [
     "Sécurité : les données PocketBase (commandes, casaques, réglages…) exigent désormais un compte connecté, plus d'accès public",
     "Accès à distance : bascule automatique sur Tailscale si le réseau local de l'atelier n'est pas joignable",

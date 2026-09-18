@@ -110,14 +110,33 @@
   // qui n'utilisent pas le SDK pb.collection(...) construisent leurs URLs eux-mêmes) : ajoute
   // l'en-tête d'authentification de la session en cours, indispensable dès qu'une collection
   // PocketBase exige un compte connecté au lieu d'un accès public.
-  function authedFetch(url, options) {
+  //
+  // Les URLs sont construites par chaque module à partir de getPbUrl() — si cet appel a lieu
+  // avant que le test de jonabilité au démarrage (ci-dessus) ait fini de trancher, l'URL peut
+  // encore pointer sur l'adresse locale même quand elle est injoignable (poste à distance). Pour
+  // ne pas dépendre de ce minutage, on retente automatiquement une fois sur l'adresse Tailscale
+  // dès qu'une requête échoue au niveau réseau, et on retient l'adresse qui a marché pour la
+  // suite de la session (tous les prochains getPbUrl() en profitent aussitôt).
+  async function authedFetch(url, options) {
     const opts = Object.assign({}, options);
     const headers = Object.assign({}, opts.headers);
     if (pb.authStore.isValid && pb.authStore.token) {
       headers['Authorization'] = pb.authStore.token;
     }
     opts.headers = headers;
-    return fetch(url, opts);
+    try {
+      return await fetch(url, opts);
+    } catch (networkErr) {
+      const customUrl = localStorage.getItem(PB_URL_KEY);
+      if (!customUrl && effectivePbUrl !== FALLBACK_PB_URL && url.indexOf(effectivePbUrl) === 0) {
+        const fallbackUrl = FALLBACK_PB_URL + url.slice(effectivePbUrl.length);
+        const res = await fetch(fallbackUrl, opts);
+        effectivePbUrl = FALLBACK_PB_URL;
+        pb.baseUrl = FALLBACK_PB_URL;
+        return res;
+      }
+      throw networkErr;
+    }
   }
 
   global.CSBAuth = {
