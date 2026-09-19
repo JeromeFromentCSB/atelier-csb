@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.13', items: [
+    "Nouvel onglet Fournisseurs : mini-navigateur à onglets pour TopTex, Valento, Imbretex, Falk & Ross et Safety Jogger (liste modifiable avec ✎)",
+    "Fournisseurs : identifiants mémorisables par site (bouton 🔑, chiffrés sur le poste), pré-remplis et validés automatiquement à l'ouverture de la page de connexion",
+  ]},
   { v: '0.2.12', items: [
     "Correction : les réglages partagés (Colissimo, France Express…) ne se chargeaient pas depuis un poste à distance si la bascule automatique vers Tailscale n'avait pas eu le temps de se faire",
   ]},

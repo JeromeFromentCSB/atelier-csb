@@ -143,6 +143,18 @@ input:focus{outline:2px solid var(--spool-gold); outline-offset:1px;}
   border-radius:4px; line-height:1;
 }
 .webview-tab-close:hover{background:var(--paper-dim); color:var(--rouge);}
+.webview-toolbar{display:flex; align-items:center; gap:6px; padding:6px 8px; background:#fff; border-bottom:1px solid var(--line); flex:none;}
+.webview-nav-btn{border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 9px; cursor:pointer; font-size:14px; color:var(--ink);}
+.webview-nav-btn:hover{background:var(--paper-dim);}
+.webview-url{flex:1; min-width:0; border:1px solid var(--line); border-radius:6px; padding:5px 10px; font-size:13px;}
+.sites-editor-overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:9999;}
+.sites-editor{background:#fff; border-radius:10px; padding:18px 20px; width:520px; max-width:92vw; display:flex; flex-direction:column; gap:10px; box-shadow:0 10px 40px rgba(0,0,0,.3);}
+.sites-editor h3{margin:0; font-size:16px;}
+.sites-editor-hint{font-size:12px; color:#777;}
+.sites-editor textarea{min-height:150px; font-family:monospace; font-size:13px; border:1px solid var(--line); border-radius:6px; padding:8px;}
+.sites-editor-actions{display:flex; justify-content:flex-end; gap:8px;}
+.sites-editor-actions button{border:1px solid var(--line); background:#fff; border-radius:6px; padding:6px 14px; cursor:pointer;}
+.sites-editor-actions button.primary{background:var(--thread); color:#fff; border-color:var(--thread);}
 .webview-pages{position:relative; flex:1; min-height:0; display:flex; flex-direction:column;}
 .webview-pages webview{flex:1; width:100%; min-height:0; border:none; background:#fff;}
 .main-placeholder{

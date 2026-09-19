@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { autoUpdater } = require('electron-updater');
@@ -177,6 +177,35 @@ app.on('window-all-closed', () => {
 ipcMain.handle('csb:get-config', () => readConfig());
 ipcMain.handle('csb:set-config', (_event, partial) => writeConfig(partial));
 ipcMain.handle('csb:open-external', (_event, url) => shell.openExternal(url));
+
+// Identifiants des sites fournisseurs (onglet Fournisseurs) : chiffrés avec le trousseau du
+// système (Windows DPAPI / Keychain Mac) via safeStorage, propres à ce poste — jamais envoyés
+// vers PocketBase ni écrits en clair dans le fichier de config.
+function siteCredsRead() {
+  return readConfig().site_creds || {};
+}
+ipcMain.handle('csb:cred-get', (_event, origin) => {
+  const entry = siteCredsRead()[origin];
+  if (!entry || !safeStorage.isEncryptionAvailable()) return null;
+  try {
+    return { username: entry.username, password: safeStorage.decryptString(Buffer.from(entry.password, 'base64')) };
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle('csb:cred-set', (_event, origin, username, password) => {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error("Le chiffrement du système n'est pas disponible sur ce poste.");
+  const all = siteCredsRead();
+  all[origin] = { username, password: safeStorage.encryptString(password).toString('base64') };
+  writeConfig({ site_creds: all });
+  return true;
+});
+ipcMain.handle('csb:cred-delete', (_event, origin) => {
+  const all = siteCredsRead();
+  delete all[origin];
+  writeConfig({ site_creds: all });
+  return true;
+});
 ipcMain.handle('csb:install-update', () => autoUpdater.quitAndInstall());
 ipcMain.handle('csb:app-version', () => app.getVersion());
 

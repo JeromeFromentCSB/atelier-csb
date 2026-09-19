@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('csbHost', {
   emailSetFlags: (uid, mailbox, addFlags, removeFlags) => ipcRenderer.invoke('csb:email-set-flags', { uid, mailbox, addFlags, removeFlags }),
   emailMoveToTrash: (uid, mailbox) => ipcRenderer.invoke('csb:email-move-to-trash', { uid, mailbox }),
   emailMoveToFolder: (uid, mailbox, targetPath) => ipcRenderer.invoke('csb:email-move-to-folder', { uid, mailbox, targetPath }),
+  credGet: (origin) => ipcRenderer.invoke('csb:cred-get', origin),
+  credSet: (origin, username, password) => ipcRenderer.invoke('csb:cred-set', origin, username, password),
+  credDelete: (origin) => ipcRenderer.invoke('csb:cred-delete', origin),
   onWebviewOpenTab: (callback) => {
     const listener = (_event, url) => callback(url);
     ipcRenderer.on('csb:webview-open-tab', listener);
