@@ -161,7 +161,19 @@
     if (placeholder) placeholder.remove();
 
     Object.keys(moduleFrames).forEach((id) => {
-      moduleFrames[id].style.display = id === mod.id ? 'block' : 'none';
+      const el = moduleFrames[id];
+      const isActive = id === mod.id;
+      el.style.display = isActive ? 'block' : 'none';
+      // Un module iframe masqué (display:none) n'a plus de mise en page réelle : si son propre
+      // code recalcule des hauteurs sur cette période (ex: ResizeObserver déclenché par un
+      // polling en arrière-plan), il capte des valeurs fausses (ex: --header-h) qui restent
+      // figées ensuite. On force un 'resize' au ré-affichage pour que le module se recalcule.
+      if (isActive && el.tagName === 'IFRAME' && el.contentWindow) {
+        try { el.contentWindow.dispatchEvent(new Event('resize')); } catch (e) {}
+        requestAnimationFrame(() => {
+          try { el.contentWindow.dispatchEvent(new Event('resize')); } catch (e) {}
+        });
+      }
     });
 
     if (!moduleFrames[mod.id]) {

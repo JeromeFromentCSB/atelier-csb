@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.15', items: [
+    "Correction : en revenant sur l'onglet Gestion Commande après être passé sur un autre onglet, la fenêtre restait parfois réduite à une petite bande en haut au lieu d'occuper toute la hauteur",
+  ]},
   { v: '0.2.14', items: [
     "Gestion Commande : une commande peut désormais avoir plusieurs colis/étiquettes (bouton « Étiquette supplémentaire », chaque colis avec ses propres impression/CN23/facture/refaire/supprimer)",
   ]},
