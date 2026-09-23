@@ -34,6 +34,7 @@
       { key: 'export', label: 'Exporter une sauvegarde' },
       { key: 'import', label: 'Importer une sauvegarde' }
     ] },
+    { id: 'simulateur', label: 'Simulateur marquage', icon: '👕', path: '../../modules/simulateur/index.html', perms: [] },
     { id: 'prospection', label: 'Prospection', icon: '📍', path: '../../modules/prospection/index.html', perms: [] },
     { id: 'pointage', label: 'Pointage', icon: '🕒', path: '../../modules/pointage/index.html', perms: [] },
     { id: 'email', label: 'Email', icon: '✉️', path: '../../modules/email/index.html', perms: [] },

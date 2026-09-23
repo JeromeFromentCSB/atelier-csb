@@ -742,10 +742,10 @@
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn ghost" id="blViewQuoteBtn" style="display:none;">📄 Voir le devis</button>
           <button class="btn ghost" id="blFabricationBtn" style="display:none;">🏭 Bon de fabrication</button>
-          <span id="blTrackingLabel" style="font-family:sans-serif; font-size:.8rem; color:var(--muted);"></span>
-          <button class="btn ghost" id="blEtiquetteBtn" style="display:none;"></button>
-          <span id="blEtiquetteExtraBtns" style="display:inline-flex; gap:4px;"></span>
-          <button class="iconbtn iconbtn-delete" id="blEtiquetteDeleteBtn" style="display:none;" title="Supprimer l'étiquette et repasser à « à traiter »">🗑</button>
+        </div>
+        <div id="blShipmentsBox" style="margin-bottom:14px;">
+          <div id="blShipmentsList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;"></div>
+          <button class="btn ghost" id="blAddShipmentBtn" style="display:none;"></button>
         </div>
         <div id="blLinesList"></div>
         <div class="col-result" id="blResult" style="margin-top:12px;"></div>
@@ -1700,39 +1700,49 @@ document.getElementById('colAddZip').addEventListener('input', recomputeTranspor
 // ---------- Fenêtre de préparation d'étiquette Colissimo ----------
 let colModalRecord = null;
 let carrierChoiceRecord = null;
-function openCarrierChoice(r){
+// Fiche PocketBase (un envoi/colis précis) à écraser plutôt que d'en créer un nouveau — posée
+// par le bouton « Refaire » d'un colis existant dans la liste du BL. Laissée à null pour
+// « + Étiquette » : une commande peut avoir plusieurs colis, donc plusieurs envois.
+let carrierChoiceTargetShipment = null;
+function openCarrierChoice(r, targetShipment){
   if(!CSBAuth.can('axonaut', 'etiquettes')){
     alert("Accès à la gestion des étiquettes non autorisé pour cet utilisateur.");
     return;
   }
   carrierChoiceRecord = r;
+  carrierChoiceTargetShipment = targetShipment || null;
   document.getElementById('carrierChoiceOverlay').style.display = 'flex';
 }
 function closeCarrierChoice(){
   document.getElementById('carrierChoiceOverlay').style.display = 'none';
   carrierChoiceRecord = null;
+  carrierChoiceTargetShipment = null;
 }
 document.getElementById('carrierChoiceClose').addEventListener('click', closeCarrierChoice);
 document.getElementById('carrierChoiceOverlay').addEventListener('click', (e) => { if(e.target.id === 'carrierChoiceOverlay') closeCarrierChoice(); });
 document.getElementById('carrierChoiceColissimo').addEventListener('click', async () => {
   const r = carrierChoiceRecord;
+  const target = carrierChoiceTargetShipment;
   closeCarrierChoice();
-  if(r) await openColissimoModal(r);
+  if(r) await openColissimoModal(r, target);
 });
 document.getElementById('carrierChoiceFranceExpress').addEventListener('click', () => {
   const r = carrierChoiceRecord;
+  const target = carrierChoiceTargetShipment;
   closeCarrierChoice();
-  if(r) openFeModal(r);
+  if(r) openFeModal(r, target);
 });
 
 // ================== France Express (GEODIS) ==================
 let feModalRecord = null;
+let feModalTargetShipment = null;
 function splitContactNameFe(full){
   const parts = (full || '').trim().split(/\s+/);
   return { firstName: parts.slice(0, -1).join(' '), lastName: parts.slice(-1).join(' ') || full || '' };
 }
-function openFeModal(r){
+function openFeModal(r, targetShipment){
   feModalRecord = r;
+  feModalTargetShipment = targetShipment || null;
   document.getElementById('feModalSub').textContent = r.numeroCommande + (r.clientCompany ? ' — ' + r.clientCompany : '');
   document.getElementById('feDestNom').value = r.nomSoc || r.clientCompany || '';
   document.getElementById('feDestAdresse').value = r.adresse || '';
@@ -1751,6 +1761,7 @@ function openFeModal(r){
 function closeFeModal(){
   document.getElementById('feModalOverlay').style.display = 'none';
   feModalRecord = null;
+  feModalTargetShipment = null;
 }
 document.getElementById('feModalClose').addEventListener('click', closeFeModal);
 document.getElementById('feModalOverlay').addEventListener('click', (e) => { if(e.target.id === 'feModalOverlay') closeFeModal(); });
@@ -1860,7 +1871,7 @@ document.getElementById('feGenerateBtn').addEventListener('click', async () => {
       tracking: retour.noSuivi || retour.noRecepisse || '',
       labelGenerated: true,
       labelPdfBase64: labelDoc ? labelDoc.contenu : ''
-    });
+    }, feModalTargetShipment);
     result.className = 'col-result ok';
     result.textContent = '✔ Étiquette générée — n° de suivi ' + (retour.noSuivi || retour.noRecepisse || '');
     if(labelDoc && labelDoc.contenu) openPdfInNewTab(labelDoc.contenu, 'application/pdf');
@@ -1873,12 +1884,14 @@ document.getElementById('feGenerateBtn').addEventListener('click', async () => {
   btn.disabled = false;
 });
 
-async function openColissimoModal(r){
+let colModalTargetShipment = null;
+async function openColissimoModal(r, targetShipment){
   if(!CSBAuth.can('axonaut', 'etiquettes')){
     alert("Accès à la gestion des étiquettes non autorisé pour cet utilisateur.");
     return;
   }
   colModalRecord = r;
+  colModalTargetShipment = targetShipment || null;
   const cfg = await getColConfig();
   const isoGuess = countryToISO(r.pays);
   if(r.pays && !isoGuess){
@@ -1936,6 +1949,7 @@ async function openColissimoModal(r){
 function closeColissimoModal(){
   document.getElementById('colModalOverlay').classList.remove('show');
   colModalRecord = null;
+  colModalTargetShipment = null;
 }
 function toggleCustomsExplanations(){
   const needsExplanations = document.getElementById('colCustCategory').value === '6';
@@ -2258,6 +2272,7 @@ document.getElementById('colGenerateBtn').addEventListener('click', async () => 
       parsed.parcelNumber || '';
 
     let finalLabel = '';
+    let pendingLocalLabel = null;
     if(parsed.labelBase64){
       finalLabel = parsed.labelBase64;
       let finalCn23 = parsed.cn23Base64 || null;
@@ -2273,15 +2288,18 @@ document.getElementById('colGenerateBtn').addEventListener('click', async () => 
         try{ finalProforma = await buildInvoicePdf(form, cfg, r); proformaContentType = 'application/pdf'; }
         catch(e){ console.warn('Echec génération facture proforma', e); }
       }
-      await idbSetLabel(labelKeyFor(r), {
+      pendingLocalLabel = {
         base64: finalLabel, contentType: parsed.labelContentType || 'application/pdf',
         cn23Base64: finalCn23, cn23ContentType: parsed.cn23ContentType || 'application/pdf',
         proformaBase64: finalProforma, proformaContentType,
         parcelNumber, date: new Date().toISOString()
-      });
+      };
     }
 
-    await saveShipment(r, { tracking: parcelNumber || r.tracking, labelGenerated: true, labelPdfBase64: finalLabel || '' });
+    await saveShipment(r, { tracking: parcelNumber || r.tracking, labelGenerated: true, labelPdfBase64: finalLabel || '' }, colModalTargetShipment);
+    // La clé locale (IndexedDB) est par ENVOI (colis), pas par commande — on l'enregistre donc
+    // seulement une fois l'id PocketBase du colis connu (créé ci-dessus si c'est un nouveau colis).
+    if(pendingLocalLabel) await idbSetLabel(labelKeyFor(r, r._pbId), pendingLocalLabel);
 
     resultBox.className = 'col-result ok';
     resultBox.textContent = '✔ Étiquette générée' + (parcelNumber ? ' — n° colis : ' + parcelNumber : '') +
@@ -2304,7 +2322,10 @@ document.getElementById('colGenerateBtn').addEventListener('click', async () => 
 // ---------- IndexedDB : étiquette / CN23 / facture, par commande ----------
 const LABEL_DB_NAME = 'csb_envoi_axonaut_labels';
 const LABEL_STORE = 'labels';
-function labelKeyFor(r){ return 'ax_' + r.contractId; }
+// Une clé par ENVOI (colis) et non plus par commande — une commande peut avoir plusieurs
+// colis/étiquettes. shipmentId omis = clé historique (avant le multi-colis), gardée pour
+// retrouver les étiquettes déjà générées avant cette évolution.
+function labelKeyFor(r, shipmentId){ return shipmentId ? ('ax_' + r.contractId + '_' + shipmentId) : ('ax_' + r.contractId); }
 function openLabelDB(){
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(LABEL_DB_NAME, 1);
@@ -2640,7 +2661,10 @@ function openPdfInNewTab(base64, contentType){
 }
 
 // ---------- Sauvegarde de l'envoi dans PocketBase ----------
-async function saveShipment(r, patch){
+// targetShipment : fiche PocketBase existante à écraser (cas « Refaire » sur un colis précis) ;
+// laissé vide, un NOUVEL envoi est créé (cas « + Étiquette » — une commande peut avoir
+// plusieurs colis, donc plusieurs envois/étiquettes).
+async function saveShipment(r, patch, targetShipment){
   Object.assign(r, patch);
   const fullBody = {
     contract_id: String(r.contractId), numero_commande: r.numeroCommande, name: r.numeroCommande,
@@ -2651,9 +2675,20 @@ async function saveShipment(r, patch){
     date_generation: r.labelGenerated ? new Date().toISOString() : '',
     label_pdf: r.labelPdfBase64 || '' // sauvegarde le PDF dans PocketBase pour un accès multi-appareils
   };
+  const targetId = targetShipment ? targetShipment.id : null;
+  async function persist(body){
+    if(targetId){
+      await pbPatch(targetId, body);
+      const s = r.shipments.find(x => x.id === targetId);
+      if(s) Object.assign(s, body, { id: targetId });
+      return targetId;
+    }
+    const created = await pbCreate(body);
+    r.shipments = (r.shipments || []).concat(Object.assign({}, body, { id: created.id, created: created.created }));
+    return created.id;
+  }
   try{
-    if(r._pbId){ await pbPatch(r._pbId, fullBody); }
-    else{ const created = await pbCreate(fullBody); r._pbId = created.id; }
+    r._pbId = await persist(fullBody);
     setSyncStatus('on', 'PocketBase à jour.');
   }catch(e){
     // Échec possible à cause de label_pdf (limite de longueur du champ dans PocketBase, par
@@ -2661,8 +2696,7 @@ async function saveShipment(r, patch){
     console.warn('Échec de sauvegarde complète, nouvelle tentative sans label_pdf', e);
     const bodyWithoutPdf = Object.assign({}, fullBody, { label_pdf: '' });
     try{
-      if(r._pbId){ await pbPatch(r._pbId, bodyWithoutPdf); }
-      else{ const created = await pbCreate(bodyWithoutPdf); r._pbId = created.id; }
+      r._pbId = await persist(bodyWithoutPdf);
       setSyncStatus('off', "⚠ Suivi enregistré, mais le PDF n'a pas pu être sauvegardé dans PocketBase (vérifie la limite de longueur du champ label_pdf).");
     }catch(e2){
       console.warn('Echec sauvegarde PocketBase', e2);
@@ -3492,43 +3526,7 @@ async function openBlModal(r){
     updateFabricationBtnLabel(r.contractId);
   };
 
-  const trackingLabel = document.getElementById('blTrackingLabel');
-  trackingLabel.textContent = (r.labelGenerated && r.tracking) ? ('N° de suivi : ' + r.tracking) : '';
-  document.getElementById('blEtiquetteExtraBtns').innerHTML = '';
-  if(r.labelGenerated) loadBlEtiquetteExtraBtns(r);
-  const etiquetteBtn = document.getElementById('blEtiquetteBtn');
-  const etiquetteDeleteBtn = document.getElementById('blEtiquetteDeleteBtn');
-  const canEtiquettes = isAdminUser() && typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'etiquettes');
-  if(!canEtiquettes){
-    etiquetteBtn.style.display = 'none';
-    etiquetteDeleteBtn.style.display = 'none';
-  }else if(!r.blReady && !r.labelGenerated){
-    etiquetteBtn.style.display = 'inline-flex';
-    etiquetteBtn.disabled = true;
-    etiquetteBtn.textContent = 'BL à valider avant étiquette';
-    etiquetteDeleteBtn.style.display = 'none';
-  }else{
-    etiquetteBtn.style.display = 'inline-flex';
-    etiquetteBtn.disabled = false;
-    etiquetteBtn.textContent = (r.labelGenerated ? '✉ Refaire' : '✉ Étiquette');
-    etiquetteBtn.onclick = () => openCarrierChoice(r);
-    etiquetteDeleteBtn.style.display = r.labelGenerated ? 'inline-flex' : 'none';
-    etiquetteDeleteBtn.onclick = async () => {
-      if(!confirm(`Supprimer l'étiquette de la commande « ${r.numeroCommande} » ?\n\nLe numéro de suivi ${r.tracking || ''} et le PDF seront supprimés. La commande repassera à « à traiter ».`)) return;
-      etiquetteDeleteBtn.disabled = true;
-      try{
-        if(r._pbId) await pbDeleteShipment(r._pbId);
-        await idbDeleteLabel(labelKeyFor(r));
-        r._pbId = null; r.tracking = ''; r.labelGenerated = false; r.pbLabelPdf = '';
-        setSyncStatus('on', `Étiquette de « ${r.numeroCommande} » supprimée.`);
-        render();
-        openBlModal(r);
-      }catch(e){
-        alert('Erreur lors de la suppression : ' + e.message);
-        etiquetteDeleteBtn.disabled = false;
-      }
-    };
-  }
+  renderBlShipments(r);
 
   try{
     // On relit le contrat en direct pour être sûr d'avoir l'id du devis lié (pas garanti présent
@@ -3916,24 +3914,25 @@ async function refreshAll(){
     try{ shipments = await pbFetchAllShipments(); }
     catch(e){ shipmentsError = e; console.warn('PocketBase indisponible', e); }
 
-    // Fusion robuste : clés converties en texte des deux côtés, et en cas de doublon pour une
-    // même commande, on garde en priorité l'enregistrement qui a un numéro de suivi renseigné
-    // (il n'y a pas de champ booléen dédié : "généré" = numero_suivi non vide).
+    // Une commande peut avoir plusieurs envois (plusieurs colis = plusieurs étiquettes) : on
+    // regroupe donc TOUTES les fiches PocketBase de ce contrat, triées par date de création,
+    // au lieu de n'en garder qu'une. Pour compatibilité avec le reste du code (statut de la
+    // ligne, etc.), r.tracking/r._pbId/r.labelGenerated continuent de désigner le DERNIER envoi.
     const byContract = {};
     shipments.forEach(s => {
       const key = String(s.contract_id);
-      const existing = byContract[key];
-      const hasTracking = !!(s.numero_suivi && s.numero_suivi.trim());
-      const existingHasTracking = existing ? !!(existing.numero_suivi && existing.numero_suivi.trim()) : false;
-      if(!existing || (hasTracking && !existingHasTracking)) byContract[key] = s;
+      (byContract[key] || (byContract[key] = [])).push(s);
     });
     contracts.forEach(r => {
-      const s = byContract[String(r.contractId)];
-      if(s){
-        r._pbId = s.id;
-        r.tracking = s.numero_suivi || '';
-        r.labelGenerated = !!(s.numero_suivi && s.numero_suivi.trim());
-        r.pbLabelPdf = s.label_pdf || '';
+      const list = (byContract[String(r.contractId)] || []).slice()
+        .sort((a,b) => (a.created || '').localeCompare(b.created || ''));
+      r.shipments = list;
+      const last = list[list.length - 1];
+      if(last){
+        r._pbId = last.id;
+        r.tracking = last.numero_suivi || '';
+        r.labelGenerated = list.some(s => s.numero_suivi && s.numero_suivi.trim());
+        r.pbLabelPdf = last.label_pdf || '';
       }
     });
 
@@ -4096,30 +4095,92 @@ function render(){
   });
 
 }
-// Boutons de téléchargement (étiquette / douane / facture) du panneau bon de livraison,
-// ajoutés dynamiquement si un fichier existe pour cette commande. Appelé depuis openBlModal.
-async function loadBlEtiquetteExtraBtns(r){
-  const box = document.getElementById('blEtiquetteExtraBtns');
-  box.innerHTML = '';
-  let lbl = await idbGetLabel(labelKeyFor(r));
-  if(!lbl && r.pbLabelPdf){ lbl = { base64: r.pbLabelPdf, contentType: 'application/pdf' }; }
-  if(!lbl || currentBlRecord !== r) return; // la sélection a changé entre-temps
-  const safeName = (r.numeroCommande || 'etiquette').replace(/[^a-z0-9]+/gi, '_');
-  const dlBtn = document.createElement('button');
-  dlBtn.className = 'iconbtn iconbtn-download'; dlBtn.title = "Ouvrir l'étiquette (impression)"; dlBtn.textContent = '🖨️';
-  dlBtn.addEventListener('click', () => openPdfInNewTab(lbl.base64, lbl.contentType || 'application/pdf'));
-  box.appendChild(dlBtn);
-  if(lbl.cn23Base64){
-    const cn23Btn = document.createElement('button');
-    cn23Btn.className = 'iconbtn'; cn23Btn.title = 'Télécharger le CN23 (douane)'; cn23Btn.textContent = '🛃';
-    cn23Btn.addEventListener('click', () => downloadBase64(lbl.cn23Base64, lbl.cn23ContentType || 'application/pdf', safeName + '_cn23.pdf'));
-    box.appendChild(cn23Btn);
+// Liste des colis/envois (étiquettes) d'une commande dans le panneau BL — une commande peut
+// avoir plusieurs colis, donc plusieurs envois PocketBase distincts (r.shipments). Chaque ligne
+// a ses propres boutons (imprimer/CN23/facture/refaire/supprimer) ; « + Étiquette » en bas crée
+// toujours un NOUVEL envoi plutôt que d'écraser les précédents.
+async function renderBlShipments(r){
+  const listEl = document.getElementById('blShipmentsList');
+  const addBtn = document.getElementById('blAddShipmentBtn');
+  listEl.innerHTML = '';
+  const canEtiquettes = isAdminUser() && typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'etiquettes');
+  const shipments = (r.shipments || []).filter(s => s.numero_suivi && s.numero_suivi.trim());
+
+  if(!canEtiquettes){
+    addBtn.style.display = 'none';
+  }else if(!r.blReady && !shipments.length){
+    addBtn.style.display = 'inline-flex';
+    addBtn.disabled = true;
+    addBtn.textContent = 'BL à valider avant étiquette';
+    addBtn.onclick = null;
+  }else{
+    addBtn.style.display = 'inline-flex';
+    addBtn.disabled = false;
+    addBtn.textContent = shipments.length ? '✉ Étiquette supplémentaire' : '✉ Étiquette';
+    addBtn.onclick = () => openCarrierChoice(r, null);
   }
-  if(lbl.proformaBase64){
-    const invBtn = document.createElement('button');
-    invBtn.className = 'iconbtn'; invBtn.title = 'Ouvrir la facture proforma'; invBtn.textContent = '🧾';
-    invBtn.addEventListener('click', () => openPdfInNewTab(lbl.proformaBase64, lbl.proformaContentType || 'application/pdf'));
-    box.appendChild(invBtn);
+
+  for(let i = 0; i < shipments.length; i++){
+    const s = shipments[i];
+    if(currentBlRecord !== r) return; // la sélection a changé pendant le chargement
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.8rem; flex-wrap:wrap;';
+    const label = document.createElement('span');
+    label.style.color = 'var(--muted)';
+    label.textContent = `Colis ${i+1} — N° de suivi : ${s.numero_suivi}`;
+    row.appendChild(label);
+
+    let lbl = await idbGetLabel(labelKeyFor(r, s.id));
+    if(!lbl && s.label_pdf) lbl = { base64: s.label_pdf, contentType: 'application/pdf' };
+    const safeName = (r.numeroCommande || 'etiquette').replace(/[^a-z0-9]+/gi, '_') + '_colis' + (i+1);
+    if(lbl){
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'iconbtn iconbtn-download'; dlBtn.title = "Ouvrir l'étiquette (impression)"; dlBtn.textContent = '🖨️';
+      dlBtn.addEventListener('click', () => openPdfInNewTab(lbl.base64, lbl.contentType || 'application/pdf'));
+      row.appendChild(dlBtn);
+      if(lbl.cn23Base64){
+        const cn23Btn = document.createElement('button');
+        cn23Btn.className = 'iconbtn'; cn23Btn.title = 'Télécharger le CN23 (douane)'; cn23Btn.textContent = '🛃';
+        cn23Btn.addEventListener('click', () => downloadBase64(lbl.cn23Base64, lbl.cn23ContentType || 'application/pdf', safeName + '_cn23.pdf'));
+        row.appendChild(cn23Btn);
+      }
+      if(lbl.proformaBase64){
+        const invBtn = document.createElement('button');
+        invBtn.className = 'iconbtn'; invBtn.title = 'Ouvrir la facture proforma'; invBtn.textContent = '🧾';
+        invBtn.addEventListener('click', () => openPdfInNewTab(lbl.proformaBase64, lbl.proformaContentType || 'application/pdf'));
+        row.appendChild(invBtn);
+      }
+    }
+    if(canEtiquettes){
+      const redoBtn = document.createElement('button');
+      redoBtn.className = 'iconbtn'; redoBtn.title = 'Refaire ce colis'; redoBtn.textContent = '↻';
+      redoBtn.addEventListener('click', () => openCarrierChoice(r, s));
+      row.appendChild(redoBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'iconbtn iconbtn-delete'; delBtn.title = 'Supprimer ce colis'; delBtn.textContent = '🗑';
+      delBtn.addEventListener('click', async () => {
+        if(!confirm(`Supprimer le colis ${i+1} (n° ${s.numero_suivi}) de la commande « ${r.numeroCommande} » ?`)) return;
+        delBtn.disabled = true;
+        try{
+          await pbDeleteShipment(s.id);
+          await idbDeleteLabel(labelKeyFor(r, s.id));
+          r.shipments = (r.shipments || []).filter(x => x.id !== s.id);
+          const last = r.shipments[r.shipments.length - 1];
+          r._pbId = last ? last.id : null;
+          r.tracking = last ? (last.numero_suivi || '') : '';
+          r.labelGenerated = r.shipments.some(x => x.numero_suivi && x.numero_suivi.trim());
+          setSyncStatus('on', `Colis supprimé de « ${r.numeroCommande} ».`);
+          render();
+          openBlModal(r);
+        }catch(e){
+          alert('Erreur lors de la suppression : ' + e.message);
+          delBtn.disabled = false;
+        }
+      });
+      row.appendChild(delBtn);
+    }
+    listEl.appendChild(row);
   }
 }
 

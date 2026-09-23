@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.14', items: [
+    "Gestion Commande : une commande peut désormais avoir plusieurs colis/étiquettes (bouton « Étiquette supplémentaire », chaque colis avec ses propres impression/CN23/facture/refaire/supprimer)",
+  ]},
   { v: '0.2.13', items: [
     "Nouvel onglet Fournisseurs : mini-navigateur à onglets pour TopTex, Valento, Imbretex, Falk & Ross et Safety Jogger (liste modifiable avec ✎)",
     "Fournisseurs : identifiants mémorisables par site (bouton 🔑, chiffrés sur le poste), pré-remplis et validés automatiquement à l'ouverture de la page de connexion",
