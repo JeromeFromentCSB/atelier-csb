@@ -69,6 +69,9 @@ input:focus{outline:2px solid var(--spool-gold); outline-offset:1px;}
 .nav-item .icon{font-size:15px;}
 .nav-item.locked{opacity:.4; cursor:not-allowed;}
 .nav-item.locked:hover{background:none; color:var(--ink-soft);}
+.nav-item.dragging{opacity:.35;}
+.nav-item.drag-over-before{box-shadow:inset 2.5px 0 0 var(--thread);}
+.nav-item.drag-over-after{box-shadow:inset -2.5px 0 0 var(--thread);}
 .nav-item .soon{
   font-size:8.5px; text-transform:uppercase; letter-spacing:.3px;
   color:var(--ink-soft); background:var(--paper-dim); padding:1px 5px; border-radius:10px;

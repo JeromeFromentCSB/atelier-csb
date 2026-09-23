@@ -130,19 +130,73 @@
     if (!userMenuWrap.contains(e.target)) userMenuDropdown.classList.remove('show');
   });
 
+  // Ordre des onglets : mémorisé par poste (comme les fournisseurs), pas synchronisé via
+  // PocketBase — c'est une préférence d'affichage personnelle, pas un réglage métier partagé.
+  const MODULE_ORDER_KEY = 'csb_module_order';
+  function loadModuleOrder() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODULE_ORDER_KEY));
+      if (!Array.isArray(saved)) return MODULES.slice();
+      const byId = new Map(MODULES.map((m) => [m.id, m]));
+      const ordered = saved.map((id) => byId.get(id)).filter(Boolean);
+      MODULES.forEach((m) => { if (!saved.includes(m.id)) ordered.push(m); });
+      return ordered.length === MODULES.length ? ordered : MODULES.slice();
+    } catch (e) { return MODULES.slice(); }
+  }
+  function saveModuleOrder(orderedMods) {
+    try { localStorage.setItem(MODULE_ORDER_KEY, JSON.stringify(orderedMods.map((m) => m.id))); } catch (e) {}
+  }
+  let moduleOrder = loadModuleOrder();
+  let draggedModId = null;
+
   function renderModuleNav() {
     moduleNav.innerHTML = '';
-    MODULES.forEach((mod) => {
+    moduleOrder.forEach((mod) => {
       const allowed = CSBAuth.hasModuleAccess(mod.id);
       const item = document.createElement('div');
       item.className = 'nav-item' + (mod.id === activeModuleId ? ' active' : '') + (allowed ? '' : ' locked');
       item.innerHTML = `<span class="icon">${mod.icon}</span><span>${mod.label}</span>` +
         (allowed ? '' : '<span class="soon">🔒</span>');
+      item.draggable = true;
+      item.dataset.modId = mod.id;
       if (allowed) {
-        item.addEventListener('click', () => openModule(mod));
+        item.addEventListener('click', () => { if (!item.classList.contains('dragging')) openModule(mod); });
       } else {
         item.title = "Tu n'as pas accès à ce module — demande à un administrateur.";
       }
+      item.addEventListener('dragstart', (e) => {
+        draggedModId = mod.id;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', mod.id); } catch (err) {}
+      });
+      item.addEventListener('dragend', () => {
+        draggedModId = null;
+        moduleNav.querySelectorAll('.nav-item').forEach((el) => el.classList.remove('dragging', 'drag-over-before', 'drag-over-after'));
+      });
+      item.addEventListener('dragover', (e) => {
+        if (!draggedModId || draggedModId === mod.id) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const before = e.clientX < item.getBoundingClientRect().left + item.offsetWidth / 2;
+        item.classList.toggle('drag-over-before', before);
+        item.classList.toggle('drag-over-after', !before);
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over-before', 'drag-over-after'));
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        item.classList.remove('drag-over-before', 'drag-over-after');
+        if (!draggedModId || draggedModId === mod.id) return;
+        const fromIdx = moduleOrder.findIndex((m) => m.id === draggedModId);
+        const toIdx = moduleOrder.findIndex((m) => m.id === mod.id);
+        if (fromIdx === -1 || toIdx === -1) return;
+        const before = e.clientX < item.getBoundingClientRect().left + item.offsetWidth / 2;
+        const [moved] = moduleOrder.splice(fromIdx, 1);
+        const insertAt = moduleOrder.findIndex((m) => m.id === mod.id) + (before ? 0 : 1);
+        moduleOrder.splice(insertAt, 0, moved);
+        saveModuleOrder(moduleOrder);
+        renderModuleNav();
+      });
       moduleNav.appendChild(item);
     });
   }
