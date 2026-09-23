@@ -163,17 +163,12 @@
     Object.keys(moduleFrames).forEach((id) => {
       const el = moduleFrames[id];
       const isActive = id === mod.id;
-      el.style.display = isActive ? 'block' : 'none';
-      // Un module iframe masqué (display:none) n'a plus de mise en page réelle : si son propre
-      // code recalcule des hauteurs sur cette période (ex: ResizeObserver déclenché par un
-      // polling en arrière-plan), il capte des valeurs fausses (ex: --header-h) qui restent
-      // figées ensuite. On force un 'resize' au ré-affichage pour que le module se recalcule.
-      if (isActive && el.tagName === 'IFRAME' && el.contentWindow) {
-        try { el.contentWindow.dispatchEvent(new Event('resize')); } catch (e) {}
-        requestAnimationFrame(() => {
-          try { el.contentWindow.dispatchEvent(new Event('resize')); } catch (e) {}
-        });
-      }
+      // On garde tous les modules superposés (position absolute en CSS) et on bascule via
+      // visibility, jamais display:none : une <webview> Electron masquée par display:none puis
+      // réaffichée ne récupère pas toujours sa bonne taille (bug connu du composant), alors
+      // qu'avec visibility elle garde en permanence une vraie boîte de mise en page.
+      el.style.visibility = isActive ? 'visible' : 'hidden';
+      el.style.pointerEvents = isActive ? 'auto' : 'none';
     });
 
     if (!moduleFrames[mod.id]) {
@@ -324,7 +319,10 @@
     state.tabs.forEach((t) => {
       const active = t.id === tabId;
       if (active) ensureWebview(modId, t);
-      if (t.webview) t.webview.style.display = active ? 'flex' : 'none';
+      if (t.webview) {
+        t.webview.style.visibility = active ? 'visible' : 'hidden';
+        t.webview.style.pointerEvents = active ? 'auto' : 'none';
+      }
       t.tabBtn.classList.toggle('active', active);
       if (active && state.urlInput) state.urlInput.value = t.url && t.url !== 'about:blank' ? t.url : '';
     });
@@ -491,7 +489,7 @@
   // onglets (aujourd'hui, uniquement Axonaut), sinon ignoré silencieusement.
   if (window.csbHost && window.csbHost.onWebviewOpenTab) {
     window.csbHost.onWebviewOpenTab((url) => {
-      const modId = Object.keys(webviewTabsState).find((id) => moduleFrames[id] && moduleFrames[id].style.display !== 'none') || Object.keys(webviewTabsState)[0];
+      const modId = Object.keys(webviewTabsState).find((id) => moduleFrames[id] && moduleFrames[id].style.visibility !== 'hidden') || Object.keys(webviewTabsState)[0];
       if (modId) createWebviewTab(modId, url, url);
     });
   }

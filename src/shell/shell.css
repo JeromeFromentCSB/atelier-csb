@@ -126,7 +126,12 @@ input:focus{outline:2px solid var(--spool-gold); outline-offset:1px;}
 #updateBanner button.ghost:hover{background:rgba(255,255,255,.12); color:#fff;}
 
 #main{flex:1; min-width:0; position:relative; background:var(--paper-dim);}
-#main iframe{width:100%; height:100%; border:none; background:#fff;}
+/* Les modules masqués restent superposés en position absolue (jamais display:none) : une
+   <webview> Electron qu'on masque avec display:none puis réaffiche ne récupère pas toujours sa
+   bonne taille (bug connu du composant), alors qu'avec visibility elle garde en permanence une
+   vraie boîte de mise en page et n'a donc jamais besoin de se "re-résoudre". */
+#main > iframe, #main > .webview-shell{position:absolute; inset:0; width:100%; height:100%;}
+#main iframe{border:none; background:#fff;}
 
 /* ---------- Onglets internes pour les modules webview (ex: Axonaut) ---------- */
 .webview-shell{display:flex; flex-direction:column; width:100%; height:100%;}
@@ -155,8 +160,8 @@ input:focus{outline:2px solid var(--spool-gold); outline-offset:1px;}
 .sites-editor-actions{display:flex; justify-content:flex-end; gap:8px;}
 .sites-editor-actions button{border:1px solid var(--line); background:#fff; border-radius:6px; padding:6px 14px; cursor:pointer;}
 .sites-editor-actions button.primary{background:var(--thread); color:#fff; border-color:var(--thread);}
-.webview-pages{position:relative; flex:1; min-height:0; display:flex; flex-direction:column;}
-.webview-pages webview{flex:1; width:100%; min-height:0; border:none; background:#fff;}
+.webview-pages{position:relative; flex:1; min-height:0;}
+.webview-pages webview{position:absolute; inset:0; width:100%; height:100%; border:none; background:#fff;}
 .main-placeholder{
   height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:10px; color:var(--ink-soft); text-align:center; padding:40px;
