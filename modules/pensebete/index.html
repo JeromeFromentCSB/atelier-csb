@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pense-bête CSB</title>
+<!--
+  Module Pense-bête intégré au socle Atelier CSB : même collection PocketBase "pensebete" que
+  la petite appli autonome (PWA) installée sur iPhone (PenseBete_CSB.html) — les notes créées
+  ici ou sur le téléphone sont donc les mêmes, juste vues depuis deux endroits différents.
+  La collection reste à accès public côté PocketBase (la version iPhone ne se connecte pas),
+  donc pas d'en-tête d'authentification obligatoire ici non plus ; on utilise CSBAuth.authedFetch
+  uniquement pour profiter de son adresse PocketBase déjà réglée et de sa bascule automatique
+  vers Tailscale.
+-->
+<style>
+  :root {
+    --bg: #f5f3ef;
+    --card: #ffffff;
+    --ink: #2b2620;
+    --muted: #8a8175;
+    --accent: #7a5c3e;
+    --accent-light: #e8ddd0;
+    --done: #b8b0a3;
+    --danger: #b5544a;
+    --border: #e5ddd0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    height: 100vh;
+    overflow-y: auto;
+  }
+  header {
+    padding: 20px 16px 12px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  header .sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+  }
+  .add-box {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 20px;
+  }
+  .add-box textarea {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family: inherit;
+    background: var(--card);
+    min-height: 44px;
+    max-height: 120px;
+  }
+  .add-box textarea:focus { outline: 2px solid var(--accent-light); border-color: var(--accent); }
+  .list-box {
+    margin-bottom: 8px;
+  }
+  .list-box input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px;
+    background: var(--card);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .list-box input:focus { outline: 2px solid var(--accent-light); border-color: var(--accent); }
+  .list-box .hint { font-size: 11px; color: var(--muted); margin-top: 3px; margin-left: 2px; }
+  .list-box { position: relative; }
+  .list-suggest {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+    z-index: 20;
+    display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .list-suggest.open { display: block; }
+  .list-suggest div {
+    padding: 9px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .list-suggest div:last-child { border-bottom: none; }
+  .list-suggest div:hover { background: var(--accent-light); }
+  .add-box button {
+    border: none;
+    background: var(--accent);
+    color: white;
+    border-radius: 12px;
+    padding: 0 18px;
+    font-size: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .add-box button:active { opacity: 0.8; }
+  .mic-btn {
+    background: var(--card);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 44px;
+    font-size: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .mic-btn.recording {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(181,84,74,0.5); }
+    70% { box-shadow: 0 0 0 8px rgba(181,84,74,0); }
+    100% { box-shadow: 0 0 0 0 rgba(181,84,74,0); }
+  }
+  .voice-note {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin: -10px 0 14px;
+  }
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .tabs button {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .tabs button.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .list-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .list-tabs button {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .list-tabs button.active {
+    background: var(--accent-light);
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .list-tabs button .count {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 4px;
+  }
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .checkbox {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    flex-shrink: 0;
+    margin-top: 2px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: white;
+  }
+  .checkbox.checked { background: var(--accent); }
+  .item-body { flex: 1; min-width: 0; }
+  .item-text {
+    font-size: 15px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .item.done .item-text { text-decoration: line-through; color: var(--done); }
+  .item-date { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .del-btn {
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 2px 4px;
+    flex-shrink: 0;
+  }
+  .del-btn:hover { color: var(--danger); }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 40px 20px;
+  }
+  .status { font-size: 12px; color: var(--muted); text-align: center; margin-top: 8px; }
+  .status.error { color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📌 Pense-bête CSB</h1>
+  <div class="sub">Partagé avec l'appli iPhone — même liste des deux côtés</div>
+</header>
+
+<div class="container">
+  <div class="list-box">
+    <input type="text" id="listName" placeholder="Nom de la liste (ex: Courses, Idées atelier...)" autocomplete="off">
+    <div class="list-suggest" id="listSuggest"></div>
+    <div class="hint">La note sera rangée dans cette liste</div>
+  </div>
+
+  <div class="add-box">
+    <textarea id="newNote" placeholder="Écris ta pensée ici..." rows="1"></textarea>
+    <button class="mic-btn" id="micBtn" onclick="toggleVoice()">🎤</button>
+    <button id="addBtn" onclick="addNote()">＋</button>
+  </div>
+  <div class="voice-note" id="voiceNote"></div>
+
+  <div class="tabs">
+    <button id="tabActive" class="active" onclick="setTab('active')">À faire</button>
+    <button id="tabDone" onclick="setTab('done')">Fait</button>
+  </div>
+
+  <div class="list-tabs" id="listTabs"></div>
+
+  <div id="list"></div>
+  <div id="statusMsg" class="status"></div>
+</div>
+
+<script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/csb-auth.js"></script>
+<script>
+const COLLECTION = 'pensebete';
+let currentTab = 'active';
+let currentList = 'Toutes';
+let notes = [];
+
+function setTab(tab) {
+  currentTab = tab;
+  document.getElementById('tabActive').classList.toggle('active', tab === 'active');
+  document.getElementById('tabDone').classList.toggle('active', tab === 'done');
+  renderListTabs();
+  render();
+}
+
+function setListTab(name) {
+  currentList = name;
+  renderListTabs();
+  render();
+}
+
+function renderListTabs() {
+  const box = document.getElementById('listTabs');
+  const relevant = notes.filter(n => currentTab === 'active' ? !n.fait : n.fait);
+  const names = [...new Set(relevant.map(n => n.liste && n.liste.trim() ? n.liste.trim() : 'Sans liste'))]
+    .sort((a, b) => {
+      if (a === 'Sans liste') return 1;
+      if (b === 'Sans liste') return -1;
+      return a.localeCompare(b, 'fr');
+    });
+  if (!names.includes(currentList) && currentList !== 'Toutes') currentList = 'Toutes';
+  const tabs = ['Toutes', ...names];
+  box.innerHTML = tabs.map(name => {
+    const count = name === 'Toutes' ? relevant.length : relevant.filter(n => (n.liste && n.liste.trim() ? n.liste.trim() : 'Sans liste') === name).length;
+    return `<button class="${name === currentList ? 'active' : ''}" onclick="setListTab('${name.replace(/'/g, "\\'")}')">${escapeHtml(name)}<span class="count">${count}</span></button>`;
+  }).join('');
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status' + (isError ? ' error' : '');
+}
+
+async function apiCall(path, options = {}) {
+  const res = await CSBAuth.authedFetch(CSBAuth.getPbUrl() + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error('API error ' + res.status + ': ' + t);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+async function loadNotes() {
+  setStatus('Chargement...');
+  try {
+    const data = await apiCall(`/api/collections/${COLLECTION}/records?sort=-created&perPage=200`);
+    notes = data.items || [];
+    setStatus('');
+    updateListSuggestions();
+  } catch (e) {
+    console.error(e);
+    setStatus('Erreur de connexion à PocketBase', true);
+  }
+  renderListTabs();
+  render();
+}
+
+async function addNote() {
+  const textarea = document.getElementById('newNote');
+  const listInput = document.getElementById('listName');
+  const text = textarea.value.trim();
+  const liste = listInput.value.trim();
+  if (!text) return;
+  textarea.value = '';
+  textarea.style.height = 'auto';
+  try {
+    const rec = await apiCall(`/api/collections/${COLLECTION}/records`, {
+      method: 'POST',
+      body: JSON.stringify({ texte: text, fait: false, liste: liste })
+    });
+    notes.unshift(rec);
+    localStorage.setItem('pensebete_last_liste', liste);
+    updateListSuggestions();
+    currentList = 'Toutes';
+    setTab('active');
+  } catch (e) {
+    console.error(e);
+    setStatus('Erreur lors de l\'ajout', true);
+    textarea.value = text;
+  }
+}
+
+let allListNames = [];
+
+function updateListSuggestions() {
+  allListNames = [...new Set(notes.map(n => n.liste).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+function renderListSuggest() {
+  const input = document.getElementById('listName');
+  const box = document.getElementById('listSuggest');
+  const val = input.value.trim().toLowerCase();
+  const matches = val
+    ? allListNames.filter(n => n.toLowerCase().includes(val))
+    : allListNames;
+  if (matches.length === 0) {
+    box.classList.remove('open');
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = matches.map(n => `<div onmousedown="selectListName('${n.replace(/'/g, "\\'")}')">${escapeHtml(n)}</div>`).join('');
+  box.classList.add('open');
+}
+
+function selectListName(name) {
+  document.getElementById('listName').value = name;
+  document.getElementById('listSuggest').classList.remove('open');
+}
+
+async function toggleDone(id, current) {
+  const note = notes.find(n => n.id === id);
+  if (note) note.fait = !current;
+  renderListTabs();
+  render();
+  try {
+    await apiCall(`/api/collections/${COLLECTION}/records/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fait: !current })
+    });
+  } catch (e) {
+    console.error(e);
+    if (note) note.fait = current;
+    renderListTabs();
+    render();
+    setStatus('Erreur de mise à jour', true);
+  }
+}
+
+async function deleteNote(id) {
+  const idx = notes.findIndex(n => n.id === id);
+  const backup = notes[idx];
+  notes = notes.filter(n => n.id !== id);
+  renderListTabs();
+  render();
+  try {
+    await apiCall(`/api/collections/${COLLECTION}/records/${id}`, { method: 'DELETE' });
+  } catch (e) {
+    console.error(e);
+    if (backup) notes.splice(idx, 0, backup);
+    renderListTabs();
+    render();
+    setStatus('Erreur de suppression', true);
+  }
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) +
+    ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function render() {
+  const list = document.getElementById('list');
+  let filtered = notes.filter(n => currentTab === 'active' ? !n.fait : n.fait);
+  if (currentList !== 'Toutes') {
+    filtered = filtered.filter(n => (n.liste && n.liste.trim() ? n.liste.trim() : 'Sans liste') === currentList);
+  }
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty">${currentTab === 'active' ? 'Rien pour le moment' : 'Aucune note terminée'}</div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(n => `
+    <div class="item ${n.fait ? 'done' : ''}">
+      <div class="checkbox ${n.fait ? 'checked' : ''}" onclick="toggleDone('${n.id}', ${n.fait})">${n.fait ? '✓' : ''}</div>
+      <div class="item-body">
+        <div class="item-text">${escapeHtml(n.texte)}</div>
+        <div class="item-date">${formatDate(n.created)}</div>
+      </div>
+      <button class="del-btn" onclick="deleteNote('${n.id}')">✕</button>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById('newNote').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+document.getElementById('newNote').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    addNote();
+  }
+});
+
+// --- Reconnaissance vocale (si le navigateur/Chromium l'expose) ---
+let recognition = null;
+let isRecording = false;
+let baseText = '';
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function setVoiceNote(msg) {
+  document.getElementById('voiceNote').textContent = msg;
+}
+
+function initRecognition() {
+  if (!SpeechRecognitionAPI) return null;
+  const rec = new SpeechRecognitionAPI();
+  rec.lang = 'fr-FR';
+  rec.continuous = true;
+  rec.interimResults = true;
+
+  rec.onresult = (e) => {
+    let finalText = '';
+    let interimText = '';
+    for (let i = 0; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      else interimText += e.results[i][0].transcript;
+    }
+    const textarea = document.getElementById('newNote');
+    textarea.value = (baseText + finalText + interimText).trim();
+    textarea.dispatchEvent(new Event('input'));
+  };
+
+  rec.onerror = (e) => {
+    console.error('Speech error', e.error);
+    if (e.error === 'not-allowed') {
+      setVoiceNote('Micro refusé.');
+    } else if (e.error === 'no-speech') {
+      setVoiceNote('Rien entendu, réessaie.');
+    } else {
+      setVoiceNote('Dictée indisponible ici.');
+    }
+    stopVoice();
+  };
+
+  rec.onend = () => {
+    if (isRecording) {
+      try { rec.start(); } catch(e) { stopVoice(); }
+    }
+  };
+
+  return rec;
+}
+
+function toggleVoice() {
+  if (!SpeechRecognitionAPI) {
+    setVoiceNote('Dictée vocale non supportée ici.');
+    return;
+  }
+  if (isRecording) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  const textarea = document.getElementById('newNote');
+  baseText = textarea.value ? textarea.value.trim() + ' ' : '';
+  recognition = initRecognition();
+  if (!recognition) return;
+  isRecording = true;
+  document.getElementById('micBtn').classList.add('recording');
+  setVoiceNote('🔴 Enregistrement... tape sur le micro pour arrêter');
+  try {
+    recognition.start();
+  } catch (e) {
+    console.error(e);
+    stopVoice();
+  }
+}
+
+function stopVoice() {
+  isRecording = false;
+  document.getElementById('micBtn').classList.remove('recording');
+  if (recognition) {
+    try { recognition.stop(); } catch(e) {}
+  }
+  setVoiceNote('');
+}
+
+document.getElementById('listName').value = localStorage.getItem('pensebete_last_liste') || '';
+document.getElementById('listName').addEventListener('input', renderListSuggest);
+document.getElementById('listName').addEventListener('focus', renderListSuggest);
+document.getElementById('listName').addEventListener('blur', () => {
+  document.getElementById('listSuggest').classList.remove('open');
+});
+
+loadNotes();
+</script>
+</body>
+</html>

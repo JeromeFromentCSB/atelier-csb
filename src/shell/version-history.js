@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.18', items: [
+    "Nouvel onglet Pense-bête : les mêmes notes que sur l'appli iPhone (Pense-bête CSB), directement dans Atelier CSB",
+  ]},
   { v: '0.2.17', items: [
     "Les onglets (Gestion Commande, Gestion Casaque…) peuvent maintenant être réorganisés par glisser-déposer ; l'ordre choisi est mémorisé sur ce poste",
   ]},

@@ -38,6 +38,9 @@
     { id: 'prospection', label: 'Prospection', icon: '📍', path: '../../modules/prospection/index.html', perms: [] },
     { id: 'pointage', label: 'Pointage', icon: '🕒', path: '../../modules/pointage/index.html', perms: [] },
     { id: 'email', label: 'Email', icon: '✉️', path: '../../modules/email/index.html', perms: [] },
+    // Même collection PocketBase "pensebete" que l'appli iPhone autonome (PenseBete_CSB.html) :
+    // les notes ajoutées ici ou sur le téléphone apparaissent des deux côtés.
+    { id: 'pensebete', label: 'Pense-bête', icon: '📌', path: '../../modules/pensebete/index.html', perms: [] },
     // Axonaut lui-même (le vrai site, via une webview) — pour les écrans que notre intégration
     // API ne couvre pas encore. Session de connexion propre à cet onglet, indépendante de
     // notre appli (comme un onglet de navigateur classique).
