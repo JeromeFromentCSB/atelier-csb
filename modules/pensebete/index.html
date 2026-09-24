@@ -170,6 +170,7 @@
     color: white;
     border-color: var(--accent);
   }
+  .tabs .refresh-btn { flex: none; width: 40px; font-size: 16px; }
   .list-tabs {
     display: flex;
     gap: 6px;
@@ -310,6 +311,7 @@
   <div class="tabs">
     <button id="tabActive" class="active" onclick="setTab('active')">À faire</button>
     <button id="tabDone" onclick="setTab('done')">Fait</button>
+    <button class="refresh-btn" onclick="loadNotes()" title="Actualiser la liste des notes">↻</button>
   </div>
 
   <div class="list-tabs" id="listTabs"></div>

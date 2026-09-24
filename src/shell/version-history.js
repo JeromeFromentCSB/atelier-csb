@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.22', items: [
+    "Pense-bête : bouton ↻ pour actualiser la liste des notes (utile après une note ajoutée depuis un autre appareil)",
+  ]},
   { v: '0.2.21', items: [
     "Pense-bête : changer la liste d'une note ouvre maintenant un choix parmi les listes existantes (au lieu d'une saisie manuelle)",
   ]},
