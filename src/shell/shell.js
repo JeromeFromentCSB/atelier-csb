@@ -226,6 +226,19 @@
       // qu'avec visibility elle garde en permanence une vraie boîte de mise en page.
       el.style.visibility = isActive ? 'visible' : 'hidden';
       el.style.pointerEvents = isActive ? 'auto' : 'none';
+      // visibility s'hérite, mais un enfant qui a lui-même visibility:visible (l'onglet actif
+      // d'un module à onglets, ex. Fournisseurs) reprend le dessus sur ce parent masqué et reste
+      // affiché par-dessus le module qu'on vient d'ouvrir. On force donc aussi ses webviews
+      // internes à se masquer quand le module lui-même n'est pas actif.
+      const state = webviewTabsState[id];
+      if (state) {
+        state.tabs.forEach((t) => {
+          if (!t.webview) return;
+          const tabActive = isActive && t.id === state.activeId;
+          t.webview.style.visibility = tabActive ? 'visible' : 'hidden';
+          t.webview.style.pointerEvents = tabActive ? 'auto' : 'none';
+        });
+      }
     });
 
     if (!moduleFrames[mod.id]) {

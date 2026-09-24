@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.20', items: [
+    "Correction : en quittant l'onglet Fournisseurs (ou Axonaut) pour un autre onglet, le site affiché restait visible par-dessus le nouvel onglet au lieu de disparaître",
+  ]},
   { v: '0.2.19', items: [
     "Pense-bête : possibilité de changer la liste d'une note déjà créée (tag cliquable sous chaque note)",
   ]},
