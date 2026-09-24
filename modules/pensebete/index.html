@@ -232,7 +232,13 @@
     word-break: break-word;
   }
   .item.done .item-text { text-decoration: line-through; color: var(--done); }
-  .item-date { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .item-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .item-date { font-size: 11px; color: var(--muted); }
+  .item-list-tag {
+    font-size: 11px; color: var(--accent); background: var(--accent-light);
+    border-radius: 8px; padding: 1px 8px; cursor: pointer; white-space: nowrap;
+  }
+  .item-list-tag:hover { opacity: .8; }
   .del-btn {
     border: none;
     background: none;
@@ -429,6 +435,32 @@ async function toggleDone(id, current) {
   }
 }
 
+async function changeNoteList(id) {
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+  const val = prompt('Changer la liste de cette note :', note.liste || '');
+  if (val === null) return;
+  const liste = val.trim();
+  const prev = note.liste;
+  note.liste = liste;
+  updateListSuggestions();
+  renderListTabs();
+  render();
+  try {
+    await apiCall(`/api/collections/${COLLECTION}/records/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ liste })
+    });
+  } catch (e) {
+    console.error(e);
+    note.liste = prev;
+    updateListSuggestions();
+    renderListTabs();
+    render();
+    setStatus('Erreur de mise à jour de la liste', true);
+  }
+}
+
 async function deleteNote(id) {
   const idx = notes.findIndex(n => n.id === id);
   const backup = notes[idx];
@@ -467,7 +499,10 @@ function render() {
       <div class="checkbox ${n.fait ? 'checked' : ''}" onclick="toggleDone('${n.id}', ${n.fait})">${n.fait ? '✓' : ''}</div>
       <div class="item-body">
         <div class="item-text">${escapeHtml(n.texte)}</div>
-        <div class="item-date">${formatDate(n.created)}</div>
+        <div class="item-meta">
+          <span class="item-date">${formatDate(n.created)}</span>
+          <span class="item-list-tag" onclick="changeNoteList('${n.id}')">${escapeHtml(n.liste && n.liste.trim() ? n.liste.trim() : 'Sans liste')} ✎</span>
+        </div>
       </div>
       <button class="del-btn" onclick="deleteNote('${n.id}')">✕</button>
     </div>
