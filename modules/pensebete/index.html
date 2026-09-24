@@ -257,6 +257,33 @@
   }
   .status { font-size: 12px; color: var(--muted); text-align: center; margin-top: 8px; }
   .status.error { color: var(--danger); }
+  .list-picker-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; align-items: flex-end; justify-content: center; z-index: 60;
+  }
+  .list-picker-overlay.open { display: flex; }
+  .list-picker-sheet {
+    background: var(--card); width: 100%; max-width: 480px;
+    border-radius: 16px 16px 0 0; padding: 20px; max-height: 70vh; overflow-y: auto;
+  }
+  .list-picker-sheet h3 { margin: 0 0 12px; font-size: 16px; }
+  .list-picker-opt {
+    display: block; width: 100%; text-align: left; padding: 10px 12px;
+    border: 1px solid var(--border); background: var(--card); border-radius: 10px;
+    font-size: 14px; margin-bottom: 6px; cursor: pointer; color: var(--ink);
+  }
+  .list-picker-opt.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .list-picker-new { display: flex; gap: 8px; margin-top: 10px; }
+  .list-picker-new input {
+    flex: 1; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
+  }
+  .list-picker-new button {
+    border: none; background: var(--accent); color: white; border-radius: 8px; padding: 0 16px; cursor: pointer;
+  }
+  .list-picker-cancel {
+    display: block; width: 100%; text-align: center; margin-top: 12px; background: none;
+    border: none; color: var(--muted); font-size: 13px; padding: 8px; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -289,6 +316,18 @@
 
   <div id="list"></div>
   <div id="statusMsg" class="status"></div>
+</div>
+
+<div class="list-picker-overlay" id="listPickerOverlay">
+  <div class="list-picker-sheet">
+    <h3>Changer de liste</h3>
+    <div id="listPickerOptions"></div>
+    <div class="list-picker-new">
+      <input type="text" id="listPickerNew" placeholder="Nouvelle liste...">
+      <button onclick="confirmNewListPick()">OK</button>
+    </div>
+    <button class="list-picker-cancel" onclick="closeListPicker()">Annuler</button>
+  </div>
 </div>
 
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
@@ -435,12 +474,35 @@ async function toggleDone(id, current) {
   }
 }
 
-async function changeNoteList(id) {
+let listPickerNoteId = null;
+function changeNoteList(id) {
   const note = notes.find(n => n.id === id);
   if (!note) return;
-  const val = prompt('Changer la liste de cette note :', note.liste || '');
-  if (val === null) return;
-  const liste = val.trim();
+  listPickerNoteId = id;
+  const current = (note.liste || '').trim();
+  const names = ['Sans liste', ...allListNames.filter(n => n !== 'Sans liste')];
+  document.getElementById('listPickerOptions').innerHTML = names.map(name => {
+    const val = name === 'Sans liste' ? '' : name;
+    const active = current === val;
+    return `<button class="list-picker-opt${active ? ' active' : ''}" onclick="pickList('${val.replace(/'/g, "\\'")}')">${escapeHtml(name)}</button>`;
+  }).join('');
+  document.getElementById('listPickerNew').value = '';
+  document.getElementById('listPickerOverlay').classList.add('open');
+}
+function closeListPicker() {
+  document.getElementById('listPickerOverlay').classList.remove('open');
+  listPickerNoteId = null;
+}
+function confirmNewListPick() {
+  const val = document.getElementById('listPickerNew').value.trim();
+  if (!val) return;
+  pickList(val);
+}
+async function pickList(liste) {
+  const id = listPickerNoteId;
+  closeListPicker();
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
   const prev = note.liste;
   note.liste = liste;
   updateListSuggestions();
@@ -460,6 +522,9 @@ async function changeNoteList(id) {
     setStatus('Erreur de mise à jour de la liste', true);
   }
 }
+document.getElementById('listPickerOverlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeListPicker();
+});
 
 async function deleteNote(id) {
   const idx = notes.findIndex(n => n.id === id);
