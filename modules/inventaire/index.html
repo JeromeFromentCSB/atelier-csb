@@ -2590,7 +2590,10 @@ async function importTopTexCatalogue(){
     return;
   }
   setCatalogueImportProgress(key, { busy:true, isError:false, message:"Téléchargement du catalogue TopTex…", done:0, total:0 });
-  const pageSize = 200;
+  // Des pages plus petites réduisent le risque de timeout côté TopTex (leur backend semble
+  // mettre plus de temps à répondre quand modified_since remonte loin dans l'historique).
+  const pageSize = 50;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let page = 1;
   const items = [];
   try{
@@ -2600,9 +2603,20 @@ async function importTopTexCatalogue(){
       // qu'un petit sous-ensemble (produits récemment modifiés), pas l'historique complet — c'est
       // ce qui donnait un import "réussi" mais avec seulement ~200 lignes au lieu de plusieurs
       // milliers, et donc des références bien réelles (ex. WK303) absentes du résultat.
-      const res = await toptexGet('/v3/products/all', { usage_right: 'b2b_uniquement', display_prices: '1', page_number: page, page_size: pageSize, modified_since: '2000-01-01' });
+      let res = null;
+      let attempt = 0;
+      const maxAttempts = 4;
+      while (attempt < maxAttempts) {
+        attempt++;
+        res = await toptexGet('/v3/products/all', { usage_right: 'b2b_uniquement', display_prices: '1', page_number: page, page_size: pageSize, modified_since: '2000-01-01' });
+        // 504/502/503 : erreurs passagères côté serveur TopTex (souvent un simple timeout) —
+        // on retente après une petite pause au lieu d'abandonner tout l'import en cours.
+        if (res.ok || ![502, 503, 504].includes(res.status) || attempt >= maxAttempts) break;
+        setCatalogueImportProgress(key, { message: `Page ${page} : réponse lente côté TopTex (HTTP ${res.status}), nouvelle tentative ${attempt}/${maxAttempts - 1}…` });
+        await sleep(1500 * attempt);
+      }
       if(!res.ok){
-        setCatalogueImportProgress(key, { busy:false, isError:true, message: `Erreur HTTP ${res.status} à la page ${page}. ${(res.raw||'').slice(0,200)}` });
+        setCatalogueImportProgress(key, { busy:false, isError:true, message: `Erreur HTTP ${res.status} à la page ${page} (après ${attempt} tentative(s)). ${(res.raw||'').slice(0,200)}` });
         return;
       }
       const rows = extractRows(res.data);

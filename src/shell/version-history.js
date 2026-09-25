@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.27', items: [
+    "Inventaire : l'import du catalogue TopTex retente automatiquement en cas de timeout passager (HTTP 504/502/503) au lieu d'abandonner tout l'import, et utilise des pages plus petites pour réduire le risque",
+  ]},
   { v: '0.2.26', items: [
     "Inventaire : correction de l'import du catalogue TopTex — il ne récupérait qu'un petit sous-ensemble récent (~200 lignes) au lieu du catalogue complet, d'où des références bien réelles absentes après import ; le sélecteur « Type » du Catalogue fournisseurs restait aussi vide (mauvaise extraction du champ), corrigé également",
   ]},
