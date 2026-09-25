@@ -2678,6 +2678,9 @@ document.getElementById('colGenerateBtn').addEventListener('click', async () => 
       await idbSetLabel(r._key, storedLabel);
       r._pbLabel = storedLabel;
       await pushLabelToPocketBase(r, storedLabel);
+      // Enchaîne directement sur l'affichage du PDF, comme si on cliquait sur le bouton
+      // télécharger (⭳) juste après — évite d'avoir à rouvrir la fiche pour ça.
+      openPdfInNewTab(storedLabel.base64, storedLabel.contentType);
     }
 
     persistState(r, { tracking: parcelNumber || r._state.tracking, labelGenerated: true });
