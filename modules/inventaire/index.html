@@ -657,6 +657,112 @@ async function toptexGet(path, params){
    Cloudflare Worker relay already used by Import_Fiches_Axonaut.html. */
 const VALENTO_CREDS_KEY = "csb_valento_creds_v1";
 const AXONAUT_PROXY_URL = "https://axonaut-proxy.atelier-csb.workers.dev";
+
+/* ---------- Création d'article dans Axonaut (portée depuis Import_Fiches_Axonaut.html) ----------
+   Réutilise la clé API Axonaut déjà réglée dans Gestion Commande (même clé de config locale,
+   "csb_envoi_axonaut_api_config") pour ne pas la faire ressaisir une deuxième fois sur ce poste. */
+const AXONAUT_KEY_CONFIG_KEY = 'csb_envoi_axonaut_api_config';
+async function getSharedAxonautApiKey(){
+  if(window.csbHost){
+    try{
+      const cfg = await window.csbHost.getConfig();
+      const saved = cfg && cfg[AXONAUT_KEY_CONFIG_KEY];
+      if(saved && saved.apiKey) return saved.apiKey;
+    }catch(e){}
+  }
+  return null;
+}
+async function axonautFetch(path, options){
+  const apiKey = await getSharedAxonautApiKey();
+  if(!apiKey) throw new Error("Clé API Axonaut non configurée sur ce poste — renseigne-la dans Gestion Commande → Réglages ⚙︎ (section Axonaut) ; elle sera réutilisée ici automatiquement.");
+  const res = await fetch(AXONAUT_PROXY_URL + '?path=' + encodeURIComponent(path), {
+    ...(options||{}),
+    headers: { 'Content-Type':'application/json', 'x-axonaut-key': apiKey, ...((options&&options.headers)||{}) }
+  });
+  const text = await res.text();
+  let data; try{ data = JSON.parse(text); }catch(e){ data = text; }
+  if(!res.ok){ const err = new Error('Axonaut HTTP ' + res.status); err.data = data; throw err; }
+  return data;
+}
+async function checkAxonautDuplicate(ref){
+  if(!ref) return null;
+  try{
+    const list = await axonautFetch('/products');
+    const items = Array.isArray(list) ? list : (list.items || []);
+    return items.find(p => (p.internal_reference || p.code || p.product_code || '') === ref) || null;
+  }catch(e){ return null; } // vérif best-effort : une erreur ici ne doit pas bloquer la création
+}
+// Noms de champs confirmés à partir d'une vraie réponse Axonaut (cf. Import_Fiches_Axonaut.html) :
+// "price" = prix de vente, "job_costing" = coût de revient / prix d'achat (utilisé pour la marge).
+// On importe le prix fournisseur/achat de la fiche dans job_costing, pas dans price.
+// D'après la doc officielle Axonaut v2 (api/v2/doc), le schéma de création de produit n'a ni
+// champ "image" ni champ "type" — impossible d'attacher une photo par l'API, aucun endpoint
+// séparé n'existe non plus pour ça. À la place, l'image est enregistrée dans le dossier partagé
+// du NAS pour un glisser-déposer rapide dans Axonaut ensuite.
+const AXONAUT_IMAGES_SHARE_HINT = '\\\\SB-CONFECTION\\Atelier CSB\\Images AXONAUT';
+async function saveProductImageToAxonautFolder(reference, imageUrl){
+  if(!imageUrl || !window.csbHost || !window.csbHost.saveAxonautImage) return null;
+  try{
+    // Beaucoup de CDN fournisseurs (TopTex compris) bloquent le fetch() direct depuis un
+    // navigateur (CORS) : on passe par le même relais Cloudflare que pour l'affichage d'image.
+    const res = await fetch(AXONAUT_PROXY_URL + '?img=' + encodeURIComponent(imageUrl));
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    const base64 = await new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    const ext = ((imageUrl.split('.').pop() || 'jpg').split('?')[0].slice(0, 4)) || 'jpg';
+    const filename = (reference || 'image').toString().replace(/[^a-zA-Z0-9_-]/g, '_') + '.' + ext;
+    return await window.csbHost.saveAxonautImage(filename, base64);
+  }catch(e){
+    console.warn('Enregistrement de l\'image dans le dossier Axonaut impossible :', e);
+    return null;
+  }
+}
+// Vérification de doublon + POST proprement dits, factorisés pour être appelables aussi bien
+// depuis une fiche d'inventaire existante (createItemInAxonaut) que depuis un résultat de
+// recherche directe TopTex qui n'a pas forcément de fiche d'inventaire correspondante.
+async function createAxonautProductFromPayload(payload, dedupeRef){
+  let existing = null;
+  if(dedupeRef){ try{ existing = await checkAxonautDuplicate(dedupeRef); }catch(e){} }
+  if(existing && !confirm(`Une référence « ${dedupeRef} » existe déjà dans Axonaut (id ${existing.id}). Créer quand même un doublon ?`)) return null;
+  try{
+    const result = await axonautFetch('/products', { method:'POST', body: JSON.stringify(payload) });
+    toast('Article créé dans Axonaut (id ' + (result && result.id) + ').');
+    return result;
+  }catch(e){
+    toast("Échec de création dans Axonaut : " + (e.data ? JSON.stringify(e.data) : e.message));
+    console.error(e);
+    return null;
+  }
+}
+async function createItemInAxonaut(item){
+  const name = item.description || [item.marque, item.reference].filter(Boolean).join(' ') || item.reference;
+  if(!name){ toast("Impossible de créer dans Axonaut : ni nom ni référence sur cette fiche."); return null; }
+  const payload = {
+    name,
+    product_code: item.reference || undefined,
+    description: [item.composition, item.description].filter(Boolean).join(' — ') || undefined,
+    unit: 'u',
+    job_costing: item.prix != null ? Number(item.prix) : 0,
+    tax_rate: 20, // TVA standard par défaut ; pas de sélecteur ici, contrairement à l'outil autonome
+  };
+  if(item.categorie) payload.category = item.categorie;
+  const result = await createAxonautProductFromPayload(payload, item.reference);
+  if(result){
+    const axonautId = (result && result.id) ?? null;
+    await itemsCol.doc(item.id).update({ axonautProductId: axonautId });
+    item.axonautProductId = axonautId;
+  }
+  if(item.imageUrl){
+    const savedPath = await saveProductImageToAxonautFolder(item.reference, item.imageUrl);
+    toast(savedPath ? `Image enregistrée dans ${AXONAUT_IMAGES_SHARE_HINT}` : "Impossible d'enregistrer l'image dans le dossier partagé.");
+  }
+  return result;
+}
 // Falk & Ross (et potentiellement d'autres) bloquent le "hotlinking" (chargement de leurs images
 // depuis un autre site) : on fait passer ces images-là par le relais Cloudflare comme pour TopTex.
 const PROXIED_IMAGE_HOSTS = ["download.falk-ross.eu"];
@@ -878,6 +984,11 @@ function openEditItemModal(item){
         <div class="field"><label>Fiche technique — avec prix ${item.ficheAvecPrix?`<a href="${escapeHtml(item.ficheAvecPrix)}" target="_blank" rel="noopener" style="text-transform:none; letter-spacing:0;">↗ ouvrir</a>`:''}</label><input type="text" id="edit-fiche-avec-prix" value="${escapeHtml(item.ficheAvecPrix||'')}" placeholder="https://…"></div>
         <div class="field"><label>Fiche technique — sans prix ${item.ficheSansPrix?`<a href="${escapeHtml(item.ficheSansPrix)}" target="_blank" rel="noopener" style="text-transform:none; letter-spacing:0;">↗ ouvrir</a>`:''}</label><input type="text" id="edit-fiche-sans-prix" value="${escapeHtml(item.ficheSansPrix||'')}" placeholder="https://…"></div>
       </div>
+      <div class="toolbar" style="margin-top:14px; margin-bottom:0;">
+        ${item.axonautProductId
+          ? `<span class="hint" style="color:var(--vert); margin:0;">✔ Déjà créé dans Axonaut (id ${escapeHtml(String(item.axonautProductId))})</span>`
+          : `<button class="ghost small" id="edit-create-axonaut">Créer l'article dans Axonaut</button>`}
+      </div>
       <div class="form-actions" style="margin-top:16px;">
         <button class="ghost" id="edit-cancel">Annuler</button>
         <button class="primary" id="edit-save">Enregistrer</button>
@@ -888,6 +999,16 @@ function openEditItemModal(item){
   overlay.addEventListener('click', e=>{ if(e.target === overlay) closeEditModal(); });
   document.getElementById('edit-close').addEventListener('click', closeEditModal);
   document.getElementById('edit-cancel').addEventListener('click', closeEditModal);
+  const createAxonautBtn = document.getElementById('edit-create-axonaut');
+  if(createAxonautBtn){
+    createAxonautBtn.addEventListener('click', async ()=>{
+      createAxonautBtn.disabled = true;
+      createAxonautBtn.textContent = 'Création en cours…';
+      const result = await createItemInAxonaut(item);
+      if(result){ openEditItemModal(item); }
+      else{ createAxonautBtn.disabled = false; createAxonautBtn.textContent = "Créer l'article dans Axonaut"; }
+    });
+  }
   document.getElementById('edit-save').addEventListener('click', ()=>{
     const reference = document.getElementById('edit-reference').value.trim();
     if(!reference){ toast("La référence ne peut pas être vide."); return; }
@@ -1711,6 +1832,196 @@ async function loadToptexDetail(item, row, priceCell){
   }
 }
 
+// Même principe que loadToptexDetail (bouton "Voir chez TopTex" sur une fiche d'inventaire),
+// mais sans avoir besoin d'un article existant : on tape une référence et on interroge TopTex en
+// direct, que le catalogue soit importé ou non.
+async function searchToptexDirect(){
+  const input = document.getElementById('toptex-direct-ref');
+  const resultsEl = document.getElementById('toptex-direct-results');
+  if(!input || !resultsEl) return;
+  const reference = input.value.trim();
+  if(!reference){ toast("Tape d'abord une référence."); return; }
+  const creds = getToptexCreds();
+  if(!creds){
+    resultsEl.innerHTML = `<div class="hint" style="color:var(--rouge); margin:10px 0;">Aucun accès TopTex configuré sur cet ordinateur. Va dans Paramètres → « Accès TopTex ».</div>`;
+    return;
+  }
+  resultsEl.innerHTML = `<div class="hint" style="margin:10px 0;">Recherche de « ${escapeHtml(reference)} » chez TopTex…</div>`;
+
+  const empty = { ok:false, status:0, data:null, raw:'' };
+  const settled = await Promise.allSettled([
+    toptexGet('/v3/products', { catalog_reference: reference, usage_right: 'b2b_uniquement' }),
+    toptexGet('/v3/products/price', { catalog_reference: reference }),
+    toptexGet('/v3/products/inventory', { catalog_reference: reference }),
+  ]);
+  const [catalogR, priceR, inventoryR] = settled;
+  const catalog = catalogR.status === 'fulfilled' ? catalogR.value : { ...empty, error: catalogR.reason?.message };
+  const price = priceR.status === 'fulfilled' ? priceR.value : { ...empty, error: priceR.reason?.message };
+  const inventory = inventoryR.status === 'fulfilled' ? inventoryR.value : { ...empty, error: inventoryR.reason?.message };
+
+  // Re-vérifie que le champ n'a pas changé pendant l'appel réseau (l'utilisateur a pu retaper
+  // une autre référence entre-temps).
+  if(document.getElementById('toptex-direct-ref')?.value.trim() !== reference) return;
+
+  try{
+    const catalogRows = extractRows(catalog.data);
+    if(!catalog.ok || !catalogRows.length){
+      resultsEl.innerHTML = `<div class="hint" style="color:var(--rouge); margin:10px 0;">Référence « ${escapeHtml(reference)} » non trouvée chez TopTex${!catalog.ok ? ` (HTTP ${catalog.status})` : ''}.</div>`;
+      return;
+    }
+    const catalogData = catalogRows[0];
+    const images = collectImageUrls(catalog.data, [], 0);
+    const designation = findFieldValue(catalogData, /^designation$/i) || findFieldValue(catalogData, /^name$/i) || '';
+    const brand = findFieldValue(catalogData, /^brand$/i) || '';
+    const composition = findFieldValue(catalog.data, /composition|material|matiere/i);
+    // "grammage" n'existe pas tel quel chez TopTex : c'est averageWeight (ex. "260 g") au niveau
+    // produit — /weight/i le trouve puisqu'il matche "averageWeight".
+    const grammage = catalogData.averageWeight || findFieldValue(catalog.data, /grammage|weight|poids|gsm/i);
+    // Vraie description produit TopTex (texte détaillé matière/coupe/finitions), distincte de
+    // "designation" (nom du produit) — c'est ce texte-là qui doit remplir la description Axonaut,
+    // pas composition+grammage.
+    const productDescription = (catalogData.description && (catalogData.description.fr || catalogData.description.en)) || null;
+    // family = type large ("Vêtements"), sub_family = catégorie précise ("T-shirts") — deux
+    // champs Axonaut distincts (Type du produit / Catégorie du produit).
+    const familyType = (catalogData.family && (catalogData.family.fr || catalogData.family.en)) || null;
+    const subFamilyCategory = (catalogData.sub_family && (catalogData.sub_family.fr || catalogData.sub_family.en)) || null;
+
+    function priceOf(p){
+      const up = Array.isArray(p.prices) ? (p.prices.find(pr=>String(pr.quantity)==='1') || p.prices[0]) : null;
+      return up ? Number(up.price) : null;
+    }
+    function groupByPrice(rows){
+      const groups = {};
+      rows.forEach(r=>{
+        const pr = priceOf(r);
+        if(pr === null || isNaN(pr)) return;
+        const key = pr.toFixed(2);
+        if(!groups[key]) groups[key] = { price: pr, sizes: [] };
+        if(r.size && !groups[key].sizes.includes(r.size)) groups[key].sizes.push(r.size);
+      });
+      return Object.values(groups).sort((a,b)=>a.price-b.price);
+    }
+    const priceRows = extractRows(price.data);
+    const priceGroups = groupByPrice(priceRows);
+    let priceHtml;
+    if(priceRows.length === 0){
+      priceHtml = `<div class="hint">${price.ok ? 'Aucune donnée de prix trouvée pour cette référence.' : 'Erreur lors de la récupération des prix.'}</div>`;
+    } else if(priceGroups.length === 0){
+      priceHtml = `<div class="hint">Prix trouvé mais tailles non précisées dans la réponse.</div>`;
+    } else {
+      priceHtml = `<div class="tt-kv">${priceGroups.map(g=>`<div>${escapeHtml(g.sizes.join(', ') || '—')}</div><div>${fmtPrix(g.price)}</div>`).join('')}</div>`;
+    }
+
+    const inventoryRows = extractRows(inventory.data);
+    function resolveQty(inv){
+      const candidates = [inv.quantity, inv.stock, inv.availableQuantity, inv.qty, inv.available_quantity];
+      for(const c of candidates){ if(typeof c === 'number') return c; }
+      return null;
+    }
+    function isUnavailable(inv){
+      const q = resolveQty(inv);
+      if(q !== null) return q <= 0;
+      if(typeof inv.available === 'boolean') return !inv.available;
+      if(typeof inv.inStock === 'boolean') return !inv.inStock;
+      return false;
+    }
+    const unavailable = inventoryRows.filter(isUnavailable);
+    let inventoryHtml;
+    if(inventoryRows.length === 0){
+      inventoryHtml = `<div class="hint">${inventory.ok ? 'Aucune donnée de stock trouvée.' : 'Erreur lors de la récupération du stock.'}</div>`;
+    } else if(unavailable.length === 0){
+      inventoryHtml = `<div class="hint" style="color:var(--vert);">Tout est disponible chez TopTex.</div>`;
+    } else {
+      inventoryHtml = `
+        <div class="hint" style="color:var(--rouge); margin-bottom:6px;">Non disponible :</div>
+        <div class="tt-kv">${unavailable.slice(0,20).map(inv=>`<div>${escapeHtml(inv.size||'—')}</div><div>${escapeHtml(inv.color||'')}</div>`).join('')}</div>
+      `;
+    }
+
+    let selectedToptexImage = images[0] || null;
+    resultsEl.innerHTML = `
+      <div style="display:flex; gap:20px; flex-wrap:wrap; padding:12px 4px;">
+        ${images.length ? `
+          <div>
+            <div class="tt-images" id="toptex-direct-images" style="margin:0;">${images.slice(0,6).map((u,i)=>`<img src="${escapeHtml(imgSrc(u))}" loading="lazy" style="width:80px; height:80px; cursor:pointer; border:3px solid ${i===0?'var(--thread, #C2542C)':'transparent'}; border-radius:4px;" data-toptex-select-img="${escapeHtml(u)}">`).join('')}</div>
+            <div class="hint" style="margin:4px 0 0;">Clique sur une image pour choisir celle à enregistrer</div>
+          </div>
+        ` : ''}
+        <div style="flex:1; min-width:200px;">
+          <div style="font-family:Georgia,serif; font-size:14px; margin-bottom:6px;">${escapeHtml(designation || reference)}${brand ? ' — '+escapeHtml(brand) : ''}</div>
+          <div class="tt-kv">
+            ${grammage ? `<div>Grammage</div><div>${escapeHtml(grammage)}</div>` : ''}
+            ${composition ? `<div>Composition</div><div>${escapeHtml(composition)}</div>` : ''}
+            ${!grammage && !composition ? `<div class="hint" style="grid-column:1/-1;">Grammage/composition non trouvés dans la réponse TopTex.</div>` : ''}
+          </div>
+        </div>
+        <div style="flex:1; min-width:220px;">
+          <div class="hint" style="margin:0 0 6px;">Prix</div>
+          ${priceHtml}
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <div class="hint" style="margin:0 0 6px;">Stock chez TopTex</div>
+          ${inventoryHtml}
+        </div>
+      </div>
+      <div class="toolbar" style="margin-top:14px; margin-bottom:0;">
+        <button class="small" id="toptex-direct-create-axonaut">Créer l'article dans Axonaut</button>
+      </div>
+      <details class="tt-raw">
+        <summary>Voir toutes les données brutes renvoyées par TopTex</summary>
+        <div class="tt-section"><strong>Catalogue</strong><pre>${escapeHtml(JSON.stringify(catalog.data, null, 2))}</pre></div>
+        <div class="tt-section"><strong>Prix</strong><pre>${escapeHtml(JSON.stringify(price.data, null, 2))}</pre></div>
+        <div class="tt-section"><strong>Stock</strong><pre>${escapeHtml(JSON.stringify(inventory.data, null, 2))}</pre></div>
+      </details>
+    `;
+
+    const imagesBox = document.getElementById('toptex-direct-images');
+    if(imagesBox){
+      imagesBox.querySelectorAll('[data-toptex-select-img]').forEach(img=>{
+        img.addEventListener('click', ()=>{
+          selectedToptexImage = img.dataset.toptexSelectImg;
+          imagesBox.querySelectorAll('[data-toptex-select-img]').forEach(i=>{
+            i.style.borderColor = (i.dataset.toptexSelectImg === selectedToptexImage) ? 'var(--thread, #C2542C)' : 'transparent';
+          });
+        });
+        // Clic droit = zoom (le clic gauche sert à choisir l'image à enregistrer, donc on ne
+        // peut pas garder le zoom au clic gauche habituel [data-zoom-img] sans conflit).
+        img.addEventListener('contextmenu', (e)=>{
+          e.preventDefault();
+          openImageZoom(imgSrc(img.dataset.toptexSelectImg));
+        });
+      });
+    }
+    const createBtn = document.getElementById('toptex-direct-create-axonaut');
+    if(createBtn){
+      createBtn.addEventListener('click', async ()=>{
+        createBtn.disabled = true;
+        createBtn.textContent = 'Création en cours…';
+        const cheapest = priceGroups[0] ? priceGroups[0].price : null;
+        const payload = {
+          name: designation || reference,
+          product_code: reference,
+          description: productDescription || [composition, grammage].filter(Boolean).join(' — ') || undefined,
+          unit: 'u',
+          job_costing: cheapest != null ? cheapest : 0,
+          tax_rate: 20,
+        };
+        if(subFamilyCategory) payload.category = subFamilyCategory;
+        await createAxonautProductFromPayload(payload, reference);
+        const imgToSave = selectedToptexImage;
+        if(imgToSave){
+          const savedPath = await saveProductImageToAxonautFolder(reference, imgToSave);
+          toast(savedPath ? `Image enregistrée dans ${AXONAUT_IMAGES_SHARE_HINT}` : "Impossible d'enregistrer l'image dans le dossier partagé.");
+        }
+        createBtn.disabled = false;
+        createBtn.textContent = "Créer l'article dans Axonaut";
+      });
+    }
+  }catch(err){
+    resultsEl.innerHTML = `<div class="hint" style="color:var(--rouge); margin:10px 0;">${escapeHtml(err.message)}</div>`;
+  }
+}
+
 /* ---------- Focus preservation ---------- */
 function captureFocus(){
   const el = document.activeElement;
@@ -2038,6 +2349,18 @@ function renderCataloguePanel(){
       <div id="cat-import-zone"></div>
     </div>
 
+    ${activeTab.id === 'toptex' ? `
+    <div class="form-card">
+      <h3 style="margin-top:0;">Recherche directe chez TopTex</h3>
+      <div class="hint" style="margin-top:0;">Interroge TopTex en direct pour une référence précise (prix, stock, fiche produit) — fonctionne même si le catalogue n'a pas (encore) été importé.</div>
+      <div class="toolbar">
+        <input type="text" class="search-box" id="toptex-direct-ref" placeholder="Référence TopTex (ex: WK303)…">
+        <button class="small" id="toptex-direct-btn">Rechercher</button>
+      </div>
+      <div id="toptex-direct-results" style="margin-top:10px;"></div>
+    </div>
+    ` : ''}
+
     <div class="form-card">
       <div class="hint" style="margin-top:0;">
         ${fmtNum(countForTab(activeTab))} ligne(s) ${escapeHtml(activeTab.label)} en base. Tape au moins un critère pour voir les résultats (pas de liste complète affichée d'un coup, pour que la page reste rapide).
@@ -2059,6 +2382,13 @@ function renderCataloguePanel(){
   `;
 
   renderImportZone(activeTab);
+
+  if(activeTab.id === 'toptex'){
+    const searchBtn = document.getElementById('toptex-direct-btn');
+    const searchInput = document.getElementById('toptex-direct-ref');
+    if(searchBtn) searchBtn.addEventListener('click', searchToptexDirect);
+    if(searchInput) searchInput.addEventListener('keydown', e=>{ if(e.key==='Enter') searchToptexDirect(); });
+  }
 
   panel.querySelectorAll('[data-cat-tab]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -2592,6 +2922,13 @@ function setCatalogueImportProgress(key, p){
 // produits TopTex bruts — factorisé pour être utilisé aussi bien par l'import page par page que
 // par l'import via export fichier (result_in_file), qui renvoient tous les deux des produits au
 // même format.
+// Convertit un prix TopTex tel que renvoyé dans le catalogue brut ("19,16 €", virgule décimale
+// + symbole monétaire) en nombre exploitable — Number("19,16 €") vaudrait NaN sans ce nettoyage.
+function parseToptexPrice(raw){
+  if(raw == null) return null;
+  const num = parseFloat(String(raw).replace(/[^\d,.-]/g, '').replace(',', '.'));
+  return isNaN(num) ? null : num;
+}
 function buildToptexItemsFromProducts(rows){
   const pageItems = [];
   rows.forEach(product=>{
@@ -2599,34 +2936,49 @@ function buildToptexItemsFromProducts(rows){
     const brand = findFieldValue(product, /^brand$/i) || product.brand || null;
     const designation = findFieldValue(product, /^designation$/i) || null;
     const composition = findFieldValue(product, /composition|material|matiere/i);
-    const grammage = findFieldValue(product, /grammage|weight|poids|gsm/i);
-    // subfamily/family sont souvent des objets imbriqués/multilingues côté TopTex (comme
-    // designation/composition/grammage) : un accès direct product.family renvoyait donc
-    // presque toujours vide, d'où le sélecteur "Type" resté sans aucune option après import.
-    const familyLabel = findFieldValue(product, /^subfamily$/i) || findFieldValue(product, /^family$/i);
-    const images = collectImageUrls(product.images || product, [], 0);
-    const skus = Array.isArray(product.skus) ? product.skus : (Array.isArray(product.variants) ? product.variants : (Array.isArray(product) ? product : [product]));
-    (skus.length ? skus : [product]).forEach(sku=>{
-      const price = findFieldValue(sku, /^price$|publicPrice/i);
-      pageItems.push({
-        reference: catalogRef || sku.catalogReference || sku.sku || null,
-        type: familyLabel || null,
-        modele: designation,
-        taille: sku.size || sku.sizeCode || null,
-        couleur: sku.color || sku.colorCode || null,
-        categorie: familyLabel || null,
-        fournisseur: 'TopTex',
-        qte: 0,
-        prix: price != null ? Number(price) : null,
-        note: sku.sku ? `sku ${sku.sku}` : null,
-        imageUrl: images[0] || null,
-        stock: null,
-        designation: [brand, designation].filter(Boolean).join(' '),
-        composition: composition || null,
-        grammage: grammage || null,
-        entretien: null,
+    // Pas de champ "grammage" chez TopTex : c'est "averageWeight" (ex. "260 g") au niveau du
+    // produit — /weight/i le trouve puisqu'il matche "averageWeight".
+    const grammage = product.averageWeight || findFieldValue(product, /grammage|weight|poids|gsm/i);
+    // Le champ réel est "sub_family" (avec underscore), pas "subfamily" — accès direct plutôt
+    // que regex maintenant que la vraie forme de la réponse TopTex est confirmée.
+    const familyLabel = (product.sub_family && (product.sub_family.fr || product.sub_family.en))
+      || (product.family && (product.family.fr || product.family.en))
+      || null;
+    const productImages = collectImageUrls(product.images || product, [], 0);
+    const base = {
+      reference: catalogRef, type: familyLabel, modele: designation, categorie: familyLabel,
+      fournisseur: 'TopTex', qte: 0,
+      designation: [brand, designation].filter(Boolean).join(' '),
+      composition: composition || null, grammage: grammage || null, entretien: null,
+    };
+    // La vraie forme du catalogue TopTex est product.colors[].sizes[] (pas product.skus ni
+    // product.variants, qui n'existent pas) : chaque couleur porte son nom localisé
+    // (color.colors.fr), son visuel (color.packshots.FACE.url_packshot), et un tableau de
+    // tailles où chaque entrée porte le prix public (publicUnitPrice, en chaîne formatée) et le
+    // sku précis. L'ancien code tombait donc systématiquement sur le repli [product] entier,
+    // créant une seule ligne par produit sans couleur, sans taille et sans prix.
+    const colors = Array.isArray(product.colors) ? product.colors : [];
+    if(colors.length){
+      colors.forEach(color=>{
+        const colorName = (color.colors && (color.colors.fr || color.colors.en)) || null;
+        const colorImage = (color.packshots && color.packshots.FACE && color.packshots.FACE.url_packshot) || null;
+        const sizes = Array.isArray(color.sizes) ? color.sizes : [];
+        sizes.forEach(sz=>{
+          pageItems.push({
+            ...base,
+            taille: sz.size || null,
+            couleur: colorName,
+            prix: parseToptexPrice(sz.publicUnitPrice),
+            note: sz.sku ? `sku ${sz.sku}` : null,
+            imageUrl: colorImage || productImages[0] || null,
+            stock: null,
+          });
+        });
       });
-    });
+    } else {
+      // Repli si un produit n'a exceptionnellement pas cette structure colors/sizes.
+      pageItems.push({ ...base, taille: null, couleur: null, prix: null, note: null, imageUrl: productImages[0] || null, stock: null });
+    }
   });
   return pageItems;
 }
@@ -2765,26 +3117,54 @@ async function importTopTexCatalogueFile(){
       return;
     }
     let rows = extractRows(res.data);
+    let fileUrl = null;
+    let fileRawText = null;
     // Si la réponse n'est pas déjà la liste des produits, on cherche une URL de fichier à
     // télécharger séparément (format probable pour result_in_file=1, non documenté par TopTex).
     if(!rows.length || !findFieldValue(rows[0], /reference|sku/i)){
-      const fileUrl = findFieldValue(res.data, /url|file|link|href/i);
+      fileUrl = findFieldValue(res.data, /url|file|link|href/i);
       if(fileUrl && typeof fileUrl === 'string' && /^https?:\/\//i.test(fileUrl)){
-        setCatalogueImportProgress(key, { message:"Téléchargement du fichier d'export TopTex…" });
-        const fileResp = await fetch(fileUrl);
-        if(!fileResp.ok) throw new Error(`Téléchargement du fichier d'export échoué (HTTP ${fileResp.status})`);
-        const text = await fileResp.text();
-        let data;
-        try{ data = JSON.parse(text); }
-        catch(e){ throw new Error("Le fichier d'export renvoyé par TopTex n'est pas au format JSON — dis-le pour qu'on ajuste (peut-être un CSV)."); }
-        rows = extractRows(data);
+        // Le fichier est généré par TopTex en arrière-plan : l'URL (présignée S3, valable 15 min)
+        // est renvoyée immédiatement mais le fichier est vide ("[]") tant que l'export n'est pas
+        // terminé. On retélécharge donc régulièrement jusqu'à ce qu'il contienne des données.
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const maxWaitMs = 10 * 60 * 1000; // le lien expire à 15 min, on s'arrête avant par sécurité
+        const pollIntervalMs = 8000;
+        const startedAt = Date.now();
+        let data = null;
+        while(true){
+          const waited = Math.round((Date.now() - startedAt) / 1000);
+          setCatalogueImportProgress(key, { message: `TopTex prépare le fichier d'export en arrière-plan… (${waited}s d'attente)` });
+          const fileResp = await fetch(fileUrl);
+          if(!fileResp.ok) throw new Error(`Téléchargement du fichier d'export échoué (HTTP ${fileResp.status}) à l'adresse ${fileUrl}`);
+          fileRawText = await fileResp.text();
+          try{ data = JSON.parse(fileRawText); }
+          catch(e){
+            setCatalogueImportProgress(key, { busy:false, isError:true, message: `Le fichier d'export (${fileUrl}) n'est pas au format JSON — voici ses 500 premiers caractères (à partager pour ajuster le code) : ${fileRawText.slice(0,500)}` });
+            return;
+          }
+          rows = extractRows(data);
+          if(rows.length) break;
+          if(Date.now() - startedAt > maxWaitMs){
+            setCatalogueImportProgress(key, { busy:false, isError:true, message: `TopTex n'a toujours pas terminé de générer le fichier après ${Math.round(maxWaitMs/60000)} minutes — reclique sur le bouton pour relancer une demande d'export.` });
+            return;
+          }
+          await sleep(pollIntervalMs);
+        }
       } else {
         setCatalogueImportProgress(key, { busy:false, isError:true, message: `Réponse inattendue de TopTex pour l'export fichier (ni URL de fichier, ni liste de produits directe trouvée). Réponse brute (à partager pour ajuster le code) : ${JSON.stringify(res.data).slice(0,500)}` });
         return;
       }
     }
     if(!rows.length){
-      setCatalogueImportProgress(key, { busy:false, isError:true, message:"L'export TopTex n'a renvoyé aucun produit." });
+      // L'export TopTex est probablement asynchrone (fichier généré en tâche de fond) : l'URL
+      // renvoyée existe déjà mais son contenu n'est pas encore prêt au moment où on la télécharge.
+      // On affiche tout ce qu'on a pu récupérer pour comprendre ce qui se passe réellement.
+      setCatalogueImportProgress(key, { busy:false, isError:true, message:
+        `L'export TopTex n'a renvoyé aucun produit. ` +
+        (fileUrl ? `URL de fichier trouvée : ${fileUrl}. Contenu téléchargé (500 premiers caractères) : ${(fileRawText||'').slice(0,500)}` : `Réponse initiale de TopTex (500 premiers caractères) : ${JSON.stringify(res.data).slice(0,500)}`) +
+        ` — partage ce message pour qu'on ajuste le code (l'export est peut-être généré en arrière-plan et pas encore prêt).`
+      });
       return;
     }
     setCatalogueImportProgress(key, { message: `Traitement de ${fmtNum(rows.length)} produit(s)…` });

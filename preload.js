@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('csbHost', {
   credGet: (origin) => ipcRenderer.invoke('csb:cred-get', origin),
   credSet: (origin, username, password) => ipcRenderer.invoke('csb:cred-set', origin, username, password),
   credDelete: (origin) => ipcRenderer.invoke('csb:cred-delete', origin),
+  saveAxonautImage: (filename, dataBase64) => ipcRenderer.invoke('csb:save-axonaut-image', { filename, dataBase64 }),
   onWebviewOpenTab: (callback) => {
     const listener = (_event, url) => callback(url);
     ipcRenderer.on('csb:webview-open-tab', listener);

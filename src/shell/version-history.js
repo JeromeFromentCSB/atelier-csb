@@ -2,6 +2,11 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.30', items: [
+    "Inventaire : correction majeure de l'import du catalogue TopTex — la vraie structure (couleurs/tailles imbriquées, prix au format texte) n'était pas celle attendue, ce qui faisait perdre couleur, taille et prix sur (quasiment) toutes les lignes importées",
+    "Inventaire : nouveau bouton « Créer l'article dans Axonaut » (sur une fiche article, et directement depuis une recherche TopTex) — remplit nom, catégorie, référence, description, coût de revient",
+    "Axonaut n'a pas de champ image dans son API produit : l'image est à la place enregistrée automatiquement dans \\\\SB-CONFECTION\\Atelier CSB\\Images AXONAUT (clic gauche sur une vignette pour la choisir, clic droit pour zoomer)",
+  ]},
   { v: '0.2.29', items: [
     "Inventaire : nouvelle méthode d'import du catalogue TopTex « via export fichier », en un seul appel au lieu de centaines de pages (à essayer en premier, plus rapide) — l'ancienne méthode page par page (avec reprise) reste disponible en repli si le format renvoyé ne convient pas",
   ]},

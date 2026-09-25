@@ -209,6 +209,20 @@ ipcMain.handle('csb:cred-delete', (_event, origin) => {
 ipcMain.handle('csb:install-update', () => autoUpdater.quitAndInstall());
 ipcMain.handle('csb:app-version', () => app.getVersion());
 
+// ---------- Image produit → dossier partagé Axonaut (Synology) ----------
+// Axonaut n'a pas de champ "image" dans son API produit (confirmé via leur doc v2) : pas moyen
+// d'attacher une photo à la création. À la place, on enregistre l'image dans ce dossier partagé
+// sur le NAS pour que ce soit rapide de la glisser-déposer à la main dans Axonaut ensuite.
+const AXONAUT_IMAGES_DIR = '\\\\SB-CONFECTION\\Atelier CSB\\Images AXONAUT';
+ipcMain.handle('csb:save-axonaut-image', (_event, { filename, dataBase64 }) => {
+  if (!filename || !dataBase64) throw new Error('Nom de fichier ou image manquant.');
+  const safeName = filename.replace(/[\\/:*?"<>|]/g, '_');
+  fs.mkdirSync(AXONAUT_IMAGES_DIR, { recursive: true });
+  const fullPath = path.join(AXONAUT_IMAGES_DIR, safeName);
+  fs.writeFileSync(fullPath, Buffer.from(dataBase64, 'base64'));
+  return fullPath;
+});
+
 // ---------- Email (IMAP + mot de passe d'application) ----------
 // Remplace l'ancienne connexion OAuth Google (trop lourde à configurer : projet Google
 // Cloud, écran de consentement, utilisateurs test…) par une simple connexion IMAP avec un
