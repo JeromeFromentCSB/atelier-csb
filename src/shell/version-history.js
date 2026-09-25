@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.29', items: [
+    "Inventaire : nouvelle méthode d'import du catalogue TopTex « via export fichier », en un seul appel au lieu de centaines de pages (à essayer en premier, plus rapide) — l'ancienne méthode page par page (avec reprise) reste disponible en repli si le format renvoyé ne convient pas",
+  ]},
   { v: '0.2.28', items: [
     "Inventaire : l'import du catalogue TopTex (70 000+ références, forcément long) enregistre désormais chaque page au fur et à mesure au lieu d'attendre la toute fin — un timeout en cours de route ne fait plus tout perdre, un bouton « Reprendre l'import » permet de continuer exactement où ça s'est arrêté",
   ]},
