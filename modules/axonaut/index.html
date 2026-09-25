@@ -557,6 +557,14 @@
     <div class="row" style="margin-top:14px; padding-top:14px; border-top:1.5px dashed var(--line);">
       <label style="min-width:100%; font-weight:700; color:var(--ink);">Colissimo — Expéditeur</label>
     </div>
+    <div class="row" id="colFeLoadWarning" style="display:none; min-width:100%;">
+      <div style="background:#fff3cd; border:1.5px solid #e0b23c; border-radius:8px; padding:10px 12px; font-size:13px; color:#5c4a12; min-width:100%;">
+        ⚠️ Connexion au serveur impossible : les champs ci-dessous sont peut-être affichés vides
+        alors que les vraies valeurs existent bien côté serveur. <b>Ne clique pas sur Enregistrer</b>
+        tant que ce message est affiché, tu écraserais les valeurs réelles avec des champs vides —
+        ferme cette fenêtre et réessaie une fois la connexion revenue.
+      </div>
+    </div>
     <div class="row">
       <label>Expéditeur — société</label>
       <input type="text" id="colSenderCompany" placeholder="Atelier CSB">
@@ -1327,16 +1335,18 @@ function appSettingsBase(){
   const cfg = getConfig();
   return cfg.url.replace(/\/+$/,'') + '/api/collections/axonaut_settings/records';
 }
+// Lève une exception en cas d'échec réseau/HTTP (au lieu de renvoyer null comme pour "aucun
+// réglage enregistré") : les appelants doivent pouvoir distinguer les deux cas, sinon un simple
+// souci de connexion (ex. juste après une mise à jour, avant que la bascule Tailscale ait fini
+// de se faire) est interprété comme "rien n'a jamais été sauvegardé" et invite à ressaisir des
+// réglages qui existent pourtant bien côté serveur.
 async function fetchSharedSetting(key){
-  try{
-    const filter = encodeURIComponent(`settings_key='${key}'`);
-    const res = await CSBAuth.authedFetch(appSettingsBase() + `?filter=(${filter})`);
-    if(!res.ok) return null;
-    const json = await res.json();
-    const rec = (json.items && json.items[0]) || null;
-    if(!rec) return null;
-    return JSON.parse(rec.settings_value);
-  }catch(e){ return null; }
+  const filter = encodeURIComponent(`settings_key='${key}'`);
+  const res = await CSBAuth.authedFetch(appSettingsBase() + `?filter=(${filter})`);
+  if(!res.ok) throw new Error('fetchSharedSetting HTTP ' + res.status);
+  const json = await res.json();
+  const rec = (json.items && json.items[0]) || null;
+  return rec ? JSON.parse(rec.settings_value) : null;
 }
 async function saveSharedSetting(key, value){
   try{
@@ -1377,15 +1387,25 @@ async function getColConfig(){
     customsDesc:'Casaque de courses (textile)', customsValue:'50', customsCategory:'3', customsOrigin:'FR',
     customsHsCode:''
   };
-  const shared = await fetchSharedSetting('colissimo');
-  if(shared) return Object.assign(defaults, shared);
-  const legacy = await readLegacyLocalConfig(COL_CFG_KEY);
-  if(legacy){
-    const merged = Object.assign(defaults, legacy);
-    saveSharedSetting('colissimo', merged).catch(()=>{});
-    return merged;
+  try{
+    const shared = await fetchSharedSetting('colissimo');
+    if(shared) return Object.assign(defaults, shared);
+    // Confirmé vide côté serveur (pas une erreur réseau) : on peut reprendre une éventuelle
+    // ancienne valeur locale sans risque d'écraser un vrai réglage existant.
+    const legacy = await readLegacyLocalConfig(COL_CFG_KEY);
+    if(legacy){
+      const merged = Object.assign(defaults, legacy);
+      saveSharedSetting('colissimo', merged).catch(()=>{});
+      return merged;
+    }
+    return defaults;
+  }catch(e){
+    // Échec réseau : on ne touche surtout pas à la reprise locale/à la sauvegarde (qui
+    // écraserait une vraie valeur peut-être encore présente côté serveur) — juste des
+    // valeurs par défaut, marquées comme non fiables pour l'écran de réglages.
+    defaults.__loadFailed = true;
+    return defaults;
   }
-  return defaults;
 }
 async function setColConfig(patch){
   const cfg = Object.assign(await getColConfig(), patch);
@@ -1395,15 +1415,20 @@ async function setColConfig(patch){
 const FE_CFG_KEY = 'csb_envoi_axonaut_fe_config';
 async function getFeConfig(){
   const defaults = { loginId:'', apiKey:'', codeSa:'', codeClient:'', workerUrl:'' };
-  const shared = await fetchSharedSetting('france_express');
-  if(shared) return Object.assign(defaults, shared);
-  const legacy = await readLegacyLocalConfig(FE_CFG_KEY);
-  if(legacy){
-    const merged = Object.assign(defaults, legacy);
-    saveSharedSetting('france_express', merged).catch(()=>{});
-    return merged;
+  try{
+    const shared = await fetchSharedSetting('france_express');
+    if(shared) return Object.assign(defaults, shared);
+    const legacy = await readLegacyLocalConfig(FE_CFG_KEY);
+    if(legacy){
+      const merged = Object.assign(defaults, legacy);
+      saveSharedSetting('france_express', merged).catch(()=>{});
+      return merged;
+    }
+    return defaults;
+  }catch(e){
+    defaults.__loadFailed = true;
+    return defaults;
   }
-  return defaults;
 }
 async function setFeConfig(patch){
   const cfg = Object.assign(await getFeConfig(), patch);
@@ -2818,6 +2843,10 @@ async function loadSettingsForm(){
   document.getElementById('feCodeSa').value = feCfg.codeSa;
   document.getElementById('feCodeClient').value = feCfg.codeClient;
   document.getElementById('feWorkerUrl').value = feCfg.workerUrl;
+  const loadFailed = !!(colCfg.__loadFailed || feCfg.__loadFailed);
+  document.getElementById('colFeLoadWarning').style.display = loadFailed ? 'block' : 'none';
+  document.getElementById('colSaveBtn').disabled = loadFailed;
+  document.getElementById('feSaveBtn').disabled = loadFailed;
 }
 document.getElementById('feSaveBtn').addEventListener('click', async () => {
   await setFeConfig({

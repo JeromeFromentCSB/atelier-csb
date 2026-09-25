@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.24', items: [
+    "Correction (Colissimo/France Express) : la fenêtre de réglages affichait des champs vides — au lieu d'une vraie erreur — quand la connexion au serveur avait un souci passager, ce qui donnait l'impression que les réglages étaient perdus et invitait à écraser les vraies valeurs en ressaisissant. Un bandeau d'avertissement apparaît désormais dans ce cas et empêche d'enregistrer par-dessus",
+  ]},
   { v: '0.2.23', items: [
     "Pense-bête : possibilité de marquer une note en priorité (⭐) — elle remonte en haut de la liste ; nécessite d'ajouter le champ « priorite » (Bool) à la collection pensebete dans PocketBase",
   ]},
