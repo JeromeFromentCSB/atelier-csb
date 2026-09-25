@@ -2316,12 +2316,17 @@ function renderImportZone(tab){
   const busy = p && p.busy;
 
   if(tab.mode === 'live'){
+    const resumable = !busy && (state.catalogueImports||{}).toptexProgress && (state.catalogueImports||{}).toptexProgress.lastPage;
     zone.innerHTML = `
-      <div class="hint" style="margin-top:0;">Récupère tout le catalogue TopTex (toutes marques, couleurs, tailles) directement via l'API — pas de fichier à choisir. Réinitialise puis réimporte à chaque clic.</div>
-      <button class="small" id="cat-import-btn" ${busy?'disabled':''}>Réinitialiser et importer le catalogue TopTex</button>
+      <div class="hint" style="margin-top:0;">Récupère tout le catalogue TopTex (toutes marques, couleurs, tailles) directement via l'API — pas de fichier à choisir. Le catalogue est volumineux (70 000+ références), l'import peut prendre longtemps et s'interrompre sur un ralentissement passager de TopTex : dans ce cas, reprends-le plutôt que de tout relancer depuis le début.</div>
+      <div class="add-row">
+        <button class="small" id="cat-import-btn" ${busy?'disabled':''}>Réinitialiser et importer le catalogue TopTex depuis le début</button>
+        ${resumable ? `<button class="small" id="cat-import-resume-btn">Reprendre l'import (à partir de la page ${state.catalogueImports.toptexProgress.lastPage+1}, ${fmtNum(state.catalogueImports.toptexProgress.totalLines)} ligne(s) déjà récupérées)</button>` : ''}
+      </div>
       ${renderImportProgressHtml(tab.id)}
     `;
-    document.getElementById('cat-import-btn').addEventListener('click', importTopTexCatalogue);
+    document.getElementById('cat-import-btn').addEventListener('click', () => importTopTexCatalogue(false));
+    if(resumable) document.getElementById('cat-import-resume-btn').addEventListener('click', () => importTopTexCatalogue(true));
     return;
   }
 
@@ -2578,7 +2583,13 @@ function setCatalogueImportProgress(key, p){
   renderCataloguePanel();
 }
 
-async function importTopTexCatalogue(){
+// Le catalogue TopTex complet (modified_since forcé à 2000-01-01, cf. plus haut) est trop
+// volumineux (70 000+ références, bien plus de lignes une fois éclaté par taille) pour tenir en
+// un seul import sans jamais essuyer un timeout ponctuel de leur API. Plutôt que de tout perdre à
+// la moindre coupure, chaque page est donc écrite dans PocketBase/Firestore au fur et à mesure
+// (pas seulement à la toute fin), et la dernière page réussie est mémorisée (catalogueImports.
+// toptexProgress) pour pouvoir reprendre exactement là où ça s'est arrêté au lieu de tout refaire.
+async function importTopTexCatalogue(resume){
   const key = 'toptex';
   if(catalogueImportProgress[key] && catalogueImportProgress[key].busy){
     toast("Un import est déjà en cours, attends qu'il se termine.");
@@ -2589,37 +2600,63 @@ async function importTopTexCatalogue(){
     setCatalogueImportProgress(key, { busy:false, isError:true, message:"Aucun accès TopTex configuré sur cet ordinateur (renseigne les identifiants dans Paramètres → Accès TopTex)." });
     return;
   }
-  setCatalogueImportProgress(key, { busy:true, isError:false, message:"Téléchargement du catalogue TopTex…", done:0, total:0 });
+
+  const prevProgress = (state.catalogueImports || {}).toptexProgress || null;
+  let page = 1;
+  let totalLines = 0;
+  if(resume && prevProgress && prevProgress.lastPage){
+    page = prevProgress.lastPage + 1;
+    totalLines = prevProgress.totalLines || 0;
+  } else {
+    setCatalogueImportProgress(key, { busy:true, isError:false, message:"Suppression de l'ancien catalogue TopTex…", done:0, total:0 });
+    detachCatalogueListener();
+    try{
+      const snap = await catalogueItemsCol.where('fournisseur', '==', 'TopTex').get();
+      let deleted = 0;
+      for(const chunk of chunkArray(snap.docs, 400)){
+        const batch = db.batch();
+        chunk.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        deleted += chunk.length;
+        setCatalogueImportProgress(key, { message: `Suppression de l'ancien catalogue TopTex… ${fmtNum(deleted)} / ${fmtNum(snap.docs.length)}` });
+      }
+    } finally {
+      attachCatalogueListener();
+    }
+    state.catalogueImports = { ...(state.catalogueImports||{}), toptexProgress: { lastPage: 0, totalLines: 0 } };
+    saveSettings();
+  }
+
+  setCatalogueImportProgress(key, { busy:true, isError:false, message: page>1 ? `Reprise de l'import à la page ${page}…` : "Téléchargement du catalogue TopTex…", done:0, total:0 });
   // Des pages plus petites réduisent le risque de timeout côté TopTex (leur backend semble
   // mettre plus de temps à répondre quand modified_since remonte loin dans l'historique).
   const pageSize = 50;
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  let page = 1;
-  const items = [];
   try{
     while(true){
-      setCatalogueImportProgress(key, { message: `Téléchargement du catalogue TopTex… page ${page} (${fmtNum(items.length)} lignes cumulées)` });
+      setCatalogueImportProgress(key, { message: `Téléchargement du catalogue TopTex… page ${page} (${fmtNum(totalLines)} lignes déjà enregistrées)` });
       // modified_since est requis pour récupérer tout le catalogue : sans lui, TopTex ne renvoie
       // qu'un petit sous-ensemble (produits récemment modifiés), pas l'historique complet — c'est
       // ce qui donnait un import "réussi" mais avec seulement ~200 lignes au lieu de plusieurs
       // milliers, et donc des références bien réelles (ex. WK303) absentes du résultat.
       let res = null;
       let attempt = 0;
-      const maxAttempts = 4;
+      const maxAttempts = 5;
       while (attempt < maxAttempts) {
         attempt++;
         res = await toptexGet('/v3/products/all', { usage_right: 'b2b_uniquement', display_prices: '1', page_number: page, page_size: pageSize, modified_since: '2000-01-01' });
         // 504/502/503 : erreurs passagères côté serveur TopTex (souvent un simple timeout) —
-        // on retente après une petite pause au lieu d'abandonner tout l'import en cours.
+        // on retente après une pause croissante au lieu d'abandonner tout l'import en cours.
         if (res.ok || ![502, 503, 504].includes(res.status) || attempt >= maxAttempts) break;
         setCatalogueImportProgress(key, { message: `Page ${page} : réponse lente côté TopTex (HTTP ${res.status}), nouvelle tentative ${attempt}/${maxAttempts - 1}…` });
-        await sleep(1500 * attempt);
+        await sleep(2000 * attempt);
       }
       if(!res.ok){
-        setCatalogueImportProgress(key, { busy:false, isError:true, message: `Erreur HTTP ${res.status} à la page ${page} (après ${attempt} tentative(s)). ${(res.raw||'').slice(0,200)}` });
+        setCatalogueImportProgress(key, { busy:false, isError:true, message: `Erreur HTTP ${res.status} à la page ${page} (après ${attempt} tentative(s)). Rien n'est perdu : ${fmtNum(totalLines)} ligne(s) déjà enregistrées sont conservées — reclique sur « Reprendre l'import » pour continuer à partir de la page ${page} au lieu de tout refaire. ${(res.raw||'').slice(0,200)}` });
         return;
       }
       const rows = extractRows(res.data);
+      const pageItems = [];
       rows.forEach(product=>{
         const catalogRef = product.catalogReference || product.catalog_reference || product.reference || null;
         const brand = findFieldValue(product, /^brand$/i) || product.brand || null;
@@ -2634,7 +2671,7 @@ async function importTopTexCatalogue(){
         const skus = Array.isArray(product.skus) ? product.skus : (Array.isArray(product.variants) ? product.variants : (Array.isArray(product) ? product : [product]));
         (skus.length ? skus : [product]).forEach(sku=>{
           const price = findFieldValue(sku, /^price$|publicPrice/i);
-          items.push({
+          pageItems.push({
             reference: catalogRef || sku.catalogReference || sku.sku || null,
             type: familyLabel || null,
             modele: designation,
@@ -2654,44 +2691,32 @@ async function importTopTexCatalogue(){
           });
         });
       });
+
+      if(pageItems.length){
+        const products = groupItemsByProduct(pageItems);
+        for(const chunk of chunkArray(products, 400)){
+          const batch = db.batch();
+          chunk.forEach(p => batch.set(catalogueItemsCol.doc(), { ...p, createdAt: firebase.firestore.FieldValue.serverTimestamp() }));
+          await batch.commit();
+        }
+        totalLines += pageItems.length;
+      }
+      state.catalogueImports = { ...(state.catalogueImports||{}), toptexProgress: { lastPage: page, totalLines } };
+      saveSettings();
+
       if(rows.length < pageSize) break;
       page++;
-      if(page > 500) break; // safety cap
+      if(page > 5000) break; // garde-fou
     }
   }catch(err){
-    setCatalogueImportProgress(key, { busy:false, isError:true, message: err.message });
+    setCatalogueImportProgress(key, { busy:false, isError:true, message: `${err.message} — rien n'est perdu : ${fmtNum(totalLines)} ligne(s) déjà enregistrées sont conservées, reclique sur « Reprendre l'import » pour continuer à partir de la page ${page}.` });
     return;
   }
 
-  detachCatalogueListener();
-  try{
-    // Supprime l'ancien catalogue TopTex avant de réimporter.
-    const snap = await catalogueItemsCol.where('fournisseur', '==', 'TopTex').get();
-    let deleted = 0;
-    for(const chunk of chunkArray(snap.docs, 400)){
-      const batch = db.batch();
-      chunk.forEach(d => batch.delete(d.ref));
-      await batch.commit();
-      deleted += chunk.length;
-      setCatalogueImportProgress(key, { message: `Suppression des anciennes données… ${fmtNum(deleted)} / ${fmtNum(snap.docs.length)}` });
-    }
-    let done = 0;
-    const products = groupItemsByProduct(items);
-    setCatalogueImportProgress(key, { message: `Import en cours… 0 / ${fmtNum(products.length)} produit(s) (${fmtNum(items.length)} lignes)`, done:0, total: products.length });
-    for(const chunk of chunkArray(products, 400)){
-      const batch = db.batch();
-      chunk.forEach(p => batch.set(catalogueItemsCol.doc(), { ...p, createdAt: firebase.firestore.FieldValue.serverTimestamp() }));
-      await batch.commit();
-      done += chunk.length;
-      setCatalogueImportProgress(key, { message: `Import en cours… ${fmtNum(done)} / ${fmtNum(products.length)} produit(s)`, done, total: products.length });
-    }
-  } finally {
-    attachCatalogueListener();
-  }
-  state.catalogueImports = { ...(state.catalogueImports||{}), toptex: true };
+  state.catalogueImports = { ...(state.catalogueImports||{}), toptex: true, toptexProgress: null };
   saveSettings();
-  setCatalogueImportProgress(key, { busy:false, isError:false, message: `Import terminé : ${fmtNum(items.length)} référence(s) TopTex (toutes tailles/couleurs) importées avec succès.`, done: 1, total: 1 });
-  toast(`Catalogue TopTex importé (${fmtNum(items.length)} lignes).`);
+  setCatalogueImportProgress(key, { busy:false, isError:false, message: `Import terminé : ${fmtNum(totalLines)} référence(s) TopTex (toutes tailles/couleurs) importées avec succès.`, done: 1, total: 1 });
+  toast(`Catalogue TopTex importé (${fmtNum(totalLines)} lignes).`);
 }
 
 async function importCatalogueFromFiles(tab, fileList){
