@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.26', items: [
+    "Inventaire : correction de l'import du catalogue TopTex — il ne récupérait qu'un petit sous-ensemble récent (~200 lignes) au lieu du catalogue complet, d'où des références bien réelles absentes après import ; le sélecteur « Type » du Catalogue fournisseurs restait aussi vide (mauvaise extraction du champ), corrigé également",
+  ]},
   { v: '0.2.25', items: [
     "Gestion Casaque : l'étiquette Colissimo s'affiche automatiquement juste après « Valider et générer » (si tout s'est bien passé), sans avoir à recliquer sur télécharger",
   ]},

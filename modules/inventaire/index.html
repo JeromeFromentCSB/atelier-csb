@@ -2596,7 +2596,11 @@ async function importTopTexCatalogue(){
   try{
     while(true){
       setCatalogueImportProgress(key, { message: `Téléchargement du catalogue TopTex… page ${page} (${fmtNum(items.length)} lignes cumulées)` });
-      const res = await toptexGet('/v3/products/all', { usage_right: 'b2b_uniquement', display_prices: '1', page_number: page, page_size: pageSize });
+      // modified_since est requis pour récupérer tout le catalogue : sans lui, TopTex ne renvoie
+      // qu'un petit sous-ensemble (produits récemment modifiés), pas l'historique complet — c'est
+      // ce qui donnait un import "réussi" mais avec seulement ~200 lignes au lieu de plusieurs
+      // milliers, et donc des références bien réelles (ex. WK303) absentes du résultat.
+      const res = await toptexGet('/v3/products/all', { usage_right: 'b2b_uniquement', display_prices: '1', page_number: page, page_size: pageSize, modified_since: '2000-01-01' });
       if(!res.ok){
         setCatalogueImportProgress(key, { busy:false, isError:true, message: `Erreur HTTP ${res.status} à la page ${page}. ${(res.raw||'').slice(0,200)}` });
         return;
@@ -2604,21 +2608,25 @@ async function importTopTexCatalogue(){
       const rows = extractRows(res.data);
       rows.forEach(product=>{
         const catalogRef = product.catalogReference || product.catalog_reference || product.reference || null;
-        const brand = product.brand || null;
+        const brand = findFieldValue(product, /^brand$/i) || product.brand || null;
         const designation = findFieldValue(product, /^designation$/i) || null;
         const composition = findFieldValue(product, /composition|material|matiere/i);
         const grammage = findFieldValue(product, /grammage|weight|poids|gsm/i);
+        // subfamily/family sont souvent des objets imbriqués/multilingues côté TopTex (comme
+        // designation/composition/grammage) : un accès direct product.family renvoyait donc
+        // presque toujours vide, d'où le sélecteur "Type" resté sans aucune option après import.
+        const familyLabel = findFieldValue(product, /^subfamily$/i) || findFieldValue(product, /^family$/i);
         const images = collectImageUrls(product.images || product, [], 0);
         const skus = Array.isArray(product.skus) ? product.skus : (Array.isArray(product.variants) ? product.variants : (Array.isArray(product) ? product : [product]));
         (skus.length ? skus : [product]).forEach(sku=>{
           const price = findFieldValue(sku, /^price$|publicPrice/i);
           items.push({
             reference: catalogRef || sku.catalogReference || sku.sku || null,
-            type: product.subfamily || product.family || null,
+            type: familyLabel || null,
             modele: designation,
             taille: sku.size || sku.sizeCode || null,
             couleur: sku.color || sku.colorCode || null,
-            categorie: product.family || null,
+            categorie: familyLabel || null,
             fournisseur: 'TopTex',
             qte: 0,
             prix: price != null ? Number(price) : null,
