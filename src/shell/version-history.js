@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.23', items: [
+    "Pense-bête : possibilité de marquer une note en priorité (⭐) — elle remonte en haut de la liste ; nécessite d'ajouter le champ « priorite » (Bool) à la collection pensebete dans PocketBase",
+  ]},
   { v: '0.2.22', items: [
     "Pense-bête : bouton ↻ pour actualiser la liste des notes (utile après une note ajoutée depuis un autre appareil)",
   ]},

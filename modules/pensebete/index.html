@@ -225,6 +225,12 @@
     color: white;
   }
   .checkbox.checked { background: var(--accent); }
+  .star-btn {
+    border: none; background: none; font-size: 18px; cursor: pointer;
+    flex-shrink: 0; margin-top: 1px; padding: 0; line-height: 1; color: var(--muted);
+  }
+  .star-btn.active { color: #d6a41e; }
+  .item.priorite { border-color: #e8c766; background: #fffaf0; }
   .item-body { flex: 1; min-width: 0; }
   .item-text {
     font-size: 15px;
@@ -528,6 +534,23 @@ document.getElementById('listPickerOverlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeListPicker();
 });
 
+async function togglePriority(id, current) {
+  const note = notes.find(n => n.id === id);
+  if (note) note.priorite = !current;
+  render();
+  try {
+    await apiCall(`/api/collections/${COLLECTION}/records/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priorite: !current })
+    });
+  } catch (e) {
+    console.error(e);
+    if (note) note.priorite = current;
+    render();
+    setStatus('Erreur de mise à jour', true);
+  }
+}
+
 async function deleteNote(id) {
   const idx = notes.findIndex(n => n.id === id);
   const backup = notes[idx];
@@ -557,12 +580,16 @@ function render() {
   if (currentList !== 'Toutes') {
     filtered = filtered.filter(n => (n.liste && n.liste.trim() ? n.liste.trim() : 'Sans liste') === currentList);
   }
+  // Les notes en priorité remontent en tête (l'ordre par ancienneté est conservé au sein de
+  // chaque groupe puisque Array.sort est garanti stable) — c'est ce que le widget iPhone
+  // reprendra aussi pour n'afficher que le haut de la liste sans ouvrir l'appli.
+  filtered = filtered.slice().sort((a, b) => (b.priorite ? 1 : 0) - (a.priorite ? 1 : 0));
   if (filtered.length === 0) {
     list.innerHTML = `<div class="empty">${currentTab === 'active' ? 'Rien pour le moment' : 'Aucune note terminée'}</div>`;
     return;
   }
   list.innerHTML = filtered.map(n => `
-    <div class="item ${n.fait ? 'done' : ''}">
+    <div class="item ${n.fait ? 'done' : ''} ${n.priorite ? 'priorite' : ''}">
       <div class="checkbox ${n.fait ? 'checked' : ''}" onclick="toggleDone('${n.id}', ${n.fait})">${n.fait ? '✓' : ''}</div>
       <div class="item-body">
         <div class="item-text">${escapeHtml(n.texte)}</div>
@@ -571,6 +598,7 @@ function render() {
           <span class="item-list-tag" onclick="changeNoteList('${n.id}')">${escapeHtml(n.liste && n.liste.trim() ? n.liste.trim() : 'Sans liste')} ✎</span>
         </div>
       </div>
+      <button class="star-btn ${n.priorite ? 'active' : ''}" onclick="togglePriority('${n.id}', ${n.priorite ? 'true' : 'false'})" title="Marquer en priorité">${n.priorite ? '⭐' : '☆'}</button>
       <button class="del-btn" onclick="deleteNote('${n.id}')">✕</button>
     </div>
   `).join('');
