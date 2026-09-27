@@ -6,22 +6,25 @@
 <title>Gestion Commande · L'Atelier CSB</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
   :root{
-    --ink:#1c1a17;
-    --paper:#faf7f0;
-    --paper-2:#f0ebe0;
-    --line:#ddd4c2;
+    --ink:#211C16;
+    --paper:#F5F2EC;
+    --paper-2:#EDE6D9;
+    --line:#E7E0D3;
     --poste-yellow:#f5c518;
     --poste-yellow-dark:#c99a00;
-    --silk-red:#a13a2e;
-    --silk-red-bg:#fbe4e0;
-    --silk-green:#3d6b4f;
-    --muted:#7a7266;
+    --silk-red:#B5452F;
+    --silk-red-bg:#F7E3DC;
+    --silk-green:#3E7A52;
+    --muted:#8A8074;
     --white:#fff;
     --radius:10px;
-    --shadow:0 1px 2px rgba(28,26,23,.06), 0 4px 14px rgba(28,26,23,.05);
+    --shadow:0 1px 2px rgba(33,28,22,.05), 0 8px 24px rgba(33,28,22,.07);
     --header-h:0px;
+    --font-display: 'Fraunces', Georgia, serif;
     font-size:15px;
   }
   *{box-sizing:border-box;}
@@ -29,7 +32,7 @@
     margin:0;
     background:var(--paper);
     color:var(--ink);
-    font-family:"Iowan Old Style","Georgia",serif;
+    font-family:'Public Sans',-apple-system,BlinkMacSystemFont,sans-serif;
     -webkit-font-smoothing:antialiased;
   }
   .mono{font-family:"SF Mono","Menlo","Consolas",monospace;}
@@ -83,7 +86,7 @@
   .btn:hover{ box-shadow:var(--shadow); transform:translateY(-1px); }
   .btn:active{ transform:translateY(0); }
   .btn:disabled{ opacity:.5; cursor:default; transform:none; box-shadow:none; }
-  .btn.primary{ background:var(--ink); color:var(--paper); }
+  .btn.primary{ background:linear-gradient(135deg, var(--ink), var(--silk-red)); color:#fff; border-color:transparent; }
   .btn.ghost{ border-color:var(--line); color:var(--muted); }
   .btn.danger{ border-color:var(--silk-red); color:var(--silk-red); background:#fff; }
   .btn.danger:hover{ background:var(--silk-red); color:#fff; }
@@ -116,7 +119,7 @@
   }
   .stat{ display:flex; align-items:center; gap:6px; flex:none; padding:6px 14px; border-right:1.5px solid var(--line); font-family:sans-serif; }
   .stat:last-child{ border-right:none; }
-  .stat .n{ font-size:.92rem; font-weight:700; font-family:"Iowan Old Style",Georgia,serif; white-space:nowrap; }
+  .stat .n{ font-size:.92rem; font-weight:700; font-family:var(--font-display); white-space:nowrap; }
   .stat .l{ font-size:.6rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:600; white-space:nowrap; }
   .stat.warn .n{ color:var(--silk-red); }
   .stat.ok .n{ color:var(--silk-green); }
@@ -136,7 +139,7 @@
     display:inline-block; width:34px; height:34px; background:var(--poste-yellow);
     border:2px solid var(--ink); transform:rotate(45deg); margin-bottom:22px;
   }
-  .empty h2{ font-family:"Iowan Old Style",Georgia,serif; color:var(--ink); font-size:1.3rem; margin:0 0 8px; }
+  .empty h2{ font-family:var(--font-display); color:var(--ink); font-size:1.3rem; margin:0 0 8px; }
   .empty p{ font-size:.85rem; max-width:420px; margin:0 auto; line-height:1.6; }
 
   .table-scroll{ overflow:auto; border:1.5px solid var(--ink); border-radius:var(--radius); background:var(--white); box-shadow:var(--shadow); max-height:calc(100vh - var(--header-h) - 36px); }
@@ -201,8 +204,10 @@
   .iconbtn:hover{ transform:scale(1.08); border-color:var(--poste-yellow-dark); }
 
   .settings-panel{
-    display:none; margin-top:14px; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
+    display:none; margin-top:0; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
     background:var(--white); font-family:sans-serif; font-size:.78rem;
+    position:fixed; top:64px; right:24px; width:min(560px,90vw); max-height:80vh; overflow-y:auto;
+    z-index:200; box-shadow:0 12px 40px rgba(0,0,0,.28);
   }
   .settings-panel.show{ display:block; }
   .settings-panel .row{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
@@ -230,7 +235,7 @@
     display:flex; align-items:center; justify-content:space-between; padding:16px 20px;
     border-bottom:1.5px solid var(--line);
   }
-  .col-modal-head h3{ margin:0; font-family:"Iowan Old Style",Georgia,serif; font-size:1.05rem; color:var(--ink); }
+  .col-modal-head h3{ margin:0; font-family:var(--font-display); font-size:1.05rem; color:var(--ink); }
   .col-modal-head .sub{ font-family:sans-serif; font-size:.7rem; color:var(--muted); margin-top:2px; }
   .col-modal-body{ padding:16px 20px; overflow:auto; }
   .col-section{ margin-bottom:16px; }
@@ -312,20 +317,20 @@
   .invoice-signature-img{ max-width:110px; max-height:60px; display:block; margin-top:4px; margin-left:auto; }
 
   #tabBar{
-    display:flex; align-items:center; gap:0; background:var(--ink); position:sticky; top:0; z-index:40;
+    display:flex; align-items:center; gap:0; background:linear-gradient(135deg, var(--ink), var(--silk-red)); position:sticky; top:0; z-index:40;
   }
   .tabbar-icon-btn{
-    margin-right:14px; background:transparent; border:none; color:#c9c2b3;
+    margin-right:14px; background:transparent; border:none; color:rgba(255,255,255,.65);
     cursor:pointer; font-size:1.05rem; padding:6px 10px; border-radius:6px; transition:.1s;
   }
-  .tabbar-icon-btn:hover{ color:var(--paper); background:rgba(255,255,255,.08); }
+  .tabbar-icon-btn:hover{ color:#fff; background:rgba(255,255,255,.08); }
   .tab-btn{
     flex:0 0 auto; font-family:sans-serif; font-weight:700; font-size:.82rem; letter-spacing:.02em;
-    padding:9px 22px; border:none; background:transparent; color:#c9c2b3; cursor:pointer;
-    border-bottom:3px solid transparent;
+    padding:9px 22px; border:none; background:transparent; color:rgba(255,255,255,.65); cursor:pointer;
+    border-bottom:3px solid transparent; border-radius:8px 8px 0 0; margin:5px 1px 0;
   }
-  .tab-btn.active{ color:var(--paper); border-bottom-color:var(--poste-yellow); background:rgba(255,255,255,.05); }
-  .tab-btn:hover{ color:var(--paper); }
+  .tab-btn.active{ color:var(--ink); border-bottom-color:transparent; background:var(--paper); box-shadow:0 1px 4px rgba(0,0,0,.2); }
+  .tab-btn:hover{ color:#fff; }
   .tab-panel{ display:none; }
   .tab-panel.active{ display:block; }
 
@@ -337,7 +342,7 @@
   #devisStats{ display:flex; align-items:stretch; border:1.5px solid var(--ink); border-radius:999px; overflow:hidden; background:var(--white); }
   #devisStats .stat{ display:flex; align-items:center; gap:6px; padding:6px 14px; border-right:1.5px solid var(--line); font-family:sans-serif; }
   #devisStats .stat:last-child{ border-right:none; }
-  #devisStats .stat .n{ font-size:.92rem; font-weight:700; font-family:"Iowan Old Style",Georgia,serif; white-space:nowrap; }
+  #devisStats .stat .n{ font-size:.92rem; font-weight:700; font-family:var(--font-display); white-space:nowrap; }
   #devisStats .stat .l{ font-size:.6rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:600; white-space:nowrap; }
   #devisStats .stat.ok .n{ color:var(--silk-green); }
   #devisStats .stat.warn .n{ color:var(--poste-yellow-dark); }
@@ -377,7 +382,7 @@
     font-family:sans-serif; font-weight:700; font-size:.8rem; padding:8px 16px; border:none; background:transparent;
     color:var(--muted); cursor:pointer; border-bottom:2.5px solid transparent;
   }
-  .devis-subtab-btn.active{ color:var(--ink); border-bottom-color:var(--poste-yellow-dark); }
+  .devis-subtab-btn.active{ color:var(--ink); border-bottom-color:var(--silk-red); }
   .devis-subtab-btn:hover{ color:var(--ink); }
   .devis-dot.warn{ background:var(--poste-yellow-dark); }
   .devis-number{ font-weight:600; margin-left:8px; }
@@ -744,7 +749,7 @@
     <div id="commandeRightPane" style="width:44%; flex-shrink:0; overflow-y:auto; background:var(--paper); padding:22px 26px;">
       <div id="blPanelEmpty" class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur une commande à gauche pour voir son bon de livraison ici.</div>
       <div id="blPanelContent" style="display:none;">
-        <h2 style="font-family:'Iowan Old Style',Georgia,serif; font-size:1.2rem; margin:0 0 4px;">Bon de livraison</h2>
+        <h2 style="font-family:var(--font-display); font-size:1.2rem; margin:0 0 4px;">Bon de livraison</h2>
         <div class="sub" id="blModalSub" style="font-family:sans-serif; font-size:.8rem; color:var(--muted); margin-bottom:10px;"></div>
         <div id="blAddressBlock" style="font-family:sans-serif; font-size:.85rem; color:var(--ink); margin-bottom:14px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;"></div>
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
@@ -978,7 +983,7 @@
 <div id="invoicePreviewOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:24px;">
   <div style="width:min(720px,100%); max-height:88vh; background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.35); display:flex; flex-direction:column; overflow:hidden;">
     <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1.5px solid var(--line);">
-      <h3 style="margin:0; font-family:Georgia,serif; font-size:17px;">Aperçu de la facture groupée</h3>
+      <h3 style="margin:0; font-family:var(--font-display); font-size:17px;">Aperçu de la facture groupée</h3>
       <button class="btn ghost" id="invoicePreviewClose">✕</button>
     </div>
     <div style="padding:18px 22px; overflow:auto;" id="invoicePreviewBody"></div>
@@ -2860,8 +2865,21 @@ document.getElementById('feSaveBtn').addEventListener('click', async () => {
   msg.textContent = '✔ Enregistré';
   setTimeout(() => { msg.textContent = ''; }, 2000);
 });
+// Le panneau de réglages vivait dans le DOM de l'onglet Commande (#tabPanelCommande) : quand ce
+// panneau est masqué (display:none, cas des onglets Devis/Facture), tout ce qu'il contient reste
+// masqué aussi, même avec sa propre classe "show" — un enfant ne peut jamais réapparaître par-dessus
+// un ancêtre display:none. On le sort donc du DOM des onglets et on l'attache directement au
+// <body>, en overlay fixe, pour qu'il reste accessible « Réglages » actif depuis Devis/Commande/Facture.
+document.body.appendChild(document.getElementById('settingsPanel'));
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('settingsPanel');
+  const btn = document.getElementById('settingsBtn');
+  if(panel.classList.contains('show') && !panel.contains(e.target) && e.target !== btn && !btn.contains(e.target)){
+    panel.classList.remove('show');
+  }
 });
 document.getElementById('importSettingsBtn').addEventListener('click', () => {
   const msg = document.getElementById('importSettingsMsg');

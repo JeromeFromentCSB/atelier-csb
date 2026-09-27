@@ -83,23 +83,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
   :root{
-    --ink:#232320;
-    --paper:#faf9f6;
-    --paper-2:#f2f0ea;
-    --line:#e5e1d6;
+    --ink:#211C16;
+    --paper:#F5F2EC;
+    --paper-2:#EDE6D9;
+    --line:#E7E0D3;
     --poste-yellow:#f5c518;
     --poste-yellow-dark:#c99a00;
-    --silk-red:#b3453a;
-    --silk-red-bg:#fbecea;
-    --silk-green:#3d7a57;
-    --muted:#8a8478;
+    --silk-red:#B5452F;
+    --silk-red-bg:#F7E3DC;
+    --silk-green:#3E7A52;
+    --muted:#8A8074;
     --white:#fff;
     --grenat:#6d1b2a;
     --radius:10px;
-    --shadow:0 1px 2px rgba(28,26,23,.05), 0 4px 14px rgba(28,26,23,.04);
+    --shadow:0 1px 2px rgba(33,28,22,.05), 0 8px 24px rgba(33,28,22,.07);
     --header-h:0px;
+    --font-display: 'Fraunces', Georgia, serif;
     font-size:15px;
   }
   *{box-sizing:border-box;}
@@ -107,7 +110,7 @@
     margin:0;
     background:var(--paper);
     color:var(--ink);
-    font-family:"Iowan Old Style","Georgia",serif;
+    font-family:'Public Sans',-apple-system,BlinkMacSystemFont,sans-serif;
     -webkit-font-smoothing:antialiased;
   }
   .mono{font-family:"SF Mono","Menlo","Consolas",monospace;}
@@ -128,7 +131,7 @@
     box-shadow:0 20px 60px rgba(0,0,0,.15); padding:32px 30px; width:min(340px,90vw);
     font-family:sans-serif;
   }
-  #loginForm h2{ font-family:"Iowan Old Style",Georgia,serif; margin:0 0 2px; text-align:center; }
+  #loginForm h2{ font-family:var(--font-display); margin:0 0 2px; text-align:center; }
   .login-sub{ text-align:center; color:var(--muted); font-size:.82rem; margin:0 0 20px; }
   #loginForm label{ display:block; font-size:.76rem; font-weight:600; color:var(--muted); margin-bottom:12px; }
   #loginForm input, #loginForm select{
@@ -170,7 +173,7 @@
   }
   .btn:hover{ box-shadow:var(--shadow); border-color:var(--muted); }
   .btn:active{ transform:translateY(0); }
-  .btn.primary{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .btn.primary{ background:linear-gradient(135deg, var(--ink), var(--silk-red)); color:#fff; border-color:transparent; }
   .btn.accent{ background:var(--poste-yellow); border-color:var(--poste-yellow-dark); }
   .btn.ghost{ border-color:var(--line); color:var(--muted); background:transparent; }
   .btn.danger{ border-color:var(--line); color:var(--silk-red); background:#fff; }
@@ -208,7 +211,7 @@
     flex:1; padding:10px 16px; border-right:1.5px solid var(--line); font-family:sans-serif;
   }
   .stat:last-child{ border-right:none; }
-  .stat .n{ font-size:1.3rem; font-weight:700; font-family:"Iowan Old Style",Georgia,serif; }
+  .stat .n{ font-size:1.3rem; font-weight:700; font-family:var(--font-display); }
   .stat .l{ font-size:.62rem; text-transform:uppercase; letter-spacing:.14em; color:var(--muted); font-weight:600; }
   .stat.warn .n{ color:var(--silk-red); }
   .stat.ok .n{ color:var(--silk-green); }
@@ -235,7 +238,7 @@
     display:inline-block; width:34px; height:34px; background:var(--poste-yellow);
     border:2px solid var(--ink); transform:rotate(45deg); margin-bottom:22px;
   }
-  .empty h2{ font-family:"Iowan Old Style",Georgia,serif; color:var(--ink); font-size:1.3rem; margin:0 0 8px; }
+  .empty h2{ font-family:var(--font-display); color:var(--ink); font-size:1.3rem; margin:0 0 8px; }
   .empty p{ font-size:.85rem; max-width:420px; margin:0 auto; line-height:1.6; }
 
   .table-scroll{ overflow:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--white); box-shadow:var(--shadow); max-height:calc(100vh - var(--header-h) - 60px); }
@@ -440,7 +443,7 @@
     display:flex; align-items:center; justify-content:space-between; padding:16px 20px;
     border-bottom:1.5px solid var(--line);
   }
-  .col-modal-head h3{ margin:0; font-family:"Iowan Old Style",Georgia,serif; font-size:1.1rem; color:var(--ink); }
+  .col-modal-head h3{ margin:0; font-family:var(--font-display); font-size:1.1rem; color:var(--ink); }
   .col-modal-body{ padding:16px 20px; overflow:auto; }
   .col-section{ margin-bottom:16px; }
   .col-section-title{
@@ -566,7 +569,7 @@
 
   /* ---------- Impression fiche production ---------- */
   #printArea{ display:none; }
-  #printArea h2{ font-family:"Iowan Old Style",Georgia,serif; margin:0 0 12px; }
+  #printArea h2{ font-family:var(--font-display); margin:0 0 12px; }
   #printArea table{ width:100%; border-collapse:collapse; font-family:sans-serif; font-size:10.5px; }
   #printArea th, #printArea td{
     border:none; border-bottom:0.5px solid #999; padding:2px 6px; text-align:left; vertical-align:middle; line-height:1.2;
@@ -643,7 +646,7 @@
      à l'écran. */
   #topAppTabs{
     position:sticky; top:0; z-index:40;
-    background:var(--grenat); display:flex; align-items:center; gap:2px; padding:0 22px;
+    background:linear-gradient(135deg, var(--ink), var(--silk-red)); display:flex; align-items:center; gap:2px; padding:0 22px;
     font-family:sans-serif; flex-wrap:wrap;
     box-shadow:0 2px 8px rgba(0,0,0,.28);
   }
@@ -652,22 +655,23 @@
     border-right:1px solid rgba(255,255,255,.14); cursor:default;
   }
   #topAppTabs .topbrand-flag{
-    width:11px; height:11px; flex:none; background:var(--poste-yellow);
-    border-radius:3px; transform:rotate(45deg);
+    width:11px; height:11px; flex:none; background:#fff;
+    border-radius:3px; transform:rotate(45deg); opacity:.85;
   }
   #topAppTabs .topbrand-name{
-    font-family:"Iowan Old Style","Georgia",serif; font-size:1.02rem; font-weight:700;
+    font-family:var(--font-display); font-size:1.02rem; font-weight:700;
     color:#fff; letter-spacing:.2px; white-space:nowrap;
   }
   #topAppTabs{ min-height:0; }
   #topAppTabs button{
     background:transparent; border:none; color:rgba(255,255,255,.65);
-    padding:7px 13px; margin:5px 1px; font-size:.78rem; font-weight:600; letter-spacing:.02em;
-    cursor:pointer; border-radius:8px; font-family:sans-serif;
+    padding:7px 13px; margin:5px 1px 0; font-size:.78rem; font-weight:600; letter-spacing:.02em;
+    cursor:pointer; border-radius:8px 8px 0 0; font-family:sans-serif;
     transition:color .15s ease, background .15s ease;
   }
   #topAppTabs button:hover{ color:#fff; background:rgba(255,255,255,.07); }
-  #topAppTabs button.active{ color:#fff; background:rgba(255,255,255,.16); }
+  #topAppTabs button.active{ color:var(--ink); background:var(--paper); box-shadow:0 -1px 4px rgba(0,0,0,.15); }
+  #topAppTabs .top-tab-btn{ padding:9px 22px; margin:5px 1px 0; font-size:.82rem; font-weight:700; }
   #topAppTabs .top-tabs-sep{ display:none; width:1px; height:18px; background:rgba(255,255,255,.2); margin:0 6px; }
   #topAppTabs #tabBar{ display:none; gap:2px; }
   #topAppTabs .tab-btn{ padding:13px 14px; font-size:.76rem; }
@@ -687,12 +691,12 @@
      composants de base (carte, boutons, champs, texte atténué), d'où les
      sélecteurs doublés ci-dessous plutôt qu'un jeu de styles dupliqué. */
   #fabricationPane, #visualiseurPane{
-    --fab-bg:#f4f1ec; --fab-panel:#ffffff; --fab-ink:#1f2420; --fab-muted:#6b7268;
-    --fab-line:#e2ddd2; --fab-accent:#8a1f2d; --fab-accent-ink:#ffffff;
-    --fab-accent-soft:#f4e2e4; --fab-ok:#2f6b3a; --fab-warn:#9a6a12; --fab-shadow:0 1px 3px rgba(20,20,10,.08);
+    --fab-bg:#F5F2EC; --fab-panel:#ffffff; --fab-ink:#211C16; --fab-muted:#8A8074;
+    --fab-line:#E7E0D3; --fab-accent:#B5452F; --fab-accent-ink:#ffffff;
+    --fab-accent-soft:#F7E3DC; --fab-ok:#3E7A52; --fab-warn:#9a6a12; --fab-shadow:0 1px 3px rgba(33,28,22,.08);
   }
   #fabricationPane *, #visualiseurPane *{box-sizing:border-box;}
-  #fabricationPane, #visualiseurPane{margin:0;background:var(--fab-bg);color:var(--fab-ink);font:14px/1.45 "Segoe UI",system-ui,Arial,sans-serif;}
+  #fabricationPane, #visualiseurPane{margin:0;background:var(--fab-bg);color:var(--fab-ink);font:14px/1.45 'Public Sans',"Segoe UI",system-ui,Arial,sans-serif;}
   #fabricationPane main, #visualiseurPane main{max-width:none;margin:0;padding:20px 28px 60px;}
   #fabricationPane section.card[data-tab]{display:none;}
   #fabricationPane section.card[data-tab].active{display:block;}
@@ -708,7 +712,7 @@
   #fabricationPane input[type=number]{width:78px;}
   #fabricationPane button, #visualiseurPane button{border:1px solid var(--fab-line);background:#fff;border-radius:6px;padding:7px 13px;font-size:13px;cursor:pointer;color:var(--fab-ink);}
   #fabricationPane button:hover, #visualiseurPane button:hover{border-color:#c9c1af;}
-  #fabricationPane button.primary, #visualiseurPane button.primary{background:var(--fab-accent);color:#fff;border-color:var(--fab-accent);}
+  #fabricationPane button.primary, #visualiseurPane button.primary{background:linear-gradient(135deg, var(--fab-ink), var(--fab-accent));color:#fff;border-color:transparent;}
   #fabricationPane button.primary:hover, #visualiseurPane button.primary:hover{background:#711824;}
   #fabricationPane button.ghost, #visualiseurPane button.ghost{background:transparent;border-color:transparent;color:var(--fab-muted);padding:5px 8px;}
   #fabricationPane button.ghost:hover, #visualiseurPane button.ghost:hover{color:var(--fab-ink);}

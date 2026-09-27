@@ -13,22 +13,25 @@
   uniquement pour profiter de son adresse PocketBase déjà réglée et de sa bascule automatique
   vers Tailscale.
 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
   :root {
-    --bg: #f5f3ef;
+    --bg: #F5F2EC;
     --card: #ffffff;
-    --ink: #2b2620;
-    --muted: #8a8175;
-    --accent: #7a5c3e;
-    --accent-light: #e8ddd0;
+    --ink: #211C16;
+    --muted: #8A8074;
+    --accent: #B5452F;
+    --accent-light: #F7E3DC;
     --done: #b8b0a3;
     --danger: #b5544a;
-    --border: #e5ddd0;
+    --border: #E7E0D3;
+    --font-display: 'Fraunces', Georgia, serif;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--ink);
     height: 100vh;
@@ -40,8 +43,9 @@
   }
   header h1 {
     margin: 0;
-    font-size: 20px;
-    font-weight: 700;
+    font-family: var(--font-display);
+    font-size: 21px;
+    font-weight: 600;
     letter-spacing: 0.3px;
   }
   header .sub {
@@ -114,7 +118,7 @@
   .list-suggest div:hover { background: var(--accent-light); }
   .add-box button {
     border: none;
-    background: var(--accent);
+    background: linear-gradient(135deg, var(--ink), var(--accent));
     color: white;
     border-radius: 12px;
     padding: 0 18px;
@@ -152,23 +156,30 @@
   }
   .tabs {
     display: flex;
-    gap: 6px;
+    gap: 2px;
     margin-bottom: 10px;
+    padding: 5px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--ink), var(--accent));
   }
   .tabs button {
     flex: 1;
     padding: 8px;
-    border: 1px solid var(--border);
-    background: var(--card);
-    border-radius: 10px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
     font-size: 13px;
-    color: var(--muted);
+    font-weight: 600;
+    color: rgba(255,255,255,.65);
     cursor: pointer;
   }
+  .tabs button:hover { color: #fff; background: rgba(255,255,255,.08); }
   .tabs button.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
+    background: var(--card);
+    color: var(--ink);
+    font-weight: 700;
+    border-color: transparent;
+    box-shadow: 0 1px 4px rgba(0,0,0,.2);
   }
   .tabs .refresh-btn { flex: none; width: 40px; font-size: 16px; }
   .list-tabs {

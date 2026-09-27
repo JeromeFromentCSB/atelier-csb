@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.31', items: [
+    "Nouveau design de l'appli : coquille passée en barre latérale sombre (réductible), palette ivoire/terracotta et police Fraunces/Public Sans appliquées à tous les modules",
+    "Tous les onglets internes (Gestion Commande, Gestion Casaque, Inventaire, Stock de Fil, Vectorisation…) ont maintenant le même style — barre en dégradé noir→terracotta, onglet actif en forme de vraie carte de classeur (coins arrondis en haut, collée au contenu)",
+    "Boutons principaux harmonisés partout (dégradé noir→terracotta) au lieu d'un mélange de couleurs différentes selon le module",
+    "Gestion Commande : le bouton Réglages (⚙) fonctionne maintenant depuis les 3 onglets (Devis/Commande/Facture) — avant, il ne s'ouvrait que depuis l'onglet Commande",
+  ]},
   { v: '0.2.30', items: [
     "Inventaire : correction majeure de l'import du catalogue TopTex — la vraie structure (couleurs/tailles imbriquées, prix au format texte) n'était pas celle attendue, ce qui faisait perdre couleur, taille et prix sur (quasiment) toutes les lignes importées",
     "Inventaire : nouveau bouton « Créer l'article dans Axonaut » (sur une fiche article, et directement depuis une recherche TopTex) — remplit nom, catégorie, référence, description, coût de revient",

@@ -5,18 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Prospection CSB — Mairies &amp; Associations</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
   :root{
-    --ink:#1c1f26;
-    --paper:#f6f4ef;
+    --ink:#211C16;
+    --paper:#F5F2EC;
     --panel:#ffffff;
-    --line:#e2ddd0;
-    --thread:#b3492f;
-    --thread-dark:#8f3a24;
-    --gold:#b08a3e;
-    --green:#3f6e4e;
-    --muted:#6b6f76;
-    --radius:8px;
+    --line:#E7E0D3;
+    --thread:#B5452F;
+    --thread-dark:#8F3423;
+    --gold:#B08A2E;
+    --green:#3E7A52;
+    --muted:#8A8074;
+    --radius:10px;
+    --font-display: 'Fraunces', Georgia, serif;
     font-size:15px;
   }
   *{box-sizing:border-box;}
@@ -24,19 +27,20 @@
     margin:0;
     background:var(--paper);
     color:var(--ink);
-    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    font-family:'Public Sans',"Segoe UI",system-ui,-apple-system,sans-serif;
     line-height:1.45;
   }
   header{
-    background:var(--ink);
-    color:#f2ede1;
+    background:linear-gradient(135deg, var(--ink), var(--thread));
+    color:#fff;
     padding:18px 28px;
     display:flex;
     align-items:baseline;
     gap:14px;
-    border-bottom:3px solid var(--thread);
+    border-bottom:none;
   }
   header h1{
+    font-family:var(--font-display);
     font-size:19px;
     margin:0;
     letter-spacing:.3px;
@@ -88,11 +92,11 @@
     font-size:13px;
     font-weight:600;
     cursor:pointer;
-    background:var(--thread);
+    background:linear-gradient(135deg, var(--ink), var(--thread));
     color:#fff;
-    transition:background .15s;
+    transition:filter .15s;
   }
-  button:hover{background:var(--thread-dark);}
+  button:hover{filter:brightness(1.08);}
   button.secondary{background:#fff;color:var(--ink);border:1px solid #c9c2ad;}
   button.secondary:hover{background:#efe9dc;}
   button.ghost{background:transparent;color:var(--thread-dark);padding:4px 8px;font-size:12px;}
@@ -148,9 +152,10 @@
     font-size:13px;
   }
   .mairie-contact div span.lbl{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
-  .subtabs{display:flex;gap:6px;margin-bottom:8px;}
-  .subtabs button{background:#fff;color:var(--ink);border:1px solid #c9c2ad;padding:5px 12px;font-size:12px;}
-  .subtabs button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .subtabs{display:flex;gap:2px;margin-bottom:8px;padding:4px;border-radius:10px;background:linear-gradient(135deg, var(--ink), var(--thread));}
+  .subtabs button{background:transparent;color:rgba(255,255,255,.65);border:none;padding:5px 12px;font-size:12px;font-weight:600;border-radius:7px;}
+  .subtabs button:hover{color:#fff;background:rgba(255,255,255,.08);}
+  .subtabs button.active{background:var(--paper);color:var(--ink);font-weight:700;border-color:transparent;box-shadow:0 1px 4px rgba(0,0,0,.2);}
 
   table.orgs{width:100%;border-collapse:collapse;font-size:12.5px;}
   table.orgs th{

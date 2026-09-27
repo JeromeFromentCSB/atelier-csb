@@ -5,30 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stock de Fil — Atelier CSB</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
   :root{
-    --paper: #FAF6EF;
-    --paper-dim: #F1EADC;
-    --ink: #2A2622;
-    --ink-soft: #6B6155;
-    --line: #E2D8C6;
-    --thread: #B33A3A;
-    --thread-dark: #8E2B2B;
-    --spool-gold: #C08A2E;
+    --paper: #F5F2EC;
+    --paper-dim: #EDE6D9;
+    --ink: #211C16;
+    --ink-soft: #8A8074;
+    --line: #E7E0D3;
+    --thread: #B5452F;
+    --thread-dark: #8F3423;
+    --spool-gold: #B08A2E;
     --vert: #3E7A52;
     --vert-bg: #E4EFE6;
     --orange: #C4791F;
     --orange-bg: #FBEAD3;
-    --rouge: #B23A3A;
-    --rouge-bg: #F8E1DE;
-    --shadow: 0 1px 2px rgba(42,38,34,0.06), 0 4px 14px rgba(42,38,34,0.05);
+    --rouge: #B5452F;
+    --rouge-bg: #F7E3DC;
+    --shadow: 0 1px 2px rgba(33,28,22,0.05), 0 8px 24px rgba(33,28,22,0.07);
+    --font-display: 'Fraunces', Georgia, serif;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
     background:var(--paper);
     color:var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     font-size:14px;
     line-height:1.45;
     min-height:100vh;
@@ -42,11 +45,6 @@
     border-bottom: 2px solid var(--ink);
     position:relative;
   }
-  header.top::after{
-    content:"";
-    position:absolute; left:0; bottom:-2px; width:64px; height:2px;
-    background: var(--thread);
-  }
   .brand{display:flex; align-items:center; gap:14px;}
   .spool{
     width:28px;height:28px;border-radius:50%;
@@ -59,7 +57,7 @@
     background:var(--paper);
   }
   h1{
-    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size:18px; margin:0; letter-spacing:0.2px; font-weight:600;
   }
   .subtitle{color:var(--ink-soft); font-size:12.5px; margin-top:2px; letter-spacing:0.3px;}
@@ -72,7 +70,7 @@
     padding:7px 13px; border-radius:7px; transition: all .12s ease;
   }
   button:hover{border-color:var(--ink-soft); background:var(--paper-dim);}
-  button.primary{background:var(--thread); border-color:var(--thread-dark); color:#fff;}
+  button.primary{background:linear-gradient(135deg, var(--ink), var(--thread)); border-color:transparent; color:#fff;}
   button.primary:hover{background:var(--thread-dark);}
   button.ghost{background:transparent; border-color:transparent; color:var(--ink-soft); padding:6px 8px;}
   button.ghost:hover{background:var(--paper-dim); color:var(--ink);}
@@ -82,15 +80,20 @@
   button.small{padding:4px 9px; font-size:12px;}
 
   /* Nav tabs */
-  nav.tabs{display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--line);}
-  nav.tabs button{
-    border:none; background:none; border-radius:0; padding:9px 4px; margin-right:22px;
-    font-size:14px; color:var(--ink-soft); position:relative; top:1px;
+  nav.tabs{
+    display:flex; align-items:flex-end; gap:2px; margin:0 0 20px; padding:9px calc(50vw - 50% + 24px) 0;
+    margin-left:calc(50% - 50vw); margin-right:calc(50% - 50vw); width:100vw;
+    background:linear-gradient(135deg, var(--ink), var(--thread)); border-bottom:none;
+    position:sticky; top:0; z-index:20; box-shadow:0 2px 8px rgba(0,0,0,.15);
   }
-  nav.tabs button:hover{background:none; color:var(--ink);}
+  nav.tabs button{
+    border:none; background:transparent; border-radius:8px 8px 0 0; padding:9px 18px 12px; margin:0 1px;
+    font-size:13px; font-weight:600; color:rgba(255,255,255,.65); position:static; top:0;
+  }
+  nav.tabs button:hover{background:rgba(255,255,255,.08); color:#fff;}
   nav.tabs button.active{
-    color:var(--ink); font-weight:600;
-    border-bottom:2px solid var(--thread);
+    color:var(--ink); font-weight:700;
+    background:var(--paper); border-bottom:none; box-shadow:0 -1px 4px rgba(0,0,0,.15);
   }
 
   .panel{display:none;}
@@ -102,7 +105,7 @@
     background:#fff; border:1px solid var(--line); border-radius:10px;
     padding:14px 16px; box-shadow:var(--shadow);
   }
-  .card .num{font-size:24px; font-weight:700; font-family:Georgia,serif;}
+  .card .num{font-size:24px; font-weight:700; font-family:var(--font-display);}
   .card .label{font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;}
   .card.rouge .num{color:var(--rouge);}
   .card.orange .num{color:var(--orange);}
@@ -154,7 +157,7 @@
     background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px;
     box-shadow:var(--shadow); margin-bottom:20px;
   }
-  .form-card h3{margin:0 0 14px; font-family:Georgia,serif; font-size:16px; font-weight:600;}
+  .form-card h3{margin:0 0 14px; font-family:var(--font-display); font-size:16px; font-weight:600;}
   .form-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
   .form-grid .full{grid-column:1/-1;}
   .field label{display:block; font-size:11px; color:var(--ink-soft); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.3px;}
@@ -165,7 +168,7 @@
   .type-toggle button.on.sortie{background:var(--rouge-bg); color:var(--rouge); font-weight:600;}
   .form-actions{margin-top:14px; display:flex; gap:8px; justify-content:flex-end;}
 
-  .section-title{font-family:Georgia,serif; font-size:15px; font-weight:600; margin:26px 0 10px;}
+  .section-title{font-family:var(--font-display); font-size:15px; font-weight:600; margin:26px 0 10px;}
   .section-title:first-child{margin-top:0;}
   .hint{color:var(--ink-soft); font-size:12px; margin:-4px 0 14px;}
 
@@ -218,12 +221,12 @@ const DEFAULT_THRESHOLDS = { rouge: 4, orange: 8 };
 const FIL_TYPES = ["Polyneon 40", "Lurex"];
 const DEFAULT_FIL_TYPE = FIL_TYPES[0];
 const TABS = [
-  { id: "stock", label: "État du stock" },
-  { id: "mouvements", label: "Mouvements" },
-  { id: "recherche", label: "Recherche" },
-  { id: "nuancier", label: "Nuancier" },
-  { id: "trouver_couleur", label: "Trouver couleur" },
-  { id: "parametres", label: "Paramètres" },
+  { id: "stock", label: "🧵 État du stock" },
+  { id: "mouvements", label: "🔄 Mouvements" },
+  { id: "recherche", label: "🔍 Recherche" },
+  { id: "nuancier", label: "🎨 Nuancier" },
+  { id: "trouver_couleur", label: "🎯 Trouver couleur" },
+  { id: "parametres", label: "⚙︎ Paramètres" },
 ];
 // Nuancier Madeira Polyneon — numéro + couleur exacte, extraits du shade card officiel Madeira
 // (page-échantillonnage pixel par pixel de chaque vignette du PDF, vérifié visuellement).
@@ -1649,7 +1652,7 @@ function renderParametresPanel(){
   panel.innerHTML = `
     <div class="params-grid">
       <div class="param-block">
-        <h3 style="margin:0 0 12px; font-family:Georgia,serif; font-size:15px;">Seuils d'alerte par défaut</h3>
+        <h3 style="margin:0 0 12px; font-family:var(--font-display); font-size:15px;">Seuils d'alerte par défaut</h3>
         <div class="param-row"><label>Seuil ROUGE (stock ≤ à cette valeur)</label><input type="number" id="th-rouge" value="${state.thresholds.rouge}"></div>
         <div class="param-row"><label>Seuil ORANGE (stock ≤ à cette valeur)</label><input type="number" id="th-orange" value="${state.thresholds.orange}"></div>
         <button class="small" id="save-thresholds">Enregistrer les seuils</button>
@@ -1678,7 +1681,7 @@ function renderParametresPanel(){
       </div>
 
       <div class="param-block">
-        <h3 style="margin:0 0 12px; font-family:Georgia,serif; font-size:15px;">Zones de stockage</h3>
+        <h3 style="margin:0 0 12px; font-family:var(--font-display); font-size:15px;">Zones de stockage</h3>
         <div class="hint" style="margin-top:-6px;">Renomme ou ajoute des zones. L'orthographe doit correspondre à ce qui est saisi dans les mouvements ; sinon la quantité tombe dans « Zone non définie ».</div>
         <div class="zone-list" id="zone-list">
           ${state.zones.map(z=>`<span class="zone-chip">${escapeHtml(z)}<button data-del-zone="${escapeHtml(z)}">✕</button></span>`).join('')}
@@ -1706,7 +1709,7 @@ function renderParametresPanel(){
     </div>
 
     <div class="param-block" style="margin-top:20px;">
-      <h3 style="margin:0 0 4px; font-family:Georgia,serif; font-size:15px;">Utilisateurs</h3>
+      <h3 style="margin:0 0 4px; font-family:var(--font-display); font-size:15px;">Utilisateurs</h3>
       <div class="hint" style="margin-top:0;">La gestion des comptes (créer un utilisateur, changer ses droits) se fait maintenant depuis l'écran principal de l'application (barre latérale de gauche), pour tous les modules à la fois.</div>
     </div>
   `;

@@ -34,7 +34,7 @@
       { key: 'export', label: 'Exporter une sauvegarde' },
       { key: 'import', label: 'Importer une sauvegarde' }
     ] },
-    { id: 'simulateur', label: 'Simulateur marquage', icon: '👕', path: '../../modules/simulateur/index.html', perms: [] },
+    { id: 'simulateur', label: 'Simulateur', icon: '👕', path: '../../modules/simulateur/index.html', perms: [] },
     { id: 'prospection', label: 'Prospection', icon: '📍', path: '../../modules/prospection/index.html', perms: [] },
     { id: 'pointage', label: 'Pointage', icon: '🕒', path: '../../modules/pointage/index.html', perms: [] },
     { id: 'email', label: 'Email', icon: '✉️', path: '../../modules/email/index.html', perms: [] },
@@ -68,6 +68,24 @@
 
   const moduleNav = document.getElementById('moduleNav');
   const main = document.getElementById('main');
+  const topbar = document.getElementById('topbar');
+  const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+
+  // Largeur du menu réduite : préférence par poste (comme l'ordre des onglets).
+  const SIDEBAR_COLLAPSED_KEY = 'csb_sidebar_collapsed';
+  function applySidebarCollapsed(collapsed) {
+    topbar.classList.toggle('collapsed', collapsed);
+    sidebarToggleBtn.textContent = collapsed ? '»' : '«';
+    sidebarToggleBtn.title = collapsed ? 'Agrandir le menu' : 'Réduire le menu';
+  }
+  let sidebarCollapsed = false;
+  try { sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch (e) {}
+  applySidebarCollapsed(sidebarCollapsed);
+  sidebarToggleBtn.addEventListener('click', () => {
+    sidebarCollapsed = !sidebarCollapsed;
+    applySidebarCollapsed(sidebarCollapsed);
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch (e) {}
+  });
   const userMenuWrap = document.getElementById('userMenuWrap');
   const userMenuBtn = document.getElementById('userMenuBtn');
   const userMenuDropdown = document.getElementById('userMenuDropdown');
@@ -158,14 +176,13 @@
       const allowed = CSBAuth.hasModuleAccess(mod.id);
       const item = document.createElement('div');
       item.className = 'nav-item' + (mod.id === activeModuleId ? ' active' : '') + (allowed ? '' : ' locked');
-      item.innerHTML = `<span class="icon">${mod.icon}</span><span>${mod.label}</span>` +
+      item.innerHTML = `<span class="icon">${mod.icon}</span><span class="label">${mod.label}</span>` +
         (allowed ? '' : '<span class="soon">🔒</span>');
       item.draggable = true;
       item.dataset.modId = mod.id;
+      item.title = allowed ? mod.label : "Tu n'as pas accès à ce module — demande à un administrateur.";
       if (allowed) {
         item.addEventListener('click', () => { if (!item.classList.contains('dragging')) openModule(mod); });
-      } else {
-        item.title = "Tu n'as pas accès à ce module — demande à un administrateur.";
       }
       item.addEventListener('dragstart', (e) => {
         draggedModId = mod.id;
@@ -564,6 +581,7 @@
     });
   }
 
+  const userMenuAvatar = document.getElementById('userMenuAvatar');
   function renderUserMenu() {
     const user = CSBAuth.currentUser();
     if (!user) {
@@ -571,9 +589,14 @@
       return;
     }
     userMenuWrap.style.display = 'flex';
-    userMenuName.textContent = user.username || user.email || '';
+    const name = user.username || user.email || '';
+    userMenuName.textContent = name;
     userMenuRole.textContent = user.role === 'admin' ? 'Admin' : 'Utilisateur';
     userMenuRole.className = 'role' + (user.role === 'admin' ? ' admin' : '');
+    if (userMenuAvatar) {
+      const initials = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
+      userMenuAvatar.textContent = initials || '?';
+    }
   }
 
   const manageUsersBtn = document.getElementById('manageUsersBtn');

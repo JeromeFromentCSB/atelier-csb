@@ -128,12 +128,13 @@
 <script src="../../src/shared/csb-prompt.js"></script>
 <style>
   :root{
-    --bg:#f5f6fa; --card:#ffffff; --border:#e5e7eb; --ink:#111827; --muted:#6b7280;
-    --accent:#4f46e5; --accent-dark:#3730a3; --accent-soft:#eef2ff;
-    --danger:#ef4444; --radius:14px; --shadow:0 1px 3px rgba(17,24,39,.06), 0 8px 24px rgba(17,24,39,.04);
-    --font: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    --bg:#F5F2EC; --card:#ffffff; --border:#E7E0D3; --ink:#211C16; --muted:#8A8074;
+    --accent:#B5452F; --accent-dark:#8F3423; --accent-soft:#F7E3DC;
+    --danger:#ef4444; --radius:14px; --shadow:0 1px 3px rgba(33,28,22,.06), 0 8px 24px rgba(33,28,22,.05);
+    --font: 'Public Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    --font-display: 'Fraunces', Georgia, serif;
   }
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap');
   *{ box-sizing:border-box; }
   html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink); font-family:var(--font); }
   #app{ min-height:100vh; }
@@ -157,18 +158,18 @@
   .emp-tile:hover{ border-color:var(--c); box-shadow:0 4px 14px rgba(0,0,0,.06); transform:translateY(-1px); }
   .avatar{ width:44px; height:44px; border-radius:50%; background:var(--c,#4f46e5); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
   .avatar.sm{ width:36px; height:36px; font-size:12px; }
-  .role-chip{ position:absolute; top:6px; right:6px; font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:999px; background:#eef2ff; color:var(--accent-dark); text-transform:uppercase; letter-spacing:.03em; }
+  .role-chip{ position:absolute; top:6px; right:6px; font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:999px; background:var(--accent-soft); color:var(--accent-dark); text-transform:uppercase; letter-spacing:.03em; }
   .lock-chip{ position:absolute; top:6px; left:6px; font-size:11px; }
   .login-footer{ margin-top:26px; display:flex; align-items:center; justify-content:space-between; }
   .master-link{ background:none; border:none; color:var(--muted); text-decoration:underline; font-size:12.5px; padding:0; }
-  .alert{ background:#fef2f2; color:#991b1b; border:1px solid #fecaca; padding:10px 12px; border-radius:10px; font-size:13.5px; margin-bottom:6px; }
-  .link{ background:none; border:none; color:#991b1b; text-decoration:underline; padding:0; font-size:13.5px; }
+  .alert{ background:var(--accent-soft); color:var(--accent-dark); border:1px solid var(--accent); padding:10px 12px; border-radius:10px; font-size:13.5px; margin-bottom:6px; }
+  .link{ background:none; border:none; color:var(--accent-dark); text-decoration:underline; padding:0; font-size:13.5px; }
 
   /* ---------- Buttons ---------- */
   .btn{ padding:9px 16px; border-radius:10px; border:1px solid transparent; font-weight:600; font-size:13.5px; }
-  .btn-primary{ background:var(--accent); color:#fff; }
-  .btn-primary:hover{ background:var(--accent-dark); }
-  .btn-dark{ background:#111827; color:#fff; }
+  .btn-primary{ background:linear-gradient(135deg, var(--ink), var(--accent)); color:#fff; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-dark{ background:var(--ink); color:#fff; }
   .btn-ghost{ background:#fff; color:var(--ink); border-color:var(--border); }
   .btn-ghost:hover{ background:#f3f4f6; }
   .btn-sm{ padding:5px 10px; font-size:12px; border-radius:8px; }
@@ -206,16 +207,16 @@
 
   /* ---------- Admin shell ---------- */
   .admin-shell{ display:flex; min-height:100vh; }
-  .sidebar{ width:230px; background:#111827; color:#fff; display:flex; flex-direction:column; padding:22px 16px; flex-shrink:0; }
-  .brand-side .brand-mark{ background:linear-gradient(135deg,#6366f1,#a855f7); }
-  .brand-side h1{ font-size:17px; color:#fff; }
-  .brand-side p{ color:#9ca3af; }
+  .sidebar{ width:230px; background:var(--ink); color:#fff; display:flex; flex-direction:column; padding:22px 16px; flex-shrink:0; }
+  .brand-side .brand-mark{ background:linear-gradient(135deg, var(--ink), var(--accent)); }
+  .brand-side h1{ font-family:var(--font-display); font-weight:600; font-size:17px; color:#fff; }
+  .brand-side p{ color:rgba(255,255,255,.55); }
   .sidebar nav{ display:flex; flex-direction:column; gap:4px; margin-top:26px; flex:1; }
-  .nav-item{ text-align:left; background:none; border:none; color:#d1d5db; padding:11px 12px; border-radius:10px; font-size:14px; font-weight:500; }
-  .nav-item:hover{ background:#1f2937; }
-  .nav-item.active{ background:var(--accent); color:#fff; }
-  .side-logout{ background:#1f2937; color:#d1d5db; border:none; }
-  .side-switch{ background:#1f2937; color:#fff; border:1px solid #374151; margin-top:6px; }
+  .nav-item{ text-align:left; background:none; border:none; color:rgba(255,255,255,.72); padding:11px 12px; border-radius:10px; font-size:14px; font-weight:500; }
+  .nav-item:hover{ background:rgba(255,255,255,.06); }
+  .nav-item.active{ background:rgba(255,255,255,.14); color:#fff; box-shadow:inset 2.5px 0 0 var(--accent); }
+  .side-logout{ background:rgba(255,255,255,.08); color:rgba(255,255,255,.75); border:none; }
+  .side-switch{ background:rgba(255,255,255,.08); color:#fff; border:1px solid rgba(255,255,255,.18); margin-top:6px; }
   .admin-main{ flex:1; padding:28px 32px; overflow-x:auto; }
   .admin-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
   .admin-header h2{ font-size:20px; font-weight:800; }
@@ -292,7 +293,7 @@
   @media print{
     body *{ visibility:hidden; }
     #printArea, #printArea *{ visibility:visible; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
-    #printArea{ display:block; position:absolute; top:0; left:0; width:100%; padding:16px; font-family:'Inter', system-ui, sans-serif; }
+    #printArea{ display:block; position:absolute; top:0; left:0; width:100%; padding:16px; font-family:'Public Sans', system-ui, sans-serif; }
     .print-header{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; font-size:12.5px; }
     .print-header h2{ font-size:16px; color:#3730a3; }
     table.print-table{ width:100%; border-collapse:collapse; font-size:10.5px; }

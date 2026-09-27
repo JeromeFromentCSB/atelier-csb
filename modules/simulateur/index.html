@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulateur de marquage · L'Atelier CSB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Bungee&family=Great+Vibes&family=Lobster&family=Montserrat:wght@400;700&family=Oswald:wght@400;700&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:wght@400;700&family=Righteous&family=Roboto+Slab:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#211C16;
+    --paper:#F5F2EC;
+    --paper-2:#EDE6D9;
+    --line:#E7E0D3;
+    --muted:#8A8074;
+    --accent:#B5452F;
+    --sel:#2a6fd6;
+    --white:#fff;
+    --stage:#EDE6D9;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(33,28,22,.05), 0 8px 24px rgba(33,28,22,.07);
+    --font-display: 'Fraunces', Georgia, serif;
+    font-size:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Public Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex; flex-direction:column;
+  }
+  header{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 16px; border-bottom:2px solid var(--ink); background:var(--paper);
+  }
+  header h1{font-family:var(--font-display); font-size:19px; margin:0 12px 0 0; font-weight:600;}
+  header .spacer{flex:1;}
+  button, .btn{
+    font:inherit; font-size:13px; cursor:pointer;
+    border:1px solid var(--line); background:var(--white); color:var(--ink);
+    border-radius:8px; padding:6px 11px; line-height:1.2;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  button:hover, .btn:hover{border-color:var(--ink);}
+  button:disabled{opacity:.4; cursor:default; border-color:var(--line);}
+  button.primary{background:linear-gradient(135deg, var(--ink), var(--accent)); color:#fff; border-color:transparent;}
+  button.primary:hover{filter:brightness(1.08);}
+  button.on{background:linear-gradient(135deg, var(--ink), var(--accent)); color:#fff; border-color:transparent;}
+  button.danger:hover{border-color:var(--accent); color:var(--accent);}
+  input[type=file]{display:none;}
+  [hidden]{display:none !important;}
+
+  main{flex:1; min-height:0; display:grid; grid-template-columns:260px 1fr 310px;}
+  aside{overflow-y:auto; padding:14px; background:var(--paper);}
+  aside.left{border-right:1px solid var(--line);}
+  aside.right{border-left:1px solid var(--line);}
+  section{margin-bottom:18px;}
+  h2{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; font-weight:700;}
+  .hint{font-size:12px; color:var(--muted); line-height:1.45;}
+
+  .garments{display:grid; grid-template-columns:repeat(3,1fr); gap:6px;}
+  .garment{flex-direction:column; padding:6px 4px 5px; gap:3px; font-size:11.5px; background:var(--white);}
+  .garment img{width:100%; aspect-ratio:1; display:block;}
+  .garment.on{background:var(--paper-2); color:var(--ink); border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink);}
+  .swatches{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+  .sw{width:24px; height:24px; border-radius:50%; padding:0; border:1px solid rgba(0,0,0,.2); box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);}
+  .sw.on{outline:2px solid var(--ink); outline-offset:2px;}
+  input[type=color]{width:30px; height:26px; padding:0 2px; border:1px solid var(--line); border-radius:6px; background:var(--white); cursor:pointer;}
+
+  .row{display:flex; align-items:center; gap:8px; margin:7px 0;}
+  .row > label{flex:0 0 92px; font-size:12.5px; color:#4a443c;}
+  .row input[type=range]{flex:1; min-width:0; accent-color:var(--ink);}
+  .row input[type=number]{width:74px;}
+  .row .val{width:46px; text-align:right; font-variant-numeric:tabular-nums; font-size:12px; color:var(--muted);}
+  input[type=text], input[type=number], select, textarea{
+    font:inherit; font-size:13px; border:1px solid var(--line); border-radius:7px;
+    padding:6px 8px; background:var(--white); color:var(--ink); min-width:0;
+  }
+  input[type=text], textarea{width:100%;}
+  select{flex:1;}
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--sel); outline-offset:-1px; border-color:transparent;}
+  .check{display:flex; align-items:center; gap:7px; font-size:13px; margin:7px 0; cursor:pointer;}
+  .check input{accent-color:var(--ink);}
+  .seg{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; flex:1;}
+  .seg button{border:0; border-radius:0; flex:1; justify-content:center; background:var(--white); white-space:nowrap; padding:6px;}
+  .seg button + button{border-left:1px solid var(--line);}
+  .seg button.on{background:var(--ink); color:var(--paper);}
+  .btns{display:flex; flex-wrap:wrap; gap:6px;}
+  .btns.full > *{flex:1; justify-content:center;}
+
+  .stage-wrap{position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--stage);}
+  .stage-top{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:9px 14px; background:var(--paper); border-bottom:1px solid var(--line);
+  }
+  .stage-top .seg{flex:0 0 auto;}
+  .stage-top .seg button{padding:6px 14px;}
+  .chips{display:flex; gap:6px; flex-wrap:wrap;}
+  .chip{border-radius:999px; padding:5px 12px;}
+  .chip small{color:var(--muted); font-size:11px;}
+  .chip.on small{color:#cfc8bb;}
+  .chip .n{background:var(--sel); color:#fff; border-radius:999px; font-size:10.5px; padding:1px 6px; font-weight:700;}
+  .stage{flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:16px;}
+  #cv{display:block; background:var(--stage); touch-action:none; border-radius:6px; box-shadow:var(--shadow);}
+  .stage-bar{
+    display:flex; align-items:center; gap:12px; padding:7px 14px; font-size:12px; color:var(--muted);
+    border-top:1px solid var(--line); background:var(--paper); min-height:34px;
+  }
+  .stage-bar .warn{color:var(--accent); font-weight:600;}
+  .drop-hint{
+    position:absolute; inset:10px; border:3px dashed var(--sel); border-radius:14px;
+    background:rgba(42,111,214,.08); display:none; align-items:center; justify-content:center;
+    font-size:16px; font-weight:600; color:var(--sel); pointer-events:none;
+  }
+  .stage-wrap.dragging .drop-hint{display:flex;}
+
+  .layers{list-style:none; margin:0; padding:0; border:1px solid var(--line); border-radius:var(--radius); background:var(--white); overflow:hidden;}
+  .layers li{display:flex; align-items:center; gap:6px; padding:6px 6px 6px 9px; cursor:pointer; border-bottom:1px solid var(--paper-2); font-size:13px;}
+  .layers li:last-child{border-bottom:0;}
+  .layers li.on{background:#e7effb;}
+  .layers li.hidden .name{opacity:.45; text-decoration:line-through;}
+  .layers .ico{width:26px; height:26px; flex:0 0 26px; border-radius:5px; background:var(--paper-2); display:flex; align-items:center; justify-content:center; font-weight:700; font-family:var(--font-display); overflow:hidden;}
+  .layers .ico img{max-width:100%; max-height:100%;}
+  .layers .name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .layers .name small{display:block; color:var(--muted); font-size:11px;}
+  .layers .mini{border:0; background:transparent; padding:3px 5px; font-size:13px; color:var(--muted);}
+  .layers .mini:hover{color:var(--ink); background:var(--paper-2);}
+  .empty{padding:14px; text-align:center; color:var(--muted); font-size:12.5px;}
+  .props{border-top:1px solid var(--line); padding-top:14px;}
+  .dims{font-size:12px; color:var(--muted); margin:2px 0 6px;}
+
+  @media (max-width: 1100px){ main{grid-template-columns:230px 1fr 280px;} }
+  @media (max-width: 860px){
+    body{height:auto;}
+    main{grid-template-columns:1fr;}
+    .stage-wrap{order:-1; height:min(115vw, 78vh);}
+    aside.left, aside.right{border:0; border-top:1px solid var(--line);}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulateur de marquage</h1>
+  <button id="undoBtn" title="Annuler (Ctrl+Z)">↶</button>
+  <button id="redoBtn" title="Rétablir (Ctrl+Y)">↷</button>
+  <span class="spacer"></span>
+  <button id="openBtn" title="Ouvrir un projet enregistré">Ouvrir…</button>
+  <button id="saveBtn" title="Enregistrer le projet (fichier .json)">Enregistrer</button>
+  <button id="exportPrintBtn" title="PNG transparent du marquage de l'emplacement actif, à l'échelle (300 dpi)">Marquage seul (PNG)</button>
+  <button id="exportBtn" class="primary" title="Aperçu PNG — face avant et dos côte à côte si le dos est marqué">Exporter l'aperçu (PNG)</button>
+  <input type="file" id="openFile" accept=".json,application/json">
+</header>
+
+<main>
+  <aside class="left">
+    <section>
+      <h2>Produit</h2>
+      <div class="garments" id="garments"></div>
+    </section>
+    <section id="colorSection">
+      <h2>Couleur du produit</h2>
+      <div class="swatches" id="swatches"></div>
+    </section>
+    <section>
+      <h2 id="photoTitle">Ma photo de produit</h2>
+      <div class="btns full">
+        <label class="btn" for="photoFile">📷 Choisir une photo…</label>
+        <button id="photoRemove" class="danger" hidden>Retirer</button>
+      </div>
+      <input type="file" id="photoFile" accept="image/*">
+      <p class="hint">Choisissez d'abord le type de produit, puis chargez la photo fournisseur de la vue affichée (face avant ou dos, fond uni de préférence). Elle remplace le modèle dessiné.</p>
+    </section>
+    <section>
+      <h2 id="zoneTitle">Zone d'impression</h2>
+      <label class="check"><input type="checkbox" id="zoneShow" checked> Afficher les zones</label>
+      <div class="row"><label>Largeur réelle</label><input type="number" id="zoneCm" min="1" max="200" step="0.5"><span class="hint">cm</span></div>
+      <div class="dims" id="zoneDims"></div>
+      <div class="btns">
+        <button id="zoneEdit">✎ Ajuster la zone</button>
+        <button id="zoneReset">Réinitialiser</button>
+      </div>
+      <p class="hint" style="margin-top:8px">La largeur réelle sert à afficher les dimensions des marquages en centimètres.</p>
+    </section>
+    <section>
+      <h2>Rendu</h2>
+      <div class="row"><label>Effet tissu</label><input type="range" id="fabric" min="0" max="100"><span class="val" id="fabricVal"></span></div>
+      <p class="hint">Fait ressortir les plis et le grain du vêtement à travers le marquage.</p>
+    </section>
+  </aside>
+
+  <div class="stage-wrap" id="stageWrap">
+    <div class="stage-top">
+      <div class="seg" id="viewSeg"><button data-view="front">Face avant</button><button data-view="back">Dos</button></div>
+      <div class="chips" id="placeChips"></div>
+    </div>
+    <div class="stage" id="stage"><canvas id="cv"></canvas></div>
+    <div class="stage-bar"><span id="status"></span><span style="flex:1"></span><span id="warn" class="warn"></span></div>
+    <div class="drop-hint">Déposez l'image pour l'ajouter comme logo</div>
+  </div>
+
+  <aside class="right">
+    <section>
+      <h2>Ajouter</h2>
+      <div class="btns full">
+        <button id="addText">＋ Texte</button>
+        <label class="btn" for="logoFile">＋ Logo / image</label>
+      </div>
+      <input type="file" id="logoFile" accept="image/*" multiple>
+    </section>
+    <section>
+      <h2 id="layersTitle">Éléments</h2>
+      <ul class="layers" id="layers"></ul>
+    </section>
+    <section class="props" id="props"></section>
+  </aside>
+</main>
+
+<script>
+(() => {
+'use strict';
+
+// Taille logique de la scène (carré). Toutes les coordonnées des éléments sont dans ce repère,
+// indépendamment de la taille d'affichage — le rendu est simplement mis à l'échelle.
+const S = 1000;
+const STAGE_BG = '#ecebe7';
+const SEL = '#2a6fd6';
+const VIEW_LABEL = { front: 'Face avant', back: 'Dos' };
+
+const FONTS = ['Montserrat','Oswald','Anton','Bebas Neue','Roboto Slab','Playfair Display','Righteous','Bungee',
+  'Permanent Marker','Pacifico','Lobster','Great Vibes','Arial','Georgia','Impact','Times New Roman','Courier New'];
+
+const COLORS = [
+  ['#ffffff','Blanc'],['#1f1f22','Noir'],['#9a9a9c','Gris chiné'],['#4a4d52','Anthracite'],['#1f2a44','Marine'],
+  ['#2451a6','Bleu royal'],['#7fb2de','Bleu ciel'],['#c1272d','Rouge'],['#6d1f2c','Bordeaux'],['#1f5b3a','Vert bouteille'],
+  ['#6b6b3d','Kaki'],['#f2c230','Jaune'],['#ec7a24','Orange'],['#f2a7bd','Rose'],['#e8dcc3','Sable']
+];
+
+// ================== Dessin des produits (SVG, repère 1000×1000) ==================
+const r1 = v => Math.round(v * 10) / 10;
+
+// Bord « matelassé » : suite de petits arcs bombés vers l'extérieur entre a et b
+function bumpy(a, b, n, amp) {
+  let s = '';
+  for (let i = 1; i <= n; i++) {
+    const x0 = a[0] + (b[0] - a[0]) * (i - 1) / n, y0 = a[1] + (b[1] - a[1]) * (i - 1) / n;
+    const x1 = a[0] + (b[0] - a[0]) * i / n, y1 = a[1] + (b[1] - a[1]) * i / n;
+    const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy);
+    s += ` Q${r1((x0 + x1) / 2 + dy / len * amp)} ${r1((y0 + y1) / 2 - dx / len * amp)} ${r1(x1)} ${r1(y1)}`;
+  }
+  return s;
+}
+
+// --- T-shirt / polo ---
+const teeBody = neck => `M372 118 ${neck} L770 158 C800 168 830 190 850 215 L918 350 C890 372 850 395 812 410 L752 335 C748 420 752 700 760 905 C600 925 400 925 240 905 C248 700 252 420 248 335 L188 410 C150 395 110 372 82 350 L150 215 C170 190 200 168 230 158 Z`;
+const TEE_FRONT = teeBody('C410 170 590 170 628 118');
+const TEE_BACK = teeBody('C420 136 580 136 628 118');
+const teeShading = () => `
+  <g filter="url(#b12)" fill="none">
+    <path d="M752 342 C724 366 704 396 694 432" stroke="#000" stroke-opacity=".16" stroke-width="26"/>
+    <path d="M248 342 C276 366 296 396 306 432" stroke="#000" stroke-opacity=".16" stroke-width="26"/>
+    <path d="M430 640 C425 740 418 830 412 915" stroke="#000" stroke-opacity=".07" stroke-width="30"/>
+    <path d="M458 640 C455 740 451 830 447 915" stroke="#fff" stroke-opacity=".09" stroke-width="16"/>
+    <path d="M612 600 C616 720 620 830 624 915" stroke="#000" stroke-opacity=".07" stroke-width="30"/>
+    <path d="M845 240 L895 335" stroke="#fff" stroke-opacity=".10" stroke-width="30"/>
+    <path d="M155 240 L105 335" stroke="#fff" stroke-opacity=".08" stroke-width="30"/>
+  </g>
+  <ellipse cx="500" cy="420" rx="190" ry="210" fill="#fff" opacity=".07" filter="url(#b40)"/>`;
+const teeSeams = c => `
+  <g fill="none" stroke="${c.stroke}" stroke-width="2" stroke-opacity=".55">
+    <path d="M230 158 C245 210 252 280 248 335"/><path d="M770 158 C755 210 748 280 752 335"/>
+  </g>
+  <g fill="none" stroke="${c.stroke}" stroke-width="1.8" stroke-dasharray="6 4" stroke-opacity=".8">
+    <path d="M904 333 C876 355 836 378 798 393"/><path d="M96 333 C124 355 164 378 202 393"/>
+    <path d="M244 884 C400 904 600 904 756 884"/>
+  </g>`;
+const ribBand = (d, c, stitch) => `<path d="${d}" fill="${c.color}"/><path d="${d}" fill="url(#rib)"/><path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="1.8" stroke-linejoin="round"/>` +
+  (stitch ? `<path d="${stitch}" fill="none" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="5 4" stroke-opacity=".8"/>` : '');
+const polOCuffs = c =>
+  ribBand('M918 350 C890 372 850 395 812 410 L794 389 C832 374 872 351 900 329 Z', c) +
+  ribBand('M82 350 C110 372 150 395 188 410 L206 389 C168 374 128 351 100 329 Z', c);
+
+// --- Sweat / veste (manches longues) ---
+const SWEAT_BODY = 'M385 150 C420 185 580 185 615 150 L760 188 C815 200 848 238 860 300 C880 450 898 620 912 795 L820 802 C808 660 790 520 758 405 C756 560 758 700 760 842 L240 842 C242 700 244 560 242 405 C210 520 192 660 180 802 L88 795 C102 620 120 450 140 300 C152 238 185 200 240 188 Z';
+const NECK_F = 'C420 185 580 185 628 150', NECK_B = 'C420 158 580 158 628 150';
+const jacketBody = neck => `M372 150 ${neck} L765 185 C820 198 850 238 862 300 C882 450 898 620 912 800 L914 858 L826 862 L820 802 C808 660 790 520 758 405 C757 560 758 720 760 900 L240 900 C242 720 243 560 242 405 C210 520 192 660 180 802 L174 862 L86 858 L88 800 C102 620 118 450 138 300 C150 238 180 198 235 185 Z`;
+const longSleeveShading = () => `
+  <g filter="url(#b12)" fill="none">
+    <path d="M772 420 C790 560 806 680 816 800" stroke="#000" stroke-opacity=".20" stroke-width="24"/>
+    <path d="M228 420 C210 560 194 680 184 800" stroke="#000" stroke-opacity=".20" stroke-width="24"/>
+    <path d="M858 320 C874 450 890 600 902 780" stroke="#fff" stroke-opacity=".11" stroke-width="26"/>
+    <path d="M142 320 C126 450 110 600 98 780" stroke="#fff" stroke-opacity=".08" stroke-width="26"/>
+    <path d="M826 548 C848 556 870 560 894 556" stroke="#000" stroke-opacity=".14" stroke-width="7"/>
+    <path d="M818 600 C842 610 866 612 896 606" stroke="#000" stroke-opacity=".10" stroke-width="6"/>
+    <path d="M174 548 C152 556 130 560 106 556" stroke="#000" stroke-opacity=".14" stroke-width="7"/>
+    <path d="M182 600 C158 610 134 612 104 606" stroke="#000" stroke-opacity=".10" stroke-width="6"/>
+    <path d="M760 410 C735 430 715 455 705 490" stroke="#000" stroke-opacity=".15" stroke-width="22"/>
+    <path d="M240 410 C265 430 285 455 295 490" stroke="#000" stroke-opacity=".15" stroke-width="22"/>
+    <path d="M420 660 C425 740 430 800 432 900" stroke="#000" stroke-opacity=".06" stroke-width="28"/>
+    <path d="M600 640 C604 740 606 800 608 900" stroke="#000" stroke-opacity=".06" stroke-width="28"/>
+  </g>
+  <ellipse cx="500" cy="440" rx="200" ry="220" fill="#fff" opacity=".06" filter="url(#b40)"/>`;
+const sleeveSeams = (c, neckY) => `<g fill="none" stroke="${c.stroke}" stroke-width="2" stroke-opacity=".55">
+  <path d="M240 ${neckY + 38} C255 260 250 330 242 405"/><path d="M760 ${neckY + 38} C745 260 750 330 758 405"/></g>`;
+const zipper = (y0, y1) => `
+  <rect x="492" y="${y0}" width="16" height="${y1 - y0}" fill="url(#teeth)"/>
+  <g fill="none" stroke="#000" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="5 4"><path d="M484 ${y0 + 60} L484 ${y1}"/><path d="M516 ${y0 + 60} L516 ${y1}"/></g>
+  <rect x="489" y="${y0 + 6}" width="22" height="16" rx="3" fill="#9a9a9a" stroke="#6d6d6d"/>
+  <rect x="494" y="${y0 + 20}" width="12" height="44" rx="5" fill="#bdbdbd" stroke="#737373" stroke-width="1.5"/>`;
+const pocketZip = (x0, y0, x1, y1) => `<path d="M${x0} ${y0} L${x1} ${y1}" stroke="#2c2c2c" stroke-width="6" stroke-linecap="round"/>
+  <rect x="${x0 - 5}" y="${y0 - 2}" width="10" height="22" rx="3" fill="#a3a3a3" stroke="#6d6d6d" transform="rotate(${r1(Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI - 90)} ${x0} ${y0})"/>`;
+
+// --- Doudoune ---
+const puffBody = neck => `M372 150 ${neck} L775 180 C835 195 868 240 880 300${bumpy([880, 300], [932, 800], 5, 10)} L936 858 L836 862 L830 805${bumpy([830, 805], [772, 410], 4, 7)}${bumpy([772, 410], [775, 895], 5, 9)} C600 915 400 915 225 895${bumpy([225, 895], [228, 410], 5, 9)}${bumpy([228, 410], [170, 805], 4, 7)} L164 862 L64 858 L68 800${bumpy([68, 800], [120, 300], 5, 10)} C132 240 165 195 225 180 Z`;
+const puffInner = () => `
+  <rect width="1000" height="1000" fill="url(#puff)"/>
+  <g filter="url(#b24)">
+    <ellipse cx="400" cy="330" rx="140" ry="50" fill="#fff" opacity=".07"/>
+    <ellipse cx="860" cy="430" rx="26" ry="140" fill="#fff" opacity=".08"/>
+    <ellipse cx="140" cy="430" rx="26" ry="140" fill="#fff" opacity=".06"/>
+    <path d="M772 420 C790 560 806 680 816 800" stroke="#000" stroke-opacity=".22" stroke-width="26" fill="none"/>
+    <path d="M228 420 C210 560 194 680 184 800" stroke="#000" stroke-opacity=".22" stroke-width="26" fill="none"/>
+  </g>`;
+
+// --- Casquette (6 panneaux, vue de face légèrement plongeante) ---
+const CAP_CROWN = 'M225 590 C212 410 300 222 500 205 C700 222 788 410 775 590 C670 640 330 640 225 590 Z';
+const CAP_BRIM_PTS = [[215,592],[203,640],[210,690],[245,720],[320,772],[410,794],[500,796],[590,794],[680,772],[755,720],[790,690],[797,640],[785,592]];
+const CAP_BRIM = (() => {
+  const p = CAP_BRIM_PTS, f = q => `${q[0]} ${q[1]}`;
+  return `M${f(p[0])} C${f(p[1])} ${f(p[2])} ${f(p[3])} C${f(p[4])} ${f(p[5])} ${f(p[6])} C${f(p[7])} ${f(p[8])} ${f(p[9])} C${f(p[10])} ${f(p[11])} ${f(p[12])} C670 632 330 632 215 592 Z`;
+})();
+const capBrimStitches = () => [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35].map(t => {
+  const q = CAP_BRIM_PTS.map(([x, y]) => `${r1(x + (500 - x) * t)} ${r1(y + (600 - y) * t)}`);
+  return `<path d="M${q[0]} C${q[1]} ${q[2]} ${q[3]} C${q[4]} ${q[5]} ${q[6]} C${q[7]} ${q[8]} ${q[9]} C${q[10]} ${q[11]} ${q[12]}"/>`;
+}).join('');
+
+const GARMENTS = {
+  tshirt: {
+    label: 'T-shirt', tex: '0.8',
+    places: {
+      coeur:  { label: 'Cœur', view: 'front', zone: { x: 565, y: 228, w: 110, h: 110, cm: 10 } },
+      centre: { label: 'Centre avant', view: 'front', zone: { x: 350, y: 245, w: 300, h: 400, cm: 30 } },
+      dos:    { label: 'Dos', view: 'back', zone: { x: 350, y: 220, w: 300, h: 400, cm: 30 } },
+      nuque:  { label: 'Nuque', view: 'back', zone: { x: 445, y: 162, w: 110, h: 45, cm: 10 } },
+    },
+    views: {
+      front: {
+        body: TEE_FRONT, inner: teeShading,
+        over: c => teeSeams(c) + `
+          <path d="M372 118 C420 134 580 134 628 118 C590 170 410 170 372 118 Z" fill="${c.deep}"/>
+          <path d="M378 121 C420 135 580 135 622 121" fill="none" stroke="${c.dark}" stroke-width="9"/>
+          <rect x="486" y="129" width="28" height="11" rx="1.5" fill="#e9e4d8" opacity=".95"/>` +
+          ribBand('M372 118 C410 170 590 170 628 118 L642 126 C600 192 400 192 358 126 Z', c, 'M364 130 C404 188 596 188 636 130'),
+      },
+      back: {
+        body: TEE_BACK, inner: teeShading,
+        over: c => teeSeams(c) + ribBand('M372 118 C420 136 580 136 628 118 L640 128 C585 156 415 156 360 128 Z', c, 'M362 131 C415 158 585 158 638 131'),
+      },
+    },
+  },
+  polo: {
+    label: 'Polo', tex: '0.95',
+    places: {
+      coeur:  { label: 'Cœur', view: 'front', zone: { x: 565, y: 250, w: 110, h: 100, cm: 10 } },
+      centre: { label: 'Centre avant', view: 'front', zone: { x: 360, y: 390, w: 280, h: 280, cm: 26 } },
+      dos:    { label: 'Dos', view: 'back', zone: { x: 350, y: 240, w: 300, h: 400, cm: 30 } },
+      nuque:  { label: 'Nuque', view: 'back', zone: { x: 450, y: 192, w: 100, h: 40, cm: 9 } },
+    },
+    views: {
+      front: {
+        body: TEE_FRONT, inner: teeShading,
+        over: c => teeSeams(c) + polOCuffs(c) + `
+          <path d="M372 114 C420 96 580 96 628 114 L610 136 C560 124 440 124 390 136 Z" fill="${c.dark}"/>
+          <path d="M390 136 C440 124 560 124 610 136 L500 205 Z" fill="${c.deep}"/>
+          <path d="M476 188 L524 188 L524 360 C510 367 490 367 476 360 Z" fill="${c.color}" stroke="${c.stroke}" stroke-width="2"/>
+          <path d="M482 194 L482 356 M518 194 L518 356" stroke="${c.stroke}" stroke-width="1.4" stroke-dasharray="4 3" fill="none"/>
+          <path d="M500 196 L500 358" stroke="${c.stroke}" stroke-width="1.2" stroke-opacity=".5"/>
+          ${[240, 305].map(y => `<circle cx="500" cy="${y}" r="8" fill="${c.dark}" stroke="${c.stroke}" stroke-width="1.5"/><circle cx="497" cy="${y - 2}" r="1.6" fill="${c.deep}"/><circle cx="503" cy="${y + 2}" r="1.6" fill="${c.deep}"/>`).join('')}
+          <g filter="url(#b6)" opacity=".35" transform="translate(5 8)">
+            <path d="M372 112 C378 170 410 222 455 262 C470 240 486 214 498 190 C470 166 432 142 398 128 Z"/>
+            <path d="M628 112 C622 170 590 222 545 262 C530 240 514 214 502 190 C530 166 568 142 602 128 Z"/>
+          </g>
+          ${['M372 112 C378 170 410 222 455 262 C470 240 486 214 498 190 C470 166 432 142 398 128 Z',
+             'M628 112 C622 170 590 222 545 262 C530 240 514 214 502 190 C530 166 568 142 602 128 Z'].map(d =>
+            `<path d="${d}" fill="${c.color}"/><path d="${d}" fill="url(#rib)"/><path d="${d}" fill="url(#gcol)"/><path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="2.2" stroke-linejoin="round"/>`).join('')}`,
+      },
+      back: {
+        body: TEE_BACK, inner: teeShading,
+        over: c => teeSeams(c) + polOCuffs(c) + `
+          <path d="M346 116 C420 140 580 140 654 116 L664 158 C595 196 405 196 336 158 Z" fill="#000" opacity=".3" filter="url(#b6)" transform="translate(0 6)"/>
+          <path d="M346 112 C420 136 580 136 654 112 L664 154 C595 192 405 192 336 154 Z" fill="${c.color}"/>
+          <path d="M346 112 C420 136 580 136 654 112 L664 154 C595 192 405 192 336 154 Z" fill="url(#rib)"/>
+          <path d="M346 112 C420 136 580 136 654 112 L664 154 C595 192 405 192 336 154 Z" fill="none" stroke="${c.stroke}" stroke-width="2.2"/>
+          <path d="M252 905 L250 860 M748 905 L750 860" stroke="${c.stroke}" stroke-width="2"/>`,
+      },
+    },
+  },
+  sweat: {
+    label: 'Sweat capuche', tex: '0.7',
+    places: {
+      coeur:  { label: 'Cœur', view: 'front', zone: { x: 568, y: 290, w: 110, h: 100, cm: 10 } },
+      centre: { label: 'Centre avant', view: 'front', zone: { x: 355, y: 290, w: 290, h: 290, cm: 28 } },
+      dos:    { label: 'Dos', view: 'back', zone: { x: 340, y: 410, w: 320, h: 360, cm: 30 } },
+    },
+    views: {
+      front: {
+        body: SWEAT_BODY, inner: longSleeveShading,
+        over: c => sleeveSeams(c, 150) +
+          ribBand('M912 795 L820 802 L822 870 C850 875 890 873 916 865 Z', c) +
+          ribBand('M88 795 L180 802 L178 870 C150 875 110 873 84 865 Z', c) +
+          ribBand('M240 842 L760 842 L758 905 C600 914 400 914 242 905 Z', c) + `
+          <path d="M330 612 C400 602 600 602 670 612 L722 806 C600 816 400 816 278 806 Z" fill="#000" opacity=".22" filter="url(#b6)" transform="translate(0 5)"/>
+          <path d="M330 612 C400 602 600 602 670 612 L722 806 C600 816 400 816 278 806 Z" fill="${c.color}"/>
+          <path d="M330 612 C400 602 600 602 670 612 L722 806 C600 816 400 816 278 806 Z" fill="url(#gh)"/>
+          <path d="M330 612 C400 602 600 602 670 612 L722 806 C600 816 400 816 278 806 Z" fill="none" stroke="${c.stroke}" stroke-width="2"/>
+          <path d="M330 612 L278 806 M670 612 L722 806" stroke="${c.deep}" stroke-width="5"/>
+          <path d="M338 622 C400 613 600 613 662 622 M345 624 L298 798 M655 624 L702 798" fill="none" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path d="M318 196 C292 110 370 34 500 32 C630 34 708 110 682 196 C650 236 570 262 500 262 C430 262 350 236 318 196 Z" fill="#000" opacity=".28" filter="url(#b12)" transform="translate(0 12)"/>
+          <path d="M318 196 C292 110 370 34 500 32 C630 34 708 110 682 196 C650 236 570 262 500 262 C430 262 350 236 318 196 Z" fill="${c.color}"/>
+          <path d="M318 196 C292 110 370 34 500 32 C630 34 708 110 682 196 C650 236 570 262 500 262 C430 262 350 236 318 196 Z" fill="url(#ghood)"/>
+          <path d="M318 196 C292 110 370 34 500 32 C630 34 708 110 682 196 C650 236 570 262 500 262 C430 262 350 236 318 196 Z" fill="none" stroke="${c.stroke}" stroke-width="2.2"/>
+          <path d="M388 182 C382 104 440 66 500 66 C560 66 618 104 612 182 C580 222 540 238 500 240 C460 238 420 222 388 182 Z" fill="url(#hoodIn)"/>
+          <path d="M388 182 C382 104 440 66 500 66 C560 66 618 104 612 182 C580 222 540 238 500 240 C460 238 420 222 388 182 Z" fill="none" stroke="${c.color}" stroke-width="14"/>
+          <path d="M388 182 C382 104 440 66 500 66 C560 66 618 104 612 182 C580 222 540 238 500 240 C460 238 420 222 388 182 Z" fill="none" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="5 4" transform="translate(500 150) scale(1.06) translate(-500 -150)"/>
+          ${[452, 548].map(x => `<circle cx="${x}" cy="248" r="8.5" fill="#d9d6cf" stroke="#8d8a83" stroke-width="2"/><circle cx="${x}" cy="248" r="3.5" fill="${c.deep}"/>`).join('')}
+          <path d="M452 250 C448 300 446 340 444 395 M548 250 C552 300 554 340 556 398" fill="none" stroke="${c.light}" stroke-width="7" stroke-linecap="round"/>
+          <path d="M444 380 L444 398 M556 382 L556 400" stroke="#cfcac0" stroke-width="8.5" stroke-linecap="round"/>`,
+      },
+      back: {
+        body: SWEAT_BODY, inner: longSleeveShading,
+        over: c => sleeveSeams(c, 150) +
+          ribBand('M912 795 L820 802 L822 870 C850 875 890 873 916 865 Z', c) +
+          ribBand('M88 795 L180 802 L178 870 C150 875 110 873 84 865 Z', c) +
+          ribBand('M240 842 L760 842 L758 905 C600 914 400 914 242 905 Z', c) + `
+          <path d="M322 170 C310 120 400 100 500 100 C600 100 690 120 678 170 C700 270 630 370 500 392 C370 370 300 270 322 170 Z" fill="#000" opacity=".3" filter="url(#b12)" transform="translate(0 12)"/>
+          <path d="M322 170 C310 120 400 100 500 100 C600 100 690 120 678 170 C700 270 630 370 500 392 C370 370 300 270 322 170 Z" fill="${c.color}"/>
+          <path d="M322 170 C310 120 400 100 500 100 C600 100 690 120 678 170 C700 270 630 370 500 392 C370 370 300 270 322 170 Z" fill="url(#ghood)"/>
+          <path d="M322 170 C310 120 400 100 500 100 C600 100 690 120 678 170 C700 270 630 370 500 392 C370 370 300 270 322 170 Z" fill="none" stroke="${c.stroke}" stroke-width="2.2"/>
+          <path d="M500 102 C502 200 502 300 500 390" stroke="${c.stroke}" stroke-width="2" fill="none"/>
+          <path d="M491 106 C493 200 493 300 491 384 M509 106 C507 200 507 300 509 384" stroke="${c.stroke}" stroke-width="1.4" stroke-dasharray="5 4" fill="none"/>`,
+      },
+    },
+  },
+  veste: {
+    label: 'Veste zippée', tex: '1.1',
+    places: {
+      coeur:  { label: 'Cœur', view: 'front', zone: { x: 562, y: 250, w: 120, h: 110, cm: 10 } },
+      centre: { label: 'Centre avant', view: 'front', zone: { x: 350, y: 260, w: 300, h: 300, cm: 30 } },
+      dos:    { label: 'Dos', view: 'back', zone: { x: 340, y: 340, w: 320, h: 360, cm: 32 } },
+      nuque:  { label: 'Nuque', view: 'back', zone: { x: 440, y: 190, w: 120, h: 50, cm: 12 } },
+    },
+    views: {
+      front: {
+        body: jacketBody(NECK_F), inner: longSleeveShading,
+        over: c => sleeveSeams(c, 147) + `
+          <path d="M88 800 L180 802 M912 800 L820 802 M240 872 L760 872" stroke="${c.stroke}" stroke-width="2" stroke-opacity=".7"/>
+          <path d="M240 880 L760 880" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="5 4"/>
+          ${pocketZip(300, 600, 338, 762)}${pocketZip(700, 600, 662, 762)}
+          <path d="M366 96 C420 84 580 84 634 96 L642 156 C592 200 408 200 358 156 Z" fill="#000" opacity=".25" filter="url(#b6)" transform="translate(0 6)"/>
+          <path d="M366 96 C420 84 580 84 634 96 L642 156 C592 200 408 200 358 156 Z" fill="${c.color}"/>
+          <path d="M366 96 C420 84 580 84 634 96 L642 156 C592 200 408 200 358 156 Z" fill="url(#gcol)"/>
+          <path d="M366 96 C420 84 580 84 634 96 L642 156 C592 200 408 200 358 156 Z" fill="none" stroke="${c.stroke}" stroke-width="2.2"/>
+          <path d="M380 104 C430 94 570 94 620 104 L614 126 C570 140 430 140 386 126 Z" fill="${c.deep}"/>
+          ${zipper(128, 900)}`,
+      },
+      back: {
+        body: jacketBody(NECK_B), inner: longSleeveShading,
+        over: c => sleeveSeams(c, 147) + `
+          <path d="M88 800 L180 802 M912 800 L820 802 M240 872 L760 872" stroke="${c.stroke}" stroke-width="2" stroke-opacity=".7"/>
+          <path d="M240 880 L760 880" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path d="M242 300 C400 318 600 318 758 300" stroke="${c.stroke}" stroke-width="2" fill="none"/>
+          <path d="M242 310 C400 328 600 328 758 310" stroke="${c.stroke}" stroke-width="1.4" stroke-dasharray="5 4" fill="none"/>
+          <path d="M366 96 C420 90 580 90 634 96 L640 150 C582 170 418 170 360 150 Z" fill="${c.color}"/>
+          <path d="M366 96 C420 90 580 90 634 96 L640 150 C582 170 418 170 360 150 Z" fill="url(#gcol)"/>
+          <path d="M366 96 C420 90 580 90 634 96 L640 150 C582 170 418 170 360 150 Z" fill="none" stroke="${c.stroke}" stroke-width="2.2"/>
+          <path d="M362 143 C420 162 580 162 638 143" stroke="${c.stroke}" stroke-width="1.4" stroke-dasharray="5 4" fill="none"/>`,
+      },
+    },
+  },
+  doudoune: {
+    label: 'Doudoune', tex: null,
+    places: {
+      coeur:  { label: 'Cœur', view: 'front', zone: { x: 568, y: 262, w: 120, h: 100, cm: 10 } },
+      centre: { label: 'Centre avant', view: 'front', zone: { x: 360, y: 260, w: 280, h: 300, cm: 25 } },
+      dos:    { label: 'Dos', view: 'back', zone: { x: 350, y: 290, w: 300, h: 340, cm: 28 } },
+      nuque:  { label: 'Nuque', view: 'back', zone: { x: 440, y: 180, w: 120, h: 45, cm: 10 } },
+    },
+    views: {
+      front: {
+        body: puffBody(NECK_F), inner: puffInner,
+        over: c => `
+          <path d="M68 800 L170 805 L164 862 L64 858 Z M932 800 L830 805 L836 862 L936 858 Z" fill="${c.dark}" stroke="${c.stroke}" stroke-width="2"/>
+          <path d="M225 882 C400 902 600 902 775 882" stroke="${c.dark}" stroke-width="12" fill="none"/>
+          ${pocketZip(300, 590, 336, 760)}${pocketZip(700, 590, 664, 760)}
+          <path d="M362 80 C420 68 580 68 638 80 L646 158 C592 202 408 202 354 158 Z" fill="#000" opacity=".28" filter="url(#b6)" transform="translate(0 8)"/>
+          <path d="M362 80 C420 68 580 68 638 80 L646 158 C592 202 408 202 354 158 Z" fill="${c.color}"/>
+          <path d="M362 80 C420 68 580 68 638 80 L646 158 C592 202 408 202 354 158 Z" fill="url(#gcol)"/>
+          <path d="M358 120 C420 136 580 136 642 120" stroke="#000" stroke-opacity=".35" stroke-width="2.5" fill="none"/>
+          <path d="M362 80 C420 68 580 68 638 80 L646 158 C592 202 408 202 354 158 Z" fill="none" stroke="${c.stroke}" stroke-width="2.2"/>
+          <path d="M376 88 C430 78 570 78 624 88 L618 112 C570 126 430 126 382 112 Z" fill="${c.deep}"/>
+          ${zipper(112, 905)}`,
+      },
+      back: {
+        body: puffBody(NECK_B), inner: puffInner,
+        over: c => `
+          <path d="M68 800 L170 805 L164 862 L64 858 Z M932 800 L830 805 L836 862 L936 858 Z" fill="${c.dark}" stroke="${c.stroke}" stroke-width="2"/>
+          <path d="M225 882 C400 902 600 902 775 882" stroke="${c.dark}" stroke-width="12" fill="none"/>
+          <path d="M362 80 C420 74 580 74 638 80 L644 150 C584 172 416 172 356 150 Z" fill="${c.color}"/>
+          <path d="M362 80 C420 74 580 74 638 80 L644 150 C584 172 416 172 356 150 Z" fill="url(#gcol)"/>
+          <path d="M358 116 C420 128 580 128 642 116" stroke="#000" stroke-opacity=".35" stroke-width="2.5" fill="none"/>
+          <path d="M362 80 C420 74 580 74 638 80 L644 150 C584 172 416 172 356 150 Z" fill="none" stroke="${c.stroke}" stroke-width="2.2"/>`,
+      },
+    },
+  },
+  casquette: {
+    label: 'Casquette', tex: null,
+    places: {
+      centre: { label: 'Face avant', view: 'front', zone: { x: 395, y: 372, w: 210, h: 170, cm: 10 } },
+    },
+    views: {
+      front: {
+        body: CAP_CROWN,
+        under: () => `<ellipse cx="500" cy="815" rx="340" ry="34" fill="#000" opacity=".22" filter="url(#b24)"/>`,
+        inner: c => `
+          <rect width="1000" height="1000" fill="url(#twill)"/>
+          <path d="M225 590 C212 420 300 245 500 205 C420 222 348 380 336 618 C290 610 252 602 225 590 Z" fill="#000" opacity=".17"/>
+          <path d="M775 590 C788 420 700 245 500 205 C580 222 652 380 664 618 C710 610 748 602 775 590 Z" fill="#000" opacity=".22"/>
+          <g filter="url(#b24)">
+            <path d="M225 590 C212 420 300 245 500 205" stroke="#000" stroke-opacity=".25" stroke-width="40" fill="none"/>
+            <path d="M775 590 C788 420 700 245 500 205" stroke="#000" stroke-opacity=".3" stroke-width="40" fill="none"/>
+            <path d="M225 596 C330 646 670 646 775 596" stroke="#000" stroke-opacity=".3" stroke-width="34" fill="none"/>
+          </g>
+          <ellipse cx="425" cy="350" rx="95" ry="85" fill="#fff" opacity=".20" filter="url(#b40)"/>
+          <ellipse cx="585" cy="380" rx="60" ry="80" fill="#fff" opacity=".08" filter="url(#b40)"/>`,
+        over: c => `
+          <g fill="none" stroke="${c.stroke}" stroke-width="2.2" stroke-opacity=".7">
+            <path d="M500 207 C502 400 502 520 500 628"/>
+            <path d="M500 207 C420 222 348 380 336 618"/><path d="M500 207 C580 222 652 380 664 618"/>
+            <path d="M500 207 C380 228 285 380 262 603" stroke-opacity=".45"/><path d="M500 207 C620 228 715 380 738 603" stroke-opacity=".45"/>
+          </g>
+          <g fill="none" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="5 4" stroke-opacity=".75">
+            <path d="M491 224 C493 400 493 520 491 630"/><path d="M509 224 C507 400 507 520 509 630"/>
+            <path d="M490 220 C414 236 350 390 346 620"/><path d="M510 220 C586 236 650 390 654 620"/>
+            <path d="M487 218 C400 230 336 380 326 616"/><path d="M513 218 C600 230 664 380 674 616"/>
+          </g>
+          ${[[432, 292], [568, 292]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="9" fill="none" stroke="${c.dark}" stroke-width="3.5"/><circle cx="${x}" cy="${y}" r="5" fill="${c.deep}"/>`).join('')}
+          ${[[300, 420], [700, 420]].map(([x, y]) => `<ellipse cx="${x}" cy="${y}" rx="6" ry="8.5" fill="none" stroke="${c.dark}" stroke-width="3"/><ellipse cx="${x}" cy="${y}" rx="3" ry="5" fill="${c.deep}"/>`).join('')}
+          <ellipse cx="500" cy="211" rx="25" ry="13" fill="#000" opacity=".3" filter="url(#b6)"/>
+          <ellipse cx="500" cy="207" rx="24" ry="13" fill="${c.color}" stroke="${c.stroke}" stroke-width="2"/>
+          <ellipse cx="493" cy="203" rx="10" ry="5" fill="#fff" opacity=".3"/>
+          <clipPath id="cbrim"><path d="${CAP_BRIM}"/></clipPath>
+          <path d="${CAP_BRIM}" transform="translate(0 10)" fill="${c.deep}"/>
+          <path d="${CAP_BRIM}" transform="translate(0 10)" fill="#000" opacity=".25"/>
+          <path d="${CAP_BRIM}" fill="${c.color}"/>
+          <g clip-path="url(#cbrim)">
+            <rect width="1000" height="1000" fill="url(#twill)"/>
+            <path d="${CAP_BRIM}" fill="url(#brimG)"/>
+            <path d="M215 600 C330 654 670 654 785 600" stroke="#000" stroke-opacity=".4" stroke-width="30" fill="none" filter="url(#b12)"/>
+            <ellipse cx="430" cy="735" rx="150" ry="30" fill="#fff" opacity=".12" filter="url(#b24)"/>
+            <g fill="none" stroke="${c.stroke}" stroke-width="1.6" stroke-dasharray="5 4" stroke-opacity=".75">${capBrimStitches()}</g>
+          </g>
+          <path d="${CAP_BRIM}" fill="none" stroke="${c.stroke}" stroke-width="2.2" stroke-linejoin="round"/>`,
+      },
+    },
+  },
+  tote: {
+    label: 'Tote bag', tex: '0.9',
+    places: {
+      centre: { label: 'Face avant', view: 'front', zone: { x: 320, y: 410, w: 360, h: 400, cm: 28 } },
+      dos:    { label: 'Face arrière', view: 'back', zone: { x: 320, y: 410, w: 360, h: 400, cm: 28 } },
+    },
+    views: {
+      front: { body: 'M245 300 L755 300 C758 500 764 700 770 880 C600 886 400 886 230 880 C236 700 242 500 245 300 Z', under: c => toteHandles(c), inner: toteInner, over: toteOver },
+      back:  { body: 'M245 300 L755 300 C758 500 764 700 770 880 C600 886 400 886 230 880 C236 700 242 500 245 300 Z', under: c => toteHandles(c), inner: toteInner, over: toteOver },
+    },
+  },
+};
+function toteHandles(c) {
+  const strap = (d, col) => `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="38"/><path d="${d}" fill="none" stroke="${col}" stroke-width="34"/>
+    <path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="26" stroke-dasharray="5 4"/><path d="${d}" fill="none" stroke="${col}" stroke-width="23"/>`;
+  return strap('M392 330 C392 150 608 150 608 330', c.dark) + strap('M372 330 C372 120 628 120 628 330', c.color);
+}
+function toteInner() {
+  return `<rect width="1000" height="1000" fill="url(#weave)"/>
+    <g filter="url(#b24)" fill="none">
+      <path d="M300 420 C360 560 380 700 360 880" stroke="#000" stroke-opacity=".08" stroke-width="40"/>
+      <path d="M680 380 C650 520 660 700 700 880" stroke="#000" stroke-opacity=".07" stroke-width="40"/>
+      <path d="M245 330 L755 330" stroke="#000" stroke-opacity=".18" stroke-width="22"/>
+    </g>`;
+}
+function toteOver(c) {
+  return `<path d="M246 350 L754 350" stroke="${c.stroke}" stroke-width="1.6" stroke-opacity=".6"/>
+    <path d="M247 340 L753 340" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="5 4"/>
+    ${[372, 628].map(x => `<rect x="${x - 17}" y="300" width="34" height="40" fill="none" stroke="${c.stroke}" stroke-width="1.5" stroke-dasharray="4 3"/><path d="M${x - 17} 300 L${x + 17} 340 M${x + 17} 300 L${x - 17} 340" stroke="${c.stroke}" stroke-width="1.2" stroke-dasharray="4 3"/>`).join('')}`;
+}
+
+// ---------- Couleurs ----------
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const uid = () => Math.random().toString(36).slice(2, 10);
+const rad = d => d * Math.PI / 180;
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function rgbToHex(r, g, b) { return '#' + [r, g, b].map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join(''); }
+function luminance(h) { const [r, g, b] = hexToRgb(h); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+// amt < 0 : assombrit, amt > 0 : éclaircit
+function shade(h, amt) {
+  const [r, g, b] = hexToRgb(h);
+  const t = amt < 0 ? 0 : 255, p = Math.abs(amt);
+  return rgbToHex(r + (t - r) * p, g + (t - g) * p, b + (t - b) * p);
+}
+function garmentPalette(color) {
+  const darkGarment = luminance(color) < 0.22;
+  return {
+    color,
+    stroke: darkGarment ? shade(color, 0.28) : shade(color, -0.32),
+    dark: darkGarment ? shade(color, 0.10) : shade(color, -0.14),
+    deep: darkGarment ? shade(color, -0.6) : shade(color, -0.45),
+    light: darkGarment ? shade(color, 0.45) : shade(color, 0.5),
+  };
+}
+
+function svgDefs(c, tex) {
+  const full = 'filterUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000"';
+  const blur = (id, sd) => `<filter id="${id}" ${full}><feGaussianBlur stdDeviation="${sd}"/></filter>`;
+  return `
+    <linearGradient id="gh" x1="0" x2="1">
+      <stop offset="0" stop-color="#000" stop-opacity=".22"/><stop offset=".2" stop-color="#000" stop-opacity=".04"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".06"/><stop offset=".8" stop-color="#000" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".22"/>
+    </linearGradient>
+    <linearGradient id="gv" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".08"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".14"/>
+    </linearGradient>
+    <linearGradient id="gcol" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#000" stop-opacity=".16"/>
+    </linearGradient>
+    <radialGradient id="ghood" cx=".5" cy=".35" r=".7">
+      <stop offset=".4" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/>
+    </radialGradient>
+    <radialGradient id="hoodIn" cx=".5" cy=".3" r=".75">
+      <stop offset="0" stop-color="${shade(c.deep, -0.1)}"/><stop offset="1" stop-color="${shade(c.deep, -0.6)}"/>
+    </radialGradient>
+    <radialGradient id="brimG" cx=".45" cy=".25" r=".85">
+      <stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".55" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".32"/>
+    </radialGradient>
+    <linearGradient id="gpuff" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity=".26"/><stop offset=".07" stop-color="#000" stop-opacity=".06"/><stop offset=".4" stop-color="#fff" stop-opacity=".10"/><stop offset=".75" stop-color="#fff" stop-opacity=".02"/><stop offset=".93" stop-color="#000" stop-opacity=".08"/><stop offset="1" stop-color="#000" stop-opacity=".24"/>
+    </linearGradient>
+    <pattern id="puff" y="20" width="1000" height="90" patternUnits="userSpaceOnUse">
+      <rect width="1000" height="90" fill="url(#gpuff)"/><rect width="1000" height="2.5" fill="#000" opacity=".45"/>
+    </pattern>
+    <pattern id="rib" width="7" height="10" patternUnits="userSpaceOnUse">
+      <rect width="3" height="10" fill="#000" opacity=".12"/><rect x="3" width="1" height="10" fill="#fff" opacity=".10"/>
+    </pattern>
+    <pattern id="twill" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+      <rect width="2.5" height="7" fill="#000" opacity=".09"/><rect x="3.5" width="1" height="7" fill="#fff" opacity=".06"/>
+    </pattern>
+    <pattern id="weave" width="6" height="6" patternUnits="userSpaceOnUse">
+      <rect width="6" height="1.6" fill="#000" opacity=".07"/><rect width="1.6" height="6" fill="#000" opacity=".06"/>
+    </pattern>
+    <pattern id="teeth" x="492" width="16" height="6" patternUnits="userSpaceOnUse">
+      <rect width="16" height="6" fill="#262626"/><rect x="2" width="6" height="3" fill="#8f8f8f"/><rect x="8" y="3" width="6" height="3" fill="#8f8f8f"/>
+    </pattern>
+    <filter id="ds" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".16"/></filter>
+    ${blur('b6', 6)}${blur('b12', 12)}${blur('b24', 24)}${blur('b40', 40)}
+    ${tex ? `
+    <filter id="noiseD" ${full}><feTurbulence type="fractalNoise" baseFrequency="${tex}" numOctaves="2" seed="7"/>
+      <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.45 0 0 0 -0.19"/></filter>
+    <filter id="noiseL" ${full}><feTurbulence type="fractalNoise" baseFrequency="${tex}" numOctaves="2" seed="11"/>
+      <feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.35 0 0 0 -0.15"/></filter>` : ''}`;
+}
+
+function garmentSVG(kind, view, color, thumb = false) {
+  const g = GARMENTS[kind], v = g.views[view] || g.views.front, c = garmentPalette(color), tex = thumb ? null : g.tex;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+    <defs>${svgDefs(c, tex)}<clipPath id="cb"><path d="${v.body}"/></clipPath></defs>
+    ${v.under ? v.under(c) : ''}
+    <path d="${v.body}" fill="${c.color}" filter="url(#ds)"/>
+    <g clip-path="url(#cb)">
+      ${tex ? '<rect width="1000" height="1000" filter="url(#noiseD)"/><rect width="1000" height="1000" filter="url(#noiseL)"/>' : ''}
+      ${v.inner ? v.inner(c) : ''}
+      <rect width="1000" height="1000" fill="url(#gh)"/><rect width="1000" height="1000" fill="url(#gv)"/>
+    </g>
+    <path d="${v.body}" fill="none" stroke="${c.stroke}" stroke-width="2.5" stroke-linejoin="round"/>
+    ${v.over ? v.over(c) : ''}
+  </svg>`;
+}
+const svgUrl = svg => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+function loadImage(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+function readFile(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+}
+function download(url, name) {
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+const defaultZones = key => Object.fromEntries(Object.entries(GARMENTS[key].places).map(([p, d]) => [p, { ...d.zone }]));
+
+// ================== État ==================
+// Chaque élément appartient à un emplacement (place) ; chaque emplacement appartient à une vue
+// (face avant / dos) et possède sa zone d'impression. state.zones garde aussi les zones
+// d'emplacements absents du produit courant, pour retrouver les éléments en revenant à un produit.
+const state = {
+  garment: 'tshirt', color: '#ffffff', photos: { front: null, back: null },
+  place: 'centre', zones: defaultZones('tshirt'), showZone: true, fabric: 40,
+  layers: [],
+};
+let selId = null;
+let editZone = false;
+const lastPlaceByView = {};
+const assets = new Map();        // id -> { src, img }
+const processed = new Map();     // clé -> canvas (logo détouré / recoloré)
+let bgs = {}, bgToken = 0;
+
+async function addAsset(src, id = uid()) {
+  const img = await loadImage(src);
+  assets.set(id, { src, img });
+  return id;
+}
+
+const G = () => GARMENTS[state.garment];
+const placeDef = p => G().places[p];
+const curView = () => (placeDef(state.place) || Object.values(G().places)[0]).view;
+const viewOf = L => placeDef(L.place)?.view;
+const inView = L => viewOf(L) === curView();
+const zoneOf = L => state.zones[L.place];
+const activeZone = () => state.zones[state.place];
+const sel = () => state.layers.find(l => l.id === selId) || null;
+
+// ---------- Historique (annuler / rétablir) ----------
+const undoStack = [], redoStack = [];
+let lastSnap = null;
+const snapshot = () => JSON.stringify(state);
+const bgKey = () => JSON.stringify([state.garment, state.color, state.photos]);
+function commit() {
+  const s = snapshot();
+  if (s === lastSnap) return;
+  if (lastSnap !== null) { undoStack.push(lastSnap); if (undoStack.length > 80) undoStack.shift(); }
+  lastSnap = s; redoStack.length = 0;
+  updateUndoButtons();
+}
+function restore(s) {
+  const prev = bgKey();
+  Object.assign(state, JSON.parse(s));
+  if (!state.layers.some(l => l.id === selId)) selId = null;
+  if (prev !== bgKey()) rebuildBackground();
+  refreshAll();
+}
+function undo() { if (!undoStack.length) return; redoStack.push(lastSnap); lastSnap = undoStack.pop(); restore(lastSnap); updateUndoButtons(); }
+function redo() { if (!redoStack.length) return; undoStack.push(lastSnap); lastSnap = redoStack.pop(); restore(lastSnap); updateUndoButtons(); }
+function updateUndoButtons() { $('#undoBtn').disabled = !undoStack.length; $('#redoBtn').disabled = !redoStack.length; }
+
+// ---------- Fonds (modèle ou photo, par vue) + carte d'ombrage pour l'effet tissu ----------
+async function rebuildBackground() {
+  const token = ++bgToken, out = {};
+  for (const v of Object.keys(G().views)) {
+    const pid = state.photos[v];
+    try {
+      out[v] = { img: pid && assets.has(pid) ? assets.get(pid).img : rasterize(await loadImage(svgUrl(garmentSVG(state.garment, v, state.color)))) };
+    } catch (e) { console.error(e); }
+  }
+  if (token !== bgToken) return;
+  for (const v in out) out[v].shade = computeShade(out[v].img);
+  bgs = out;
+  requestRender();
+}
+
+// Le SVG (textures, flous) est coûteux à redessiner : on le convertit une fois en bitmap.
+function rasterize(img) {
+  const c = document.createElement('canvas'); c.width = c.height = 1400;
+  c.getContext('2d').drawImage(img, 0, 0, 1400, 1400);
+  return c;
+}
+
+function containRect(img) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const k = Math.min(S / w, S / h);
+  return { x: (S - w * k) / 2, y: (S - h * k) / 2, w: w * k, h: h * k };
+}
+
+// Carte d'ombrage « passe-haut » : luminance / luminance floutée. Les plis et ombres du vêtement
+// ressortent (<1) quelle que soit sa couleur, les zones planes restent à 1 (aucun effet).
+function computeShade(img) {
+  const N = 500, r = containRect(img), k = N / S;
+  const a = document.createElement('canvas'); a.width = a.height = N;
+  const b = document.createElement('canvas'); b.width = b.height = N;
+  const actx = a.getContext('2d', { willReadFrequently: true }), bctx = b.getContext('2d', { willReadFrequently: true });
+  for (const c of [actx, bctx]) { c.fillStyle = '#fff'; c.fillRect(0, 0, N, N); }
+  actx.drawImage(img, r.x * k, r.y * k, r.w * k, r.h * k);
+  bctx.filter = 'blur(14px)';
+  bctx.drawImage(a, 0, 0);
+  try {
+    const A = actx.getImageData(0, 0, N, N), B = bctx.getImageData(0, 0, N, N).data, d = A.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const la = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const lb = 0.299 * B[i] + 0.587 * B[i + 1] + 0.114 * B[i + 2];
+      const v = 255 * Math.pow(clamp((la + 12) / (lb + 12), 0, 1), 1.6);
+      d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+    }
+    actx.putImageData(A, 0, 0);
+    return a;
+  } catch (e) { console.warn('Effet tissu indisponible', e); return null; }
+}
+
+// ================== Mise en page du texte (droit ou en arc) ==================
+const measureCtx = document.createElement('canvas').getContext('2d');
+const layoutCache = new Map();
+const requestedFonts = new Set();
+const fontStr = L => `${L.italic ? 'italic ' : ''}${L.bold ? '700' : '400'} ${L.size}px "${L.font}"`;
+
+function ensureFont(L) {
+  const f = `${L.italic ? 'italic ' : ''}${L.bold ? '700' : '400'} 40px "${L.font}"`;
+  if (requestedFonts.has(f)) return;
+  requestedFonts.add(f);
+  if (document.fonts && !document.fonts.check(f)) {
+    document.fonts.load(f).then(() => { layoutCache.clear(); requestRender(); }).catch(() => {});
+  }
+}
+
+function layoutText(L) {
+  const key = [L.text, L.font, L.bold, L.italic, L.size, L.spacing, L.arc].join('|');
+  let lay = layoutCache.get(key);
+  if (lay) return lay;
+  ensureFont(L);
+  measureCtx.font = fontStr(L);
+  const chars = [...(L.text || ' ')];
+  const widths = chars.map(ch => measureCtx.measureText(ch).width);
+  const total = widths.reduce((s, w) => s + w, 0) + L.spacing * Math.max(0, chars.length - 1);
+  const halfH = L.size * 0.58;
+  const out = [];
+  let cursor = -total / 2;
+  const theta = rad(L.arc);
+  const r = Math.abs(L.arc) < 0.5 ? Infinity : total / theta; // rayon signé : > 0 arc bombé vers le haut, < 0 vers le bas
+  for (let i = 0; i < chars.length; i++) {
+    const s = cursor + widths[i] / 2;
+    cursor += widths[i] + L.spacing;
+    if (r === Infinity) out.push({ ch: chars[i], x: s, y: 0, a: 0, w: widths[i] });
+    else { const a = s / r; out.push({ ch: chars[i], x: r * Math.sin(a), y: r * (1 - Math.cos(a)), a, w: widths[i] }); }
+  }
+  // boîte englobante à partir des coins de chaque caractère, puis recentrage sur l'origine
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const c of out) {
+    const cos = Math.cos(c.a), sin = Math.sin(c.a), hw = Math.max(c.w / 2, L.size * 0.15);
+    for (const [px, py] of [[-hw, -halfH], [hw, -halfH], [hw, halfH], [-hw, halfH]]) {
+      const x = c.x + px * cos - py * sin, y = c.y + px * sin + py * cos;
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  for (const c of out) { c.x -= cx; c.y -= cy; }
+  lay = { chars: out, hw: (maxX - minX) / 2, hh: (maxY - minY) / 2 };
+  if (layoutCache.size > 300) layoutCache.clear();
+  layoutCache.set(key, lay);
+  return lay;
+}
+
+// Demi-dimensions locales (avant rotation) d'un élément
+function halfSize(L) {
+  if (L.type === 'text') { const l = layoutText(L); const p = L.strokeW; return { hw: l.hw + p, hh: l.hh + p }; }
+  return { hw: L.w / 2, hh: L.w * L.ar / 2 };
+}
+
+// ---------- Images (détourage du blanc, recoloration) ----------
+function imageSource(L) {
+  const a = assets.get(L.asset);
+  if (!a) return null;
+  if (!L.removeWhite && !L.tint) return a.img;
+  const key = `${L.asset}|${L.removeWhite ? L.tolerance : '-'}|${L.tint || '-'}`;
+  let c = processed.get(key);
+  if (c) return c;
+  const img = a.img, max = 1600;
+  const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.drawImage(img, 0, 0, c.width, c.height);
+  if (L.removeWhite) {
+    const d = x.getImageData(0, 0, c.width, c.height), p = d.data, tol = L.tolerance, soft = 25;
+    for (let i = 0; i < p.length; i += 4) {
+      const dist = 255 - Math.min(p[i], p[i + 1], p[i + 2]);
+      if (dist <= tol) p[i + 3] = 0;
+      else if (dist < tol + soft) p[i + 3] = p[i + 3] * (dist - tol) / soft;
+    }
+    x.putImageData(d, 0, 0);
+  }
+  if (L.tint) { x.globalCompositeOperation = 'source-in'; x.fillStyle = L.tint; x.fillRect(0, 0, c.width, c.height); }
+  if (processed.size > 40) processed.clear();
+  processed.set(key, c);
+  return c;
+}
+
+// ================== Rendu ==================
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let viewScale = 1;           // pixels CSS par unité de scène
+let guides = { x: false, y: false };
+let renderQueued = false;
+const buffers = {};
+function buffer(name, size) {
+  let c = buffers[name];
+  if (!c) c = buffers[name] = document.createElement('canvas');
+  if (c.width !== size) c.width = c.height = size;
+  return c;
+}
+function requestRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; renderScene(ctx, cv.width / S, { ui: true }); updateWarning(); });
+}
+
+function drawLayer(c, L) {
+  if (L.hidden) return;
+  c.save();
+  c.translate(L.x, L.y); c.rotate(rad(L.rot)); c.globalAlpha = L.opacity;
+  if (L.type === 'text') {
+    const lay = layoutText(L);
+    c.font = fontStr(L); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.lineJoin = 'round'; c.miterLimit = 2;
+    for (const ch of lay.chars) {
+      c.save(); c.translate(ch.x, ch.y); c.rotate(ch.a);
+      if (L.strokeW > 0) { c.strokeStyle = L.strokeColor; c.lineWidth = L.strokeW * 2; c.strokeText(ch.ch, 0, 0); }
+      c.fillStyle = L.color; c.fillText(ch.ch, 0, 0);
+      c.restore();
+    }
+  } else {
+    const src = imageSource(L);
+    if (src) {
+      const w = L.w, h = L.w * L.ar;
+      if (L.flip) c.scale(-1, 1);
+      c.drawImage(src, -w / 2, -h / 2, w, h);
+    }
+  }
+  c.restore();
+}
+
+function drawLayers(c, k, size, view, shadeMap) {
+  const d = buffer('design', size), dctx = d.getContext('2d');
+  dctx.setTransform(1, 0, 0, 1, 0, 0); dctx.clearRect(0, 0, size, size);
+  dctx.setTransform(k, 0, 0, k, 0, 0);
+  for (const L of state.layers) if (viewOf(L) === view) drawLayer(dctx, L);
+  if (state.fabric > 0 && shadeMap) {
+    const fx = buffer('fx', size), f = fx.getContext('2d');
+    f.setTransform(1, 0, 0, 1, 0, 0); f.globalCompositeOperation = 'source-over'; f.globalAlpha = 1;
+    f.clearRect(0, 0, size, size); f.drawImage(d, 0, 0);
+    f.globalCompositeOperation = 'multiply'; f.globalAlpha = state.fabric / 100;
+    f.drawImage(shadeMap, 0, 0, size, size);
+    f.globalCompositeOperation = 'destination-in'; f.globalAlpha = 1;
+    f.drawImage(d, 0, 0);
+    f.globalCompositeOperation = 'source-over';
+    c.drawImage(fx, 0, 0);
+  } else c.drawImage(d, 0, 0);
+}
+
+function renderScene(c, k, opts) {
+  const size = Math.round(S * k), view = opts.view || curView(), b = bgs[view];
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, c.canvas.width, c.canvas.height);
+  c.setTransform(k, 0, 0, k, 0, 0);
+  c.fillStyle = opts.ui ? STAGE_BG : '#ffffff';
+  c.fillRect(0, 0, S, S);
+  if (b && b.img) { const r = containRect(b.img); c.drawImage(b.img, r.x, r.y, r.w, r.h); }
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  drawLayers(c, k, size, view, b && b.shade);
+  c.setTransform(k, 0, 0, k, 0, 0);
+  if (opts.ui) drawUI(c);
+}
+
+function worldCorners(L, pad = 0) {
+  const { hw, hh } = halfSize(L), a = rad(L.rot), cos = Math.cos(a), sin = Math.sin(a);
+  return [[-hw - pad, -hh - pad], [hw + pad, -hh - pad], [hw + pad, hh + pad], [-hw - pad, hh + pad]]
+    .map(([x, y]) => ({ x: L.x + x * cos - y * sin, y: L.y + x * sin + y * cos }));
+}
+function rotHandle(L, px) {
+  const { hh } = halfSize(L), a = rad(L.rot), d = hh + 8 * px + 30 * px;
+  return { x: L.x + d * Math.sin(a), y: L.y - d * Math.cos(a) };
+}
+function layerOutOfZone(L) {
+  const z = zoneOf(L);
+  if (L.hidden || !z || !placeDef(L.place)) return false;
+  return worldCorners(L).some(p => p.x < z.x - 1 || p.x > z.x + z.w + 1 || p.y < z.y - 1 || p.y > z.y + z.h + 1);
+}
+const inZone = (p, z) => p.x >= z.x && p.x <= z.x + z.w && p.y >= z.y && p.y <= z.y + z.h;
+
+function drawUI(c) {
+  const px = 1 / viewScale, view = curView();
+  const font = `600 ${11 * px}px -apple-system, Segoe UI, Arial, sans-serif`;
+  for (const [p, def] of Object.entries(G().places)) {
+    if (def.view !== view) continue;
+    const z = state.zones[p], active = p === state.place;
+    if (!active && !state.showZone) continue;
+    if (active && !state.showZone && !editZone) continue;
+    const out = state.layers.some(L => L.place === p && layerOutOfZone(L));
+    c.save();
+    c.lineWidth = (active ? 1.5 : 1) * px;
+    c.setLineDash(active ? [7 * px, 5 * px] : [3 * px, 4 * px]);
+    c.strokeStyle = out ? 'rgba(200,40,30,.9)' : active ? 'rgba(42,111,214,.8)' : 'rgba(90,90,90,.45)';
+    if (active && editZone) { c.fillStyle = 'rgba(42,111,214,.08)'; c.fillRect(z.x, z.y, z.w, z.h); }
+    c.strokeRect(z.x, z.y, z.w, z.h);
+    c.setLineDash([]);
+    c.font = font; c.fillStyle = c.strokeStyle; c.textBaseline = 'bottom';
+    c.fillText(active ? `${def.label} · ${fmt(z.cm)} × ${fmt(z.cm * z.h / z.w)} cm` : def.label, z.x, z.y - 4 * px);
+    if (active && editZone) handleSquare(c, z.x + z.w, z.y + z.h, px);
+    c.restore();
+  }
+  const z = activeZone();
+  c.save();
+  c.strokeStyle = '#e0338a'; c.lineWidth = 1 * px;
+  if (guides.x) { c.beginPath(); c.moveTo(z.x + z.w / 2, 0); c.lineTo(z.x + z.w / 2, S); c.stroke(); }
+  if (guides.y) { c.beginPath(); c.moveTo(0, z.y + z.h / 2); c.lineTo(S, z.y + z.h / 2); c.stroke(); }
+  c.restore();
+
+  const L = sel();
+  if (L && !L.hidden && inView(L) && !editZone) {
+    const pts = worldCorners(L, 6 * px);
+    c.save();
+    c.strokeStyle = SEL; c.lineWidth = 1.5 * px;
+    c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.closePath(); c.stroke();
+    const top = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 }, rh = rotHandle(L, px);
+    c.beginPath(); c.moveTo(top.x, top.y); c.lineTo(rh.x, rh.y); c.stroke();
+    c.fillStyle = '#fff';
+    c.beginPath(); c.arc(rh.x, rh.y, 7 * px, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.fillStyle = SEL; c.font = `${10 * px}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('↻', rh.x, rh.y + 0.5 * px);
+    pts.forEach(p => handleSquare(c, p.x, p.y, px));
+    c.restore();
+  }
+}
+function handleSquare(c, x, y, px) {
+  const s = 9 * px;
+  c.save(); c.setLineDash([]); c.fillStyle = '#fff'; c.strokeStyle = SEL; c.lineWidth = 1.5 * px;
+  c.fillRect(x - s / 2, y - s / 2, s, s); c.strokeRect(x - s / 2, y - s / 2, s, s); c.restore();
+}
+const fmt = v => (Math.round(v * 10) / 10).toString().replace('.', ',');
+
+function updateWarning() {
+  const n = state.layers.filter(L => inView(L) && layerOutOfZone(L)).length;
+  $('#warn').textContent = n ? `⚠ ${n > 1 ? n + ' éléments dépassent' : 'Un élément dépasse'} de leur zone d'impression` : '';
+}
+
+function resizeCanvas() {
+  const st = $('#stage'), cs = getComputedStyle(st);
+  const w = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const h = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const size = Math.max(200, Math.floor(Math.min(w, h)));
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = cv.style.height = size + 'px';
+  cv.width = cv.height = Math.round(size * dpr);
+  viewScale = size / S;
+  requestRender();
+}
+new ResizeObserver(resizeCanvas).observe($('#stage'));
+
+// ================== Interactions sur le canevas ==================
+function scenePoint(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * S, y: (e.clientY - r.top) / r.height * S };
+}
+function toLocal(L, p) {
+  const dx = p.x - L.x, dy = p.y - L.y, a = -rad(L.rot);
+  return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
+}
+function hitLayer(p) {
+  const pad = 4 / viewScale;
+  for (let i = state.layers.length - 1; i >= 0; i--) {
+    const L = state.layers[i];
+    if (L.hidden || !inView(L)) continue;
+    const l = toLocal(L, p), { hw, hh } = halfSize(L);
+    if (Math.abs(l.x) <= hw + pad && Math.abs(l.y) <= hh + pad) return L;
+  }
+  return null;
+}
+function hitOtherZone(p) {
+  if (!state.showZone) return null;
+  return Object.entries(G().places).find(([k, d]) => k !== state.place && d.view === curView() && inZone(p, state.zones[k]))?.[0] || null;
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+let drag = null;
+cv.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const p = scenePoint(e), px = 1 / viewScale, hr = 11 * px, z = activeZone();
+  drag = null;
+  if (editZone) {
+    if (dist(p, { x: z.x + z.w, y: z.y + z.h }) < hr) drag = { mode: 'zoneResize' };
+    else if (inZone(p, z)) drag = { mode: 'zoneMove', dx: p.x - z.x, dy: p.y - z.y };
+  } else {
+    const L = sel();
+    if (L && !L.hidden && inView(L)) {
+      if (dist(p, rotHandle(L, px)) < hr) drag = { mode: 'rotate', L };
+      else if (worldCorners(L, 6 * px).some(c => dist(p, c) < hr)) drag = { mode: 'resize', L, d0: Math.max(1, dist(p, L)), start: { ...L } };
+    }
+    if (!drag) {
+      const hit = hitLayer(p);
+      if (hit) { select(hit.id); drag = { mode: 'move', L: hit, dx: p.x - hit.x, dy: p.y - hit.y }; }
+      else {
+        const other = hitOtherZone(p);
+        if (other) setPlace(other); else select(null);
+      }
+    }
+  }
+  if (drag) { cv.setPointerCapture(e.pointerId); e.preventDefault(); }
+});
+
+cv.addEventListener('pointermove', e => {
+  const p = scenePoint(e), px = 1 / viewScale;
+  if (!drag) { updateCursor(p); return; }
+  if (drag.mode === 'zoneMove') {
+    const z = activeZone();
+    z.x = Math.round(clamp(p.x - drag.dx, -z.w / 2, S - z.w / 2)); z.y = Math.round(clamp(p.y - drag.dy, -z.h / 2, S - z.h / 2));
+    renderZoneDims();
+  } else if (drag.mode === 'zoneResize') {
+    const z = activeZone();
+    z.w = Math.round(clamp(p.x - z.x, 20, S)); z.h = Math.round(clamp(p.y - z.y, 20, S));
+    renderZoneDims(); syncProps();
+  } else if (drag.mode === 'move') {
+    const L = drag.L, z = zoneOf(L), snap = 7 * px;
+    let x = p.x - drag.dx, y = p.y - drag.dy;
+    const cx = z.x + z.w / 2, cy = z.y + z.h / 2;
+    guides.x = !e.altKey && Math.abs(x - cx) < snap; if (guides.x) x = cx;
+    guides.y = !e.altKey && Math.abs(y - cy) < snap; if (guides.y) y = cy;
+    L.x = r1(x); L.y = r1(y);
+  } else if (drag.mode === 'resize') {
+    scaleLayer(drag.L, dist(p, drag.L) / drag.d0, drag.start);
+    syncProps();
+  } else if (drag.mode === 'rotate') {
+    let a = Math.atan2(p.y - drag.L.y, p.x - drag.L.x) * 180 / Math.PI + 90;
+    if (e.shiftKey) a = Math.round(a / 15) * 15;
+    else { const r90 = Math.round(a / 90) * 90; if (Math.abs(a - r90) < 4) a = r90; }
+    a = ((a + 540) % 360) - 180;
+    drag.L.rot = Math.round(a);
+    syncProps();
+  }
+  requestRender();
+});
+function endDrag() {
+  if (!drag) return;
+  drag = null; guides = { x: false, y: false };
+  commit(); renderLayers(); renderViewBar(); requestRender();
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+
+function updateCursor(p) {
+  const px = 1 / viewScale, hr = 11 * px, z = activeZone();
+  let cur = 'default';
+  if (editZone) {
+    if (dist(p, { x: z.x + z.w, y: z.y + z.h }) < hr) cur = 'nwse-resize';
+    else if (inZone(p, z)) cur = 'move';
+  } else {
+    const L = sel(), vis = L && !L.hidden && inView(L);
+    if (vis && dist(p, rotHandle(L, px)) < hr) cur = 'grab';
+    else if (vis && worldCorners(L, 6 * px).some(c => dist(p, c) < hr)) cur = 'nwse-resize';
+    else if (hitLayer(p)) cur = 'move';
+    else if (hitOtherZone(p)) cur = 'pointer';
+  }
+  cv.style.cursor = cur;
+}
+
+// Redimensionne un élément d'un facteur par rapport à un état de départ
+function scaleLayer(L, ratio, start = { ...L }) {
+  ratio = clamp(ratio, 0.02, 50);
+  if (L.type === 'text') {
+    L.size = r1(clamp(start.size * ratio, 4, 800));
+    L.spacing = r1(start.spacing * (L.size / start.size));
+    L.strokeW = r1(start.strokeW * (L.size / start.size));
+  } else {
+    L.w = r1(clamp(start.w * ratio, 5, 4000));
+  }
+}
+
+// ================== Éléments, emplacements, vues ==================
+function newTextLayer() {
+  const z = activeZone(), onDark = !state.photos[curView()] && luminance(state.color) < 0.45;
+  return {
+    id: uid(), type: 'text', place: state.place, text: 'Votre texte', font: 'Montserrat', bold: true, italic: false,
+    size: Math.round(z.w * 0.13), spacing: 0, color: onDark ? '#ffffff' : '#1c1a17',
+    strokeColor: onDark ? '#1c1a17' : '#ffffff', strokeW: 0, arc: 0,
+    x: z.x + z.w / 2, y: z.y + z.h / 2, rot: 0, opacity: 1, hidden: false,
+  };
+}
+async function addImageLayer(src, name) {
+  const id = await addAsset(src);
+  const img = assets.get(id).img, ar = img.naturalHeight / img.naturalWidth, z = activeZone();
+  let w = z.w * 0.7;
+  if (w * ar > z.h * 0.7) w = z.h * 0.7 / ar;
+  const L = {
+    id: uid(), type: 'image', place: state.place, asset: id, name: name || 'Image', w: Math.round(w), ar,
+    x: z.x + z.w / 2, y: z.y + z.h / 2, rot: 0, opacity: 1, hidden: false, flip: false,
+    removeWhite: false, tolerance: 30, tint: null,
+  };
+  state.layers.push(L); selId = L.id; commit(); refreshAll();
+}
+async function addImageFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    try { await addImageLayer(await readFile(f), f.name.replace(/\.[^.]+$/, '')); }
+    catch (e) { alert(`Impossible de lire l'image « ${f.name} ».`); }
+  }
+}
+
+// Déplace et met à l'échelle les éléments d'un emplacement quand sa zone change de produit,
+// pour qu'ils gardent leur place et leur taille relatives dans la zone.
+function remapLayers(place, o, z) {
+  const k = z.w / o.w;
+  for (const L of state.layers) {
+    if (L.place !== place) continue;
+    L.x = r1(z.x + z.w / 2 + (L.x - o.x - o.w / 2) * k);
+    L.y = r1(z.y + z.h / 2 + (L.y - o.y - o.h / 2) * k);
+    scaleLayer(L, k);
+  }
+}
+function switchGarment(key) {
+  const g = GARMENTS[key], prevView = curView();
+  for (const [p, def] of Object.entries(g.places)) {
+    const nz = { ...def.zone };
+    if (state.zones[p]) remapLayers(p, state.zones[p], nz);
+    state.zones[p] = nz;
+  }
+  state.garment = key; state.photos = { front: null, back: null };
+  if (!g.places[state.place]) {
+    state.place = Object.keys(g.places).find(p => g.places[p].view === prevView) || Object.keys(g.places)[0];
+  }
+  if (sel() && !placeDef(sel().place)) selId = null;
+  rebuildBackground(); commit(); refreshAll();
+}
+function setPlace(p) {
+  if (!placeDef(p)) return;
+  state.place = p;
+  lastPlaceByView[placeDef(p).view] = p;
+  const L = sel();
+  if (L && L.place !== p) selId = null;
+  refreshAll();
+}
+function setView(v) {
+  const entries = Object.entries(G().places).filter(([, d]) => d.view === v);
+  if (!entries.length) return;
+  const keep = lastPlaceByView[v];
+  setPlace(entries.some(([k]) => k === keep) ? keep : entries[0][0]);
+}
+
+function select(id) {
+  if (selId === id) return;
+  selId = id;
+  const L = sel();
+  if (L && L.place !== state.place) { state.place = L.place; lastPlaceByView[viewOf(L)] = L.place; refreshAll(); return; }
+  renderLayers(); renderProps(); requestRender();
+}
+function removeLayer(id) {
+  state.layers = state.layers.filter(l => l.id !== id);
+  if (selId === id) selId = null;
+  commit(); refreshAll();
+}
+function duplicateLayer(id) {
+  const i = state.layers.findIndex(l => l.id === id);
+  if (i < 0) return;
+  const c = { ...state.layers[i], id: uid(), x: state.layers[i].x + 15, y: state.layers[i].y + 15 };
+  state.layers.splice(i + 1, 0, c); selId = c.id;
+  commit(); refreshAll();
+}
+// Monte / descend un élément parmi ceux de la même vue
+function moveLayer(id, dir) {
+  const idx = state.layers.map((L, i) => inView(L) ? i : -1).filter(i => i >= 0);
+  const pos = idx.findIndex(i => state.layers[i].id === id), other = idx[pos + dir];
+  if (pos < 0 || other === undefined) return;
+  const i = idx[pos];
+  [state.layers[i], state.layers[other]] = [state.layers[other], state.layers[i]];
+  commit(); refreshAll();
+}
+
+// ================== Panneaux ==================
+function renderGarments() {
+  const box = $('#garments');
+  if (!box.children.length) {
+    for (const [key, g] of Object.entries(GARMENTS)) {
+      const b = document.createElement('button');
+      b.className = 'garment'; b.dataset.g = key;
+      b.innerHTML = `<img alt="" src="${svgUrl(garmentSVG(key, 'front', '#e4e0d8', true))}"><span>${g.label}</span>`;
+      b.onclick = () => { if (state.garment !== key || state.photos.front || state.photos.back) switchGarment(key); };
+      box.appendChild(b);
+    }
+  }
+  box.querySelectorAll('.garment').forEach(b => b.classList.toggle('on', b.dataset.g === state.garment));
+}
+function renderSwatches() {
+  const box = $('#swatches');
+  box.innerHTML = '';
+  for (const [hex, name] of COLORS) {
+    const b = document.createElement('button');
+    b.className = 'sw' + (state.color.toLowerCase() === hex ? ' on' : '');
+    b.style.background = hex; b.title = name;
+    b.onclick = () => { state.color = hex; rebuildBackground(); commit(); renderSwatches(); };
+    box.appendChild(b);
+  }
+  const custom = document.createElement('input');
+  custom.type = 'color'; custom.value = state.color; custom.title = 'Couleur personnalisée';
+  custom.oninput = () => { state.color = custom.value; rebuildBackground(); };
+  custom.onchange = () => { commit(); renderSwatches(); };
+  box.appendChild(custom);
+  const photo = !!state.photos[curView()];
+  $('#colorSection').style.opacity = photo ? .45 : 1;
+  $('#colorSection').style.pointerEvents = photo ? 'none' : '';
+}
+
+function renderViewBar() {
+  const views = Object.keys(G().views), v = curView();
+  $('#viewSeg').hidden = views.length < 2;
+  $('#viewSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  const box = $('#placeChips');
+  box.innerHTML = '';
+  for (const [p, d] of Object.entries(G().places)) {
+    if (d.view !== v) continue;
+    const z = state.zones[p], n = state.layers.filter(L => L.place === p).length;
+    const b = document.createElement('button');
+    b.className = 'chip' + (p === state.place ? ' on' : '');
+    b.innerHTML = `${d.label} <small>${fmt(z.cm)}×${fmt(z.cm * z.h / z.w)} cm</small>${n ? `<span class="n">${n}</span>` : ''}`;
+    b.onclick = () => setPlace(p);
+    box.appendChild(b);
+  }
+}
+
+function renderZoneDims() {
+  const z = activeZone();
+  $('#zoneTitle').textContent = `Zone d'impression — ${placeDef(state.place).label}`;
+  $('#zoneCm').value = z.cm;
+  $('#zoneDims').textContent = `Soit ${fmt(z.cm)} × ${fmt(z.cm * z.h / z.w)} cm`;
+}
+
+function renderLayers() {
+  const ul = $('#layers'), v = curView(), list = state.layers.filter(inView);
+  $('#layersTitle').textContent = `Éléments — ${VIEW_LABEL[v].toLowerCase()}`;
+  const orphans = state.layers.filter(L => !placeDef(L.place)).length;
+  $('#status').textContent = orphans
+    ? `${orphans} élément${orphans > 1 ? 's' : ''} non affiché${orphans > 1 ? 's' : ''} : emplacement indisponible sur ce produit (conservé${orphans > 1 ? 's' : ''} si vous revenez au produit précédent).`
+    : 'Glissez un logo sur le vêtement, ou utilisez les boutons à droite. Cliquez une zone grisée pour changer d\'emplacement.';
+  if (!list.length) { ul.innerHTML = '<li class="empty" style="cursor:default">Aucun élément sur cette vue — ajoutez un texte ou un logo.</li>'; return; }
+  ul.innerHTML = '';
+  for (const L of [...list].reverse()) {
+    const li = document.createElement('li');
+    li.className = (L.id === selId ? 'on ' : '') + (L.hidden ? 'hidden' : '');
+    const ico = L.type === 'text'
+      ? `<span class="ico" style="font-family:'${esc(L.font)}';color:${L.color};background:${luminance(L.color) > .8 ? '#bdb6a8' : ''}">T</span>`
+      : `<span class="ico"><img alt="" src="${assets.get(L.asset)?.src || ''}"></span>`;
+    const name = L.type === 'text' ? (L.text || '(texte vide)') : L.name;
+    li.innerHTML = `${ico}<span class="name">${esc(name)}<small>${esc(placeDef(L.place).label)}</small></span>
+      <button class="mini" data-a="hide" title="${L.hidden ? 'Afficher' : 'Masquer'}">${L.hidden ? '◌' : '👁'}</button>
+      <button class="mini" data-a="up" title="Monter">▲</button>
+      <button class="mini" data-a="down" title="Descendre">▼</button>
+      <button class="mini" data-a="dup" title="Dupliquer (Ctrl+D)">⧉</button>
+      <button class="mini" data-a="del" title="Supprimer (Suppr)">✕</button>`;
+    li.onclick = ev => {
+      const a = ev.target.closest('[data-a]')?.dataset.a;
+      if (a === 'hide') { L.hidden = !L.hidden; commit(); refreshAll(); }
+      else if (a === 'up') moveLayer(L.id, 1);
+      else if (a === 'down') moveLayer(L.id, -1);
+      else if (a === 'dup') duplicateLayer(L.id);
+      else if (a === 'del') removeLayer(L.id);
+      else select(L.id);
+    };
+    ul.appendChild(li);
+  }
+}
+
+// Panneau de propriétés : chaque contrôle porte data-p (propriété) et se synchronise dans les deux sens.
+function slider(label, p, min, max, step, unit = '') {
+  return `<div class="row"><label>${label}</label><input type="range" data-p="${p}" min="${min}" max="${max}" step="${step}"><span class="val" data-v="${p}" data-u="${unit}"></span></div>`;
+}
+function renderProps() {
+  const box = $('#props'), L = sel();
+  if (!L) { box.innerHTML = '<p class="hint">Sélectionnez un élément sur le vêtement pour le modifier.<br><br>Astuces : flèches pour déplacer (Maj = ×10), Ctrl+D pour dupliquer, Maj en tournant pour des pas de 15°, Alt en déplaçant pour ne pas aimanter.</p>'; return; }
+  const size = `
+    <div class="row"><label>Largeur (cm)</label><input type="number" data-cm="w" min="0.5" step="0.1"><label style="flex:0 0 auto">Haut. (cm)</label><input type="number" data-cm="h" min="0.5" step="0.1"></div>`;
+  let html = '';
+  if (L.type === 'text') {
+    html = `<h2>Texte</h2>
+      <input type="text" data-p="text" maxlength="120" style="margin-bottom:6px">
+      <div class="row"><label>Police</label><select data-p="font">${FONTS.map(f => `<option style="font-family:'${f}'" value="${f}">${f}</option>`).join('')}</select></div>
+      <div class="row"><label>Style</label><div class="seg"><button data-t="bold"><b>Gras</b></button><button data-t="italic"><i>Italique</i></button></div></div>
+      <div class="row"><label>Forme</label><div class="seg"><button data-shape="straight">Droit</button><button data-shape="up" title="Arc bombé vers le haut">Arc ⌒</button><button data-shape="down" title="Arc creusé vers le bas">Arc ⌣</button></div></div>
+      <div data-arc>${slider('Courbure', 'arcAbs', 10, 360, 1, '°')}</div>
+      ${slider('Taille', 'size', 4, 400, 0.5, '')}
+      ${slider('Espacement', 'spacing', -20, 80, 0.5, '')}
+      <div class="row"><label>Couleur</label><input type="color" data-p="color"><span class="hint" data-hex="color"></span></div>
+      <div class="row"><label>Contour</label><input type="color" data-p="strokeColor"><input type="range" data-p="strokeW" min="0" max="20" step="0.5" style="flex:1"><span class="val" data-v="strokeW"></span></div>`;
+  } else {
+    html = `<h2>Logo / image</h2>
+      ${slider('Largeur', 'w', 10, 1000, 1, '')}
+      <label class="check"><input type="checkbox" data-p="removeWhite"> Supprimer le fond blanc</label>
+      <div data-tol>${slider('Tolérance', 'tolerance', 2, 120, 1, '')}</div>
+      <label class="check"><input type="checkbox" data-tint> Recolorer en une couleur <input type="color" data-p="tint"></label>
+      <label class="check"><input type="checkbox" data-p="flip"> Retourner (miroir)</label>`;
+  }
+  const others = Object.entries(G().places).filter(([k]) => k !== L.place);
+  html += `${size}
+    ${slider('Rotation', 'rot', -180, 180, 1, '°')}
+    ${slider('Opacité', 'opacity', 0.1, 1, 0.01, '%')}
+    ${others.length ? `<div class="row"><label>Emplacement</label><select data-move><option value="">${esc(placeDef(L.place).label)}</option>${others.map(([k, d]) => `<option value="${k}">→ ${esc(d.label)}</option>`).join('')}</select></div>` : ''}
+    <div class="btns full" style="margin-top:10px">
+      <button data-act="center">⇔ Centrer</button>
+      <button data-act="fit">⤢ Ajuster à la zone</button>
+    </div>
+    <div class="btns full" style="margin-top:6px">
+      <button data-act="dup">⧉ Dupliquer</button>
+      <button data-act="del" class="danger">✕ Supprimer</button>
+    </div>`;
+  box.innerHTML = html;
+
+  box.querySelectorAll('[data-p]').forEach(inp => {
+    const p = inp.dataset.p;
+    const apply = () => {
+      const v = inp.type === 'checkbox' ? inp.checked : inp.type === 'range' || inp.type === 'number' ? parseFloat(inp.value) : inp.value;
+      if (p === 'arcAbs') L.arc = (L.arc < 0 ? -1 : 1) * v;
+      else if (p === 'tint') { L.tint = v; box.querySelector('[data-tint]').checked = true; }
+      else if (p === 'size' && L.type === 'text') scaleLayer(L, v / L.size);
+      else L[p] = v;
+      syncProps(); requestRender();
+      if (p === 'text' || p === 'font' || p === 'color') renderLayers();
+    };
+    inp.addEventListener('input', apply);
+    inp.addEventListener('change', () => { apply(); commit(); });
+  });
+  box.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { L[b.dataset.t] = !L[b.dataset.t]; commit(); syncProps(); requestRender(); });
+  box.querySelectorAll('[data-shape]').forEach(b => b.onclick = () => {
+    const mag = Math.abs(L.arc) || 120;
+    L.arc = b.dataset.shape === 'straight' ? 0 : b.dataset.shape === 'up' ? mag : -mag;
+    commit(); syncProps(); requestRender();
+  });
+  const tintBox = box.querySelector('[data-tint]');
+  if (tintBox) tintBox.onchange = () => { L.tint = tintBox.checked ? (box.querySelector('[data-p=tint]').value || '#000000') : null; commit(); syncProps(); requestRender(); };
+  box.querySelectorAll('[data-cm]').forEach(inp => inp.addEventListener('change', () => {
+    const v = parseFloat(inp.value); if (!(v > 0)) return;
+    const z = zoneOf(L), k = z.cm / z.w, { hw, hh } = halfSize(L);
+    const cur = (inp.dataset.cm === 'w' ? hw : hh) * 2 * k;
+    scaleLayer(L, v / cur); commit(); syncProps(); requestRender();
+  }));
+  const mv = box.querySelector('[data-move]');
+  if (mv) mv.onchange = () => {
+    const to = mv.value; if (!to) return;
+    // Même taille réelle (cm) dans la nouvelle zone, centré
+    const from = zoneOf(L), z = state.zones[to];
+    scaleLayer(L, (from.cm / from.w) / (z.cm / z.w));
+    L.place = to; L.x = z.x + z.w / 2; L.y = z.y + z.h / 2;
+    state.place = to; lastPlaceByView[placeDef(to).view] = to;
+    commit(); refreshAll();
+  };
+  box.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
+    const a = b.dataset.act, z = zoneOf(L);
+    if (a === 'center') { L.x = z.x + z.w / 2; commit(); requestRender(); }
+    else if (a === 'fit') {
+      const { hw, hh } = halfSize(L);
+      L.rot = 0; L.x = z.x + z.w / 2; L.y = z.y + z.h / 2;
+      scaleLayer(L, Math.min(z.w / (hw * 2), z.h / (hh * 2)) * 0.96);
+      commit(); syncProps(); requestRender();
+    }
+    else if (a === 'dup') duplicateLayer(L.id);
+    else if (a === 'del') removeLayer(L.id);
+  });
+  syncProps();
+}
+
+function syncProps() {
+  const L = sel(), box = $('#props');
+  if (!L) return;
+  box.querySelectorAll('[data-p]').forEach(inp => {
+    if (document.activeElement === inp && inp.type !== 'range') return;
+    const p = inp.dataset.p;
+    let v = p === 'arcAbs' ? Math.abs(L.arc) || 120 : L[p];
+    if (p === 'tint') v = L.tint || '#000000';
+    if (inp.type === 'checkbox') inp.checked = !!v; else inp.value = v;
+  });
+  box.querySelectorAll('[data-v]').forEach(s => {
+    const p = s.dataset.v, u = s.dataset.u || '';
+    const v = p === 'arcAbs' ? Math.abs(L.arc) : L[p];
+    s.textContent = u === '%' ? Math.round(v * 100) + ' %' : fmt(v) + (u ? ' ' + u : '');
+  });
+  box.querySelectorAll('[data-hex]').forEach(s => s.textContent = L[s.dataset.hex]);
+  box.querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', !!L[b.dataset.t]));
+  const shape = L.arc === 0 ? 'straight' : L.arc > 0 ? 'up' : 'down';
+  box.querySelectorAll('[data-shape]').forEach(b => b.classList.toggle('on', b.dataset.shape === shape));
+  const arc = box.querySelector('[data-arc]'); if (arc) arc.hidden = L.arc === 0;
+  const tol = box.querySelector('[data-tol]'); if (tol) tol.hidden = !L.removeWhite;
+  const tintBox = box.querySelector('[data-tint]'); if (tintBox) tintBox.checked = !!L.tint;
+  const z = zoneOf(L), k = z.cm / z.w, { hw, hh } = halfSize(L);
+  box.querySelectorAll('[data-cm]').forEach(inp => {
+    if (document.activeElement === inp) return;
+    inp.value = r1((inp.dataset.cm === 'w' ? hw : hh) * 2 * k);
+  });
+}
+
+function refreshAll() {
+  if (!placeDef(state.place)) state.place = Object.keys(G().places)[0];
+  renderGarments(); renderSwatches(); renderViewBar(); renderZoneDims(); renderLayers(); renderProps();
+  $('#zoneShow').checked = state.showZone;
+  $('#fabric').value = state.fabric; $('#fabricVal').textContent = state.fabric + ' %';
+  const v = curView();
+  $('#photoTitle').textContent = Object.keys(G().views).length > 1 ? `Ma photo — ${VIEW_LABEL[v].toLowerCase()}` : 'Ma photo de produit';
+  $('#photoRemove').hidden = !state.photos[v];
+  requestRender();
+}
+
+// ================== Contrôles globaux ==================
+$('#viewSeg').querySelectorAll('button').forEach(b => b.onclick = () => setView(b.dataset.view));
+$('#addText').onclick = () => { const L = newTextLayer(); state.layers.push(L); selId = L.id; commit(); refreshAll(); };
+$('#logoFile').onchange = async e => { await addImageFiles([...e.target.files]); e.target.value = ''; };
+$('#photoFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    state.photos = { ...state.photos, [curView()]: await addAsset(await readFile(f)) };
+    await rebuildBackground(); commit(); refreshAll();
+    $('#status').textContent = 'Photo chargée — ajustez les zones d\'impression (✎) pour qu\'elles correspondent au vêtement.';
+  } catch (err) { alert('Impossible de lire cette image.'); }
+};
+$('#photoRemove').onclick = () => { state.photos = { ...state.photos, [curView()]: null }; rebuildBackground(); commit(); refreshAll(); };
+$('#zoneShow').onchange = e => { state.showZone = e.target.checked; commit(); requestRender(); };
+$('#zoneCm').onchange = e => { const v = parseFloat(e.target.value); if (v > 0) { activeZone().cm = v; commit(); renderZoneDims(); renderViewBar(); syncProps(); requestRender(); } };
+$('#zoneEdit').onclick = () => {
+  editZone = !editZone;
+  $('#zoneEdit').classList.toggle('on', editZone);
+  $('#zoneEdit').textContent = editZone ? '✓ Terminer' : '✎ Ajuster la zone';
+  $('#status').textContent = editZone ? 'Faites glisser la zone pour la déplacer, et le coin bas-droit pour la redimensionner.' : '';
+  if (!editZone) renderViewBar();
+  requestRender();
+};
+$('#zoneReset').onclick = () => {
+  state.zones[state.place] = { ...placeDef(state.place).zone };
+  commit(); renderZoneDims(); renderViewBar(); syncProps(); requestRender();
+};
+$('#fabric').oninput = e => { state.fabric = +e.target.value; $('#fabricVal').textContent = state.fabric + ' %'; requestRender(); };
+$('#fabric').onchange = () => commit();
+$('#undoBtn').onclick = undo;
+$('#redoBtn').onclick = redo;
+
+$('#exportBtn').onclick = () => {
+  const N = 2000;
+  const views = Object.keys(G().views).filter(v => v === curView() || state.layers.some(L => !L.hidden && viewOf(L) === v));
+  const out = document.createElement('canvas'); out.width = N * views.length; out.height = N;
+  const o = out.getContext('2d');
+  views.forEach((v, i) => {
+    const c = document.createElement('canvas'); c.width = c.height = N;
+    renderScene(c.getContext('2d'), N / S, { ui: false, view: v });
+    o.drawImage(c, i * N, 0);
+    if (views.length > 1) { o.fillStyle = '#7a7266'; o.font = '600 46px "Segoe UI", Arial, sans-serif'; o.fillText(VIEW_LABEL[v], i * N + 60, 100); }
+  });
+  download(out.toDataURL('image/png'), `simulation-${state.garment}${views.length > 1 ? '-avant-dos' : ''}.png`);
+};
+$('#exportPrintBtn').onclick = () => {
+  const z = activeZone(), list = state.layers.filter(L => L.place === state.place && !L.hidden);
+  if (!list.length) { alert(`Aucun élément sur l'emplacement « ${placeDef(state.place).label} ».`); return; }
+  const pxW = Math.round(z.cm / 2.54 * 300), k = pxW / z.w, pxH = Math.round(z.h * k);
+  if (pxW * pxH > 60e6) { alert('Zone trop grande pour un export à 300 dpi.'); return; }
+  const c = document.createElement('canvas'); c.width = pxW; c.height = pxH;
+  const x = c.getContext('2d');
+  x.setTransform(k, 0, 0, k, -z.x * k, -z.y * k);
+  for (const L of list) drawLayer(x, L);
+  const label = placeDef(state.place).label.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\W+/g, '-').toLowerCase();
+  download(c.toDataURL('image/png'), `marquage-${label}-${fmt(z.cm)}x${fmt(z.cm * z.h / z.w)}cm-300dpi.png`);
+};
+$('#saveBtn').onclick = () => {
+  const used = new Set(state.layers.filter(l => l.type === 'image').map(l => l.asset));
+  for (const id of Object.values(state.photos)) if (id) used.add(id);
+  const data = { app: 'csb-simulateur', version: 2, state, assets: Object.fromEntries([...used].map(id => [id, assets.get(id)?.src])) };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  download(url, 'projet-marquage.json');
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};
+$('#openBtn').onclick = () => $('#openFile').click();
+$('#openFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (data.app !== 'csb-simulateur') throw new Error('format');
+    for (const [id, src] of Object.entries(data.assets || {})) if (src) await addAsset(src, id);
+    let st = data.state;
+    if (!st.zones) { // projet version 1 : une seule zone, une seule vue
+      st = { ...st, place: 'centre', zones: { ...defaultZones(st.garment), centre: st.zone }, photos: { front: st.photo || null, back: null },
+        layers: st.layers.map(L => ({ ...L, place: 'centre' })) };
+      delete st.zone; delete st.photo;
+    }
+    selId = null; editZone = false;
+    lastSnap = null; undoStack.length = redoStack.length = 0;
+    Object.assign(state, st);
+    await rebuildBackground(); commit(); refreshAll();
+  } catch (err) { alert("Ce fichier n'est pas un projet du simulateur."); }
+};
+
+// Glisser-déposer et coller une image
+const wrap = $('#stageWrap');
+let dragDepth = 0;
+wrap.addEventListener('dragenter', e => { if ([...e.dataTransfer.types].includes('Files')) { dragDepth++; wrap.classList.add('dragging'); e.preventDefault(); } });
+wrap.addEventListener('dragover', e => e.preventDefault());
+wrap.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; wrap.classList.remove('dragging'); } });
+wrap.addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; wrap.classList.remove('dragging'); addImageFiles([...e.dataTransfer.files]); });
+document.addEventListener('paste', e => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+  if (files.length) { e.preventDefault(); addImageFiles(files); }
+});
+
+// Clavier
+let keyCommit;
+document.addEventListener('keydown', e => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && e.target.type !== 'range' && e.target.type !== 'checkbox';
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); return; }
+  if (typing) return;
+  const L = sel();
+  if (!L) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeLayer(L.id); }
+  else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLayer(L.id); }
+  else if (e.key === 'Escape') select(null);
+  else if (e.key.startsWith('Arrow')) {
+    e.preventDefault();
+    const s = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowLeft') L.x -= s; if (e.key === 'ArrowRight') L.x += s;
+    if (e.key === 'ArrowUp') L.y -= s; if (e.key === 'ArrowDown') L.y += s;
+    clearTimeout(keyCommit); keyCommit = setTimeout(commit, 400);
+    requestRender();
+  }
+});
+
+// ================== Démarrage ==================
+if (document.fonts) document.fonts.ready.then(() => { layoutCache.clear(); requestRender(); });
+rebuildBackground();
+commit();
+refreshAll();
+updateUndoButtons();
+})();
+</script>
+</body>
+</html>
