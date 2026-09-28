@@ -9,7 +9,7 @@
   FUSION — Appli_Casaque (suivi/envoi) + Gestion_Prog_Broderie_CSB (fabrication)
   ============================================================================
   Ce fichier réunit les deux applications sous un même écran de connexion,
-  via une barre d'onglets de premier niveau (📮 Envoi / 🧵 Fabrication).
+  via une barre d'onglets de premier niveau (📋 Liste Casaque / 🧵 Fabrication).
 
   Architecture :
     - #envoiPane        -> contenu original d'Appli_Casaque (inchangé, sauf
@@ -119,7 +119,7 @@
     position:sticky; top:var(--top-tabs-h, 0px); z-index:30;
     background:var(--paper);
     border-bottom:1px solid var(--line);
-    padding:12px 22px 10px;
+    padding:0 22px 10px;
   }
   #loginOverlay{
     position:fixed; inset:0; background:var(--paper); z-index:500;
@@ -414,10 +414,9 @@
   }
 
   .settings-panel{
-    display:none; margin-top:14px; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
+    display:block; margin-top:14px; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
     background:var(--white); font-family:sans-serif; font-size:.78rem;
   }
-  .settings-panel.show{ display:block; }
   .settings-panel .row{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
   .settings-panel label{ min-width:140px; color:var(--muted); font-weight:600; }
   .settings-panel input[type=text]{
@@ -646,7 +645,7 @@
      à l'écran. */
   #topAppTabs{
     position:sticky; top:0; z-index:40;
-    background:linear-gradient(135deg, var(--ink), var(--silk-red)); display:flex; align-items:center; gap:2px; padding:0 22px;
+    background:linear-gradient(135deg, var(--ink), var(--silk-red)); display:flex; align-items:flex-end; gap:2px; padding:0 22px;
     font-family:sans-serif; flex-wrap:wrap;
     box-shadow:0 2px 8px rgba(0,0,0,.28);
   }
@@ -675,14 +674,14 @@
   #topAppTabs .top-tabs-sep{ display:none; width:1px; height:18px; background:rgba(255,255,255,.2); margin:0 6px; }
   #topAppTabs #tabBar{ display:none; gap:2px; }
   #topAppTabs .tab-btn{ padding:13px 14px; font-size:.76rem; }
-  #topAppTabs .badge{ background:rgba(255,255,255,.18); border-radius:999px; padding:2px 10px; font-size:11px; font-weight:600; color:#fff; font-family:sans-serif; }
-  #topAppTabs #versionBadge{ cursor:pointer; user-select:none; margin-left:6px; }
+  #topAppTabs .badge{ background:rgba(255,255,255,.18); border-radius:999px; padding:2px 10px; font-size:11px; font-weight:600; color:#fff; font-family:sans-serif; align-self:center; }
+  #topAppTabs #versionBadge{ cursor:pointer; user-select:none; margin-left:6px; align-self:center; }
+  #topAppTabs > span[style*="flex:1"]{ align-self:center; }
   #topAppTabs #versionBadge:hover{ background:rgba(255,255,255,.3); }
-  #topAppTabs #status-pb{ display:none; font-size:11px; padding:3px 9px; border-radius:999px; font-family:sans-serif; margin-left:6px; }
+  #topAppTabs #status-pb{ display:none; font-size:11px; padding:3px 9px; border-radius:999px; font-family:sans-serif; margin-left:6px; align-self:center; }
   #topAppTabs #status-pb.ok{ background:#e4ede1; color:#2f6b3a; }
   #topAppTabs #status-pb.bad{ background:#f6e1e3; color:#8a1f2d; }
   #topAppTabs #status-pb.unknown{ background:rgba(255,255,255,.15); color:rgba(255,255,255,.75); }
-  #topAppTabs #paramsTopTabBtn{ display:none; }
   .top-pane{ display:none; }
   .top-pane.active{ display:block; }
 
@@ -912,20 +911,29 @@
 <body>
 
 <nav id="topAppTabs">
-  <button class="top-tab-btn active" data-toppane="envoiPane">📮 Envoi</button>
+  <button class="top-tab-btn active" data-toppane="envoiPane">📋 Liste Casaque</button>
   <button class="top-tab-btn" data-toppane="fabricationPane">🧵 Fabrication</button>
   <button class="top-tab-btn" data-toppane="visualiseurPane">🔍 Visualiseur</button>
+  <button class="top-tab-btn" data-toppane="paramsPane">⚙ Paramètres</button>
   <span class="top-tabs-sep" id="fabTopSep"></span>
   <div class="tabs" id="tabBar">
     <button class="tab-btn" data-tab="atelier">Atelier de création</button>
     <button class="tab-btn" data-tab="gen">Génération de programme</button>
   </div>
   <span style="flex:1"></span>
-  <button class="tab-btn" id="settingsBtn" title="Réglages PocketBase" style="display:none;">⚙︎ Réglages</button>
-  <button class="tab-btn" id="paramsTopTabBtn" data-tab="params">⚙ Paramètres</button>
   <span id="status-pb" class="unknown">PocketBase : non testé</span>
-  <span class="badge" id="versionBadge" title="Voir l'historique des versions">v3.23</span>
 </nav>
+
+<div id="paramsPane" class="top-pane">
+  <div style="max-width:760px; margin:0 auto; padding:22px 26px;">
+    <div class="row" style="margin-top:0; justify-content:space-between; align-items:center;">
+      <label style="min-width:auto; font-weight:700; color:var(--ink); font-size:.9rem;">Atelier CSB — Casaques</label>
+      <span id="versionBadge" title="Voir l'historique des versions" style="cursor:pointer; font-size:11px; font-weight:600; color:var(--muted); background:var(--paper-2); border-radius:999px; padding:3px 10px;">v3.23</span>
+    </div>
+    <div id="cfgCardSlot"></div>
+    <div id="settingsPanelSlot"></div>
+  </div>
+</div>
 
 <div id="envoiPane" class="top-pane active">
 <header id="pageHeader">
@@ -1299,8 +1307,8 @@
 <main>
 
   <!-- ============================= PARAMÈTRES ============================= -->
-  <section class="card" id="cfgCard" data-tab="params">
-    <h2>⚙ Paramètres</h2>
+  <section class="card" id="cfgCard">
+    <h2>Fabrication — PocketBase &amp; import</h2>
     <div class="row">
       <label for="pbUrl" class="muted">URL PocketBase</label>
       <input type="url" id="fabPbUrl" value="http://192.168.1.142:8090" style="min-width:260px;">
@@ -3710,12 +3718,10 @@ document.getElementById('printProductionBtn').addEventListener('click', () => {
 });
 
 // ---------- Réglages ----------
-const settingsBtn = document.getElementById('settingsBtn');
+// Le panneau vivait sous un bouton ⚙ Réglages dans la barre d'onglets (admin uniquement, visible
+// seulement sur "Liste Casaque") ; il est maintenant toujours affiché dans le nouvel onglet global
+// "⚙ Paramètres" (voir document.getElementById('settingsPanelSlot').appendChild(...) plus bas).
 const settingsPanel = document.getElementById('settingsPanel');
-settingsBtn.addEventListener('click', () => {
-  settingsPanel.classList.toggle('show');
-  updateHeaderHeight();
-});
 
 function loadSettingsForm(){
   const cfg = getConfig();
@@ -4598,11 +4604,12 @@ syncFilColorsWithPocketBase();
 // d'où cette fonction unique appelée des deux côtés plutôt que de laisser
 // chaque appelant écraser le style de l'autre.
 function updateSettingsBtnVisibility(){
-  const btn = document.getElementById('settingsBtn');
+  const btn = document.querySelector('#topAppTabs [data-toppane="paramsPane"]');
   if(!btn) return;
-  const envoiPane = document.getElementById('envoiPane');
-  const envoiActive = envoiPane && envoiPane.classList.contains('active');
-  btn.style.display = (envoiActive && isAdmin()) ? 'inline-block' : 'none';
+  btn.style.display = isAdmin() ? '' : 'none';
+  if(!isAdmin() && document.getElementById('paramsPane').classList.contains('active') && window.csbActivateTopPane){
+    window.csbActivateTopPane('envoiPane');
+  }
 }
 function applyPermissionsToUI(){
   updateSettingsBtnVisibility();
@@ -8062,7 +8069,6 @@ function initTopAppTabs(){
   const fabExtras = [
     { el: document.getElementById('fabTopSep'), show: 'inline-block' },
     { el: document.getElementById('tabBar'), show: 'flex' },
-    { el: document.getElementById('paramsTopTabBtn'), show: 'inline-block' },
     { el: document.getElementById('status-pb'), show: 'inline-block' },
   ].filter(x => x.el);
   function activate(paneId){
@@ -8083,6 +8089,11 @@ function initTopAppTabs(){
   window.csbActivateTopPane = activate;
 }
 initTopAppTabs();
+
+// Les réglages Fabrication (#cfgCard) et Envoi (#settingsPanel) vivaient chacun dans leur propre
+// onglet ; ils sont désormais regroupés en sections dans l'onglet global "⚙ Paramètres".
+document.getElementById('cfgCardSlot').appendChild(document.getElementById('cfgCard'));
+document.getElementById('settingsPanelSlot').appendChild(document.getElementById('settingsPanel'));
 
 // ---------- Correspondance fiche Envoi <-> programme Fabrication ----------
 // Collection PocketBase dédiée "casaque_liens" (anti-doublon, partagée entre

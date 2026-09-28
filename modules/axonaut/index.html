@@ -204,12 +204,9 @@
   .iconbtn:hover{ transform:scale(1.08); border-color:var(--poste-yellow-dark); }
 
   .settings-panel{
-    display:none; margin-top:0; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
+    display:block; margin-top:14px; padding:16px; border:1.5px solid var(--line); border-radius:var(--radius);
     background:var(--white); font-family:sans-serif; font-size:.78rem;
-    position:fixed; top:64px; right:24px; width:min(560px,90vw); max-height:80vh; overflow-y:auto;
-    z-index:200; box-shadow:0 12px 40px rgba(0,0,0,.28);
   }
-  .settings-panel.show{ display:block; }
   .settings-panel .row{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
   .settings-panel label{ min-width:170px; color:var(--muted); font-weight:600; }
   .settings-panel input[type=text]{
@@ -398,8 +395,7 @@
   <button class="tab-btn" data-tab="devis" id="tabBtnDevis">📑 Devis</button>
   <button class="tab-btn active" data-tab="commande" id="tabBtnCommande">📦 Commande</button>
   <button class="tab-btn" data-tab="facture" id="tabBtnFacture">🧾 Facture</button>
-  <span id="versionBadge" title="Voir l'historique des versions">v1.59</span>
-  <button class="tabbar-icon-btn" id="settingsBtn" title="Réglages">⚙︎</button>
+  <button class="tab-btn" data-tab="params" id="tabBtnParams">⚙︎ Paramètres</button>
 </div>
 
 <div id="tabPanelDevis" class="tab-panel">
@@ -979,6 +975,15 @@
     <button class="btn primary" id="factureGenerateBtn" style="margin-left:auto;">🧾 Générer une facture groupée</button>
   </div>
 </div><!-- /tabPanelFacture -->
+
+<div id="tabPanelParams" class="tab-panel">
+  <div style="max-width:720px; margin:0 auto; padding:22px 26px;">
+    <div class="row" style="margin-top:0; justify-content:space-between; align-items:center;">
+      <label style="min-width:auto; font-weight:700; color:var(--ink); font-size:.9rem;">Gestion Commande</label>
+      <span id="versionBadge" title="Voir l'historique des versions" style="cursor:pointer; font-size:11px; font-weight:600; color:var(--muted); background:var(--paper-2); border-radius:999px; padding:3px 10px;">v1.59</span>
+    </div>
+  </div>
+</div><!-- /tabPanelParams -->
 
 <div id="invoicePreviewOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:24px;">
   <div style="width:min(720px,100%); max-height:88vh; background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.35); display:flex; flex-direction:column; overflow:hidden;">
@@ -2537,14 +2542,15 @@ async function generateBonDeFabrication(q, clientAddress){
     page.drawText('Bon de fabrication', { x: right - 180, y: yy, size: 20, font: fontBold, color: navy });
     page.drawText(`N° ${q.number || ''}`, { x: right - 180, y: height - 72, size: 10, font });
     page.drawText(`Le ${new Date().toLocaleDateString('fr-FR')}`, { x: right - 180, y: height - 86, size: 10, font });
-    if(clientName){
-      page.drawText(`Société : ${clientName}`, { x: right - 180, y: height - 104, size: 12, font: fontBold });
-    }
 
     // Descend sous le logo avant le bloc client.
     if(logoImage) yy = logoTop - logoDims.height - 6;
 
     yy -= 8;
+    if(clientName){
+      page.drawText(clientName, { x: left, y: yy, size: 17, font: fontBold, color: navy });
+      yy -= 20;
+    }
     clientLines.forEach(line => { page.drawText(line, { x: left, y: yy, size: 9, font }); yy -= 12; });
     if(chapterTxt){ page.drawText(chapterTxt, { x: left, y: yy, size: 9, font }); yy -= 12; }
 
@@ -2560,24 +2566,88 @@ async function generateBonDeFabrication(q, clientAddress){
   let y = drawHeaderBlock();
 
   const lines = q.quotation_lines || [];
+
+  // Vignette de chaque article : d'abord la vraie image Axonaut du produit (champ "image", bien
+  // présent dans les vraies réponses de l'API même s'il manque dans l'exemple de leur doc), sinon
+  // en repli le dossier réseau partagé (voir saveProductImageToAxonautFolder côté Inventaire).
+  const THUMB_SIZE = 34;
+  async function embedPdfImageFromDataUrl(dataUrl){
+    const bytes = Uint8Array.from(atob(dataUrl.split(',')[1]), c => c.charCodeAt(0));
+    return dataUrl.startsWith('data:image/png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+  }
+  const thumbImages = await Promise.all(lines.map(async (l) => {
+    try{
+      const axImg = await fetchAxonautProductImage(l.product_id);
+      if(axImg){
+        const resp = await fetch(axImg);
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+        const ct = resp.headers.get('content-type') || '';
+        return ct.includes('png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+      }
+    }catch(e){ /* on retombe sur le dossier réseau */ }
+    if(!l.product_code || !window.csbHost || !window.csbHost.getAxonautImage) return null;
+    try{
+      const dataUrl = await window.csbHost.getAxonautImage(l.product_code);
+      return dataUrl ? await embedPdfImageFromDataUrl(dataUrl) : null;
+    }catch(e){ return null; }
+  }));
+
+  // Découpe un texte en plusieurs lignes pour qu'aucune ne dépasse maxWidth (pdf-lib ne wrap pas
+  // le texte tout seul) — sans ça, une description un peu longue débordait de la zone grise.
+  function wrapPdfText(text, useFont, size, maxWidth){
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const out = [];
+    let cur = '';
+    words.forEach(w => {
+      const test = cur ? cur + ' ' + w : w;
+      if(useFont.widthOfTextAtSize(test, size) > maxWidth && cur){
+        out.push(cur);
+        cur = w;
+      } else {
+        cur = test;
+      }
+    });
+    if(cur) out.push(cur);
+    return out.length ? out : [''];
+  }
+
   let totalQty = 0;
-  lines.forEach((l, i) => {
+  for(let i = 0; i < lines.length; i++){
+    const l = lines[i];
+    const thumb = thumbImages[i];
     const details = stripHtmlToText(l.details || '').split('\n').filter(Boolean);
-    const blockLines = [l.title || l.product_name || '', ...details];
-    const blockHeight = 14 + blockLines.length * 11;
+    const textX = left + 8 + THUMB_SIZE + 10;
+    const maxTextWidth = (right - 100) - textX;
+    const titleLines = wrapPdfText(l.title || l.product_name || '', fontBold, 9.5, maxTextWidth);
+    const detailLines = details.flatMap(d => wrapPdfText(d, font, 8.5, maxTextWidth));
+    const textHeight = 6 + titleLines.length * 13 + detailLines.length * 11;
+    const blockHeight = Math.max(textHeight, THUMB_SIZE + 10);
     if(y - blockHeight < bottom) y = newPage();
     if(i % 2 === 1) page.drawRectangle({ x: left, y: y - blockHeight + 4, width: right - left, height: blockHeight, color: lightGrey });
-    let ly = y;
-    page.drawText(blockLines[0], { x: left + 8, y: ly - 10, size: 9.5, font: fontBold });
-    ly -= 13;
-    for(let j = 1; j < blockLines.length; j++){
-      page.drawText(blockLines[j], { x: left + 8, y: ly - 10, size: 8.5, font, color: PDFLib.rgb(0.3,0.3,0.3) });
-      ly -= 11;
+    if(thumb){
+      const scale = Math.min(THUMB_SIZE / thumb.width, THUMB_SIZE / thumb.height, 1);
+      const tw = thumb.width * scale, th = thumb.height * scale;
+      page.drawImage(thumb, { x: left + 8, y: y - 4 - th, width: tw, height: th });
+    } else {
+      // Pas de vignette pour cet article : cadre + croix (au lieu de rien), comme dans Devis/Commande.
+      const bx = left + 8, by = y - 4 - THUMB_SIZE;
+      page.drawRectangle({ x: bx, y: by, width: THUMB_SIZE, height: THUMB_SIZE, borderColor: PDFLib.rgb(0.68,0.65,0.6), borderWidth: 1, color: lightGrey });
+      page.drawLine({ start: { x: bx + 6, y: by + 6 }, end: { x: bx + THUMB_SIZE - 6, y: by + THUMB_SIZE - 6 }, thickness: 1, color: PDFLib.rgb(0.54,0.5,0.45) });
+      page.drawLine({ start: { x: bx + 6, y: by + THUMB_SIZE - 6 }, end: { x: bx + THUMB_SIZE - 6, y: by + 6 }, thickness: 1, color: PDFLib.rgb(0.54,0.5,0.45) });
     }
+    let ly = y;
+    titleLines.forEach(tl => {
+      page.drawText(tl, { x: textX, y: ly - 10, size: 9.5, font: fontBold });
+      ly -= 13;
+    });
+    detailLines.forEach(dl => {
+      page.drawText(dl, { x: textX, y: ly - 10, size: 8.5, font, color: PDFLib.rgb(0.3,0.3,0.3) });
+      ly -= 11;
+    });
     page.drawText(`${(l.quantity||0).toFixed(2).replace('.', ',')} ${l.unit || ''}`, { x: right - 90, y: y - 10, size: 9.5, font });
     totalQty += (l.quantity || 0);
     y -= blockHeight;
-  });
+  }
 
   y -= 10;
   if(y - 20 < bottom) y = newPage();
@@ -2865,22 +2935,10 @@ document.getElementById('feSaveBtn').addEventListener('click', async () => {
   msg.textContent = '✔ Enregistré';
   setTimeout(() => { msg.textContent = ''; }, 2000);
 });
-// Le panneau de réglages vivait dans le DOM de l'onglet Commande (#tabPanelCommande) : quand ce
-// panneau est masqué (display:none, cas des onglets Devis/Facture), tout ce qu'il contient reste
-// masqué aussi, même avec sa propre classe "show" — un enfant ne peut jamais réapparaître par-dessus
-// un ancêtre display:none. On le sort donc du DOM des onglets et on l'attache directement au
-// <body>, en overlay fixe, pour qu'il reste accessible « Réglages » actif depuis Devis/Commande/Facture.
-document.body.appendChild(document.getElementById('settingsPanel'));
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('settingsPanel').classList.toggle('show');
-});
-document.addEventListener('click', (e) => {
-  const panel = document.getElementById('settingsPanel');
-  const btn = document.getElementById('settingsBtn');
-  if(panel.classList.contains('show') && !panel.contains(e.target) && e.target !== btn && !btn.contains(e.target)){
-    panel.classList.remove('show');
-  }
-});
+// Le panneau de réglages vivait dans le DOM de l'onglet Commande (#tabPanelCommande) : il a été
+// remplacé par un onglet "Paramètres" à part entière (#tabPanelParams), qui regroupe aussi le
+// numéro de version — plus besoin d'un bouton ⚙ ni d'un badge dupliqués dans la barre d'onglets.
+document.getElementById('tabPanelParams').appendChild(document.getElementById('settingsPanel'));
 document.getElementById('importSettingsBtn').addEventListener('click', () => {
   const msg = document.getElementById('importSettingsMsg');
   const raw = document.getElementById('importSettingsInput').value.trim();
@@ -3670,8 +3728,9 @@ function renderBlNotes(contractComment, chapterText, quotationComment){
 function renderBlLines(lines, checkedState, contractComment, chapterText, quotationComment){
   const admin = isAdminUser();
   document.getElementById('blLinesList').innerHTML = renderBlNotes(contractComment, chapterText, quotationComment) + lines.map((l, i) => `
-    <label>
-      <input type="checkbox" data-idx="${i}" ${checkedState[i] ? 'checked' : ''}>
+    <label style="display:flex; gap:10px; align-items:flex-start;">
+      <input type="checkbox" data-idx="${i}" ${checkedState[i] ? 'checked' : ''} style="margin-top:4px;">
+      <span id="blLineImg${i}" style="width:48px; height:48px; flex-shrink:0; border-radius:6px; border:1.5px dashed var(--muted); background:var(--paper-2); color:var(--muted); font-size:16px; display:flex; align-items:center; justify-content:center; overflow:hidden;">✕</span>
       <span>
         <strong>${escapeHtml(l.title || l.product_name || '')}</strong> — Qté : ${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}
         ${admin ? `<br><span style="color:var(--muted); font-size:.78rem;">${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) : ''}${l.product_code ? ' · ' : ''}${(l.pre_tax_amount||0).toFixed(2).replace('.', ',')} € HT</span>` : ''}
@@ -3679,6 +3738,10 @@ function renderBlLines(lines, checkedState, contractComment, chapterText, quotat
       </span>
     </label>
   `).join('');
+  lines.forEach((l, i) => {
+    const el = document.getElementById('blLineImg' + i);
+    if(el) loadLineThumbnail(el, l);
+  });
   document.querySelectorAll('#blLinesList input[type=checkbox]').forEach(cb => {
     cb.addEventListener('change', onBlCheckboxChange);
   });
@@ -4490,7 +4553,7 @@ function setAdminMode(on){
 
 // ---------- Onglets ----------
 const ACTIVE_TAB_KEY = 'csb_envoi_axonaut_active_tab';
-const TAB_SUFFIX = { devis:'Devis', commande:'Commande', facture:'Facture' };
+const TAB_SUFFIX = { devis:'Devis', commande:'Commande', facture:'Facture', params:'Params' };
 function activateTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -5147,7 +5210,7 @@ function renderDevisDetail(q){
         <label style="display:flex; align-items:center; padding-top:4px;">
           <input type="checkbox" class="devis-line-check" data-idx="${i}" style="width:18px; height:18px; cursor:pointer;">
         </label>
-        <div id="devisLineImg${i}" style="width:56px; height:56px; flex-shrink:0; border-radius:6px; background:var(--paper-2); display:flex; align-items:center; justify-content:center; overflow:hidden;"></div>
+        <div id="devisLineImg${i}" style="width:56px; height:56px; flex-shrink:0; border-radius:6px; border:1.5px dashed var(--muted); background:var(--paper-2); color:var(--muted); font-size:18px; display:flex; align-items:center; justify-content:center; overflow:hidden;">✕</div>
         <div style="flex:1;">
           <div class="title">${escapeHtml(l.title || l.product_name || '')} — Qté : ${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}</div>
           <div class="meta">${isAdminUser() ? `${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) + ' · ' : ''}${(l.pre_tax_amount||0).toFixed(2).replace('.', ',')} € HT` : ''}</div>
@@ -5206,22 +5269,47 @@ function renderDevisDetail(q){
     });
   });
 
-  // Charge les images produit en parallèle (silencieusement ignoré si absentes ou en échec).
+  // Charge les vignettes produit en parallèle (silencieusement ignoré si absentes) — Axonaut n'a
+  // pas de champ image dans son API, la vignette vient du dossier réseau partagé (voir
+  // saveProductImageToAxonautFolder côté Inventaire), retrouvée par référence article.
   document.getElementById('devisFabricationBtn').addEventListener('click', () => generateBonDeFabrication(q));
   setupDocDropzones(q);
   loadDevisDocuments(q);
   loadDevisLinesCheckState(q);
   lines.forEach(async (l, i) => {
-    if(!l.product_id) return;
-    try{
-      const res = await callAxonaut('/products/' + l.product_id);
-      const imgUrl = res.ok && res.parsed && res.parsed.image;
-      if(imgUrl){
-        const el = document.getElementById('devisLineImg' + i);
-        if(el) el.innerHTML = `<img src="${escapeHtml(imgUrl)}" style="width:100%; height:100%; object-fit:cover;">`;
-      }
-    }catch(e){ /* pas d'image, on ignore silencieusement */ }
+    const el = document.getElementById('devisLineImg' + i);
+    if(el) loadLineThumbnail(el, l);
   });
+}
+// Vignette d'un article de ligne : d'abord la vraie image du produit dans Axonaut (le champ
+// "image" existe bien dans la réponse réelle de l'API — absent seulement de l'exemple de leur
+// doc, ce qui nous avait fait croire à tort qu'il n'existait pas), sinon en repli le dossier
+// réseau partagé (voir saveAxonautImage/getAxonautImage, pour les articles créés avant qu'on ait
+// une image Axonaut, ou pour les references sans produit lié).
+async function fetchAxonautProductImage(productId){
+  if(!productId) return null;
+  try{
+    const res = await callAxonaut('/products/' + productId);
+    return (res.ok && res.parsed && res.parsed.image) || null;
+  }catch(e){ return null; }
+}
+async function loadLineThumbnail(el, l){
+  try{
+    const axImg = await fetchAxonautProductImage(l.product_id);
+    if(axImg){
+      el.innerHTML = `<img src="${axImg}" style="width:100%; height:100%; object-fit:cover;">`;
+      el.style.border = 'none';
+      return;
+    }
+    if(l.product_code && window.csbHost && window.csbHost.getAxonautImage){
+      const dataUrl = await window.csbHost.getAxonautImage(l.product_code);
+      if(dataUrl){
+        el.innerHTML = `<img src="${dataUrl}" style="width:100%; height:100%; object-fit:cover;">`;
+        el.style.border = 'none';
+      }
+    }
+    // Toujours pas d'image : on laisse le cadre pointillé + la croix déjà affichés par défaut.
+  }catch(e){ /* pas d'image, on ignore silencieusement */ }
 }
 let currentDevisLinesPbRecord = null;
 async function loadDevisLinesCheckState(q){
@@ -5583,22 +5671,22 @@ function applyPermissions(){
   const canDevis = CSBAuth.can('axonaut', 'devis');
   const canCommandes = CSBAuth.can('axonaut', 'commandes');
   const canFacture = CSBAuth.can('axonaut', 'facture');
+  const canSettings = CSBAuth.can('axonaut', 'settings');
   document.getElementById('tabBtnDevis').style.display = canDevis ? '' : 'none';
   document.getElementById('tabBtnCommande').style.display = canCommandes ? '' : 'none';
   document.getElementById('tabBtnFacture').style.display = canFacture ? '' : 'none';
+  document.getElementById('tabBtnParams').style.display = canSettings ? '' : 'none';
   if(!canDevis && document.getElementById('tabBtnDevis').classList.contains('active')) activateTab('commande');
   if(!canCommandes && document.getElementById('tabBtnCommande').classList.contains('active')) activateTab('devis');
   if(!canFacture && document.getElementById('tabBtnFacture').classList.contains('active')) activateTab('commande');
+  if(!canSettings && document.getElementById('tabBtnParams').classList.contains('active')) activateTab('commande');
   setAdminMode(CSBAuth.isAdmin());
   if(contracts.length) render();
   const user = CSBAuth.currentUser();
   document.getElementById('logoutBtn').style.display = user ? 'inline-flex' : 'none';
   document.getElementById('currentUserLabel').textContent = user ? `Connecté en tant que ${user.username}` : '';
-  const canSettings = CSBAuth.can('axonaut', 'settings');
   const canAddressBook = CSBAuth.can('axonaut', 'addressbook');
-  document.getElementById('settingsBtn').style.display = canSettings ? '' : 'none';
   document.getElementById('addrBookBtn').style.display = canAddressBook ? '' : 'none';
-  if(!canSettings) document.getElementById('settingsPanel').classList.remove('show');
   if(!canAddressBook) document.getElementById('addrBookOverlay').classList.remove('show');
 }
 if(typeof CSBAuth !== 'undefined'){

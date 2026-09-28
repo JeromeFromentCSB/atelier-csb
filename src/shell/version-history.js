@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.32', items: [
+    "Gestion Commande/Casaque : le numéro de version et le bouton Réglages, avant répétés dans chaque onglet, sont regroupés dans un seul onglet « ⚙ Paramètres »",
+    "Gestion Commande : vignette de l'article affichée sur chaque ligne de Devis, Commande et Bon de fabrication (récupérée depuis la vraie image du produit dans Axonaut, avec le dossier réseau partagé en repli) ; cadre avec une croix bien visible quand aucune image n'est trouvée",
+    "Bon de fabrication : nom du client agrandi et mis en valeur",
+    "Icône de l'application (barre latérale et écran de connexion) : nouveau symbole vêtement + bobine de fil",
+    "Réglages (clé API Axonaut, Colissimo…) désormais partagés entre la version de test et la version installée — avant, chacune avait ses propres réglages sans le savoir",
+  ]},
   { v: '0.2.31', items: [
     "Nouveau design de l'appli : coquille passée en barre latérale sombre (réductible), palette ivoire/terracotta et police Fraunces/Public Sans appliquées à tous les modules",
     "Tous les onglets internes (Gestion Commande, Gestion Casaque, Inventaire, Stock de Fil, Vectorisation…) ont maintenant le même style — barre en dégradé noir→terracotta, onglet actif en forme de vraie carte de classeur (coins arrondis en haut, collée au contenu)",

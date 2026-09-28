@@ -71,12 +71,32 @@
   const topbar = document.getElementById('topbar');
   const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
 
-  // Largeur du menu réduite : préférence par poste (comme l'ordre des onglets).
+  // Largeur du menu, et repli complet : préférences par poste (comme l'ordre des onglets).
   const SIDEBAR_COLLAPSED_KEY = 'csb_sidebar_collapsed';
+  const SIDEBAR_WIDTH_KEY = 'csb_sidebar_width';
+  const SIDEBAR_MIN_WIDTH = 180;
+  const SIDEBAR_MAX_WIDTH = 440;
+  const SIDEBAR_COLLAPSE_THRESHOLD = 140; // glisser sous cette largeur = replier le menu
+  const sidebarResizer = document.getElementById('sidebarResizer');
+
+  let sidebarWidth = 232;
+  try {
+    const saved = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10);
+    if (saved >= SIDEBAR_MIN_WIDTH && saved <= SIDEBAR_MAX_WIDTH) sidebarWidth = saved;
+  } catch (e) {}
+
+  function applySidebarWidth(px) {
+    topbar.style.width = px + 'px';
+  }
   function applySidebarCollapsed(collapsed) {
     topbar.classList.toggle('collapsed', collapsed);
     sidebarToggleBtn.textContent = collapsed ? '»' : '«';
     sidebarToggleBtn.title = collapsed ? 'Agrandir le menu' : 'Réduire le menu';
+    // La classe "collapsed" impose une largeur fixe (64px) : une largeur inline posée par le
+    // redimensionnement à la souris a une spécificité plus forte et l'empêcherait de s'appliquer,
+    // donc on l'enlève ici et on la remet à l'ouverture.
+    if (collapsed) topbar.style.width = '';
+    else applySidebarWidth(sidebarWidth);
   }
   let sidebarCollapsed = false;
   try { sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch (e) {}
@@ -85,6 +105,39 @@
     sidebarCollapsed = !sidebarCollapsed;
     applySidebarCollapsed(sidebarCollapsed);
     try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch (e) {}
+  });
+
+  sidebarResizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    topbar.classList.add('resizing');
+    const startX = e.clientX;
+    const startWidth = topbar.getBoundingClientRect().width;
+    function onMove(ev) {
+      const next = Math.round(startWidth + (ev.clientX - startX));
+      if (next < SIDEBAR_COLLAPSE_THRESHOLD) {
+        applySidebarWidth(SIDEBAR_MIN_WIDTH);
+        return;
+      }
+      const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, next));
+      if (sidebarCollapsed) { sidebarCollapsed = false; applySidebarCollapsed(false); }
+      sidebarWidth = clamped;
+      applySidebarWidth(clamped);
+    }
+    function onUp(ev) {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      topbar.classList.remove('resizing');
+      const next = Math.round(startWidth + (ev.clientX - startX));
+      if (next < SIDEBAR_COLLAPSE_THRESHOLD) {
+        sidebarCollapsed = true;
+        applySidebarCollapsed(true);
+        try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '1'); } catch (err) {}
+      } else {
+        try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth)); } catch (err) {}
+      }
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   });
   const userMenuWrap = document.getElementById('userMenuWrap');
   const userMenuBtn = document.getElementById('userMenuBtn');

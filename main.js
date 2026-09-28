@@ -4,6 +4,24 @@ const fs = require('node:fs');
 const { autoUpdater } = require('electron-updater');
 const vtracer = require('@visioncortex/vtracer');
 
+// Avant d'être installée, Electron nomme le dossier de réglages (userData) d'après le nom
+// technique du projet ("atelier-csb", tiré de package.json/name) ; une fois publiée/installée,
+// elle le nomme d'après le nom public ("Atelier CSB", le productName). Sans ce qui suit, la
+// version de test (npm start) et la version installée avaient donc chacune leurs propres
+// réglages (clé API Axonaut, Colissimo...), l'une ne voyant jamais ce que l'autre a enregistré.
+// On force ici le même nom dans les deux cas — en recopiant d'abord les réglages déjà présents
+// côté "test" si le dossier "Atelier CSB" n'en a encore aucun, pour ne rien perdre.
+try {
+  const appDataDir = app.getPath('appData');
+  const legacyConfigPath = path.join(appDataDir, 'atelier-csb', 'csb-config.json');
+  const finalConfigPath = path.join(appDataDir, 'Atelier CSB', 'csb-config.json');
+  if (fs.existsSync(legacyConfigPath) && !fs.existsSync(finalConfigPath)) {
+    fs.mkdirSync(path.dirname(finalConfigPath), { recursive: true });
+    fs.copyFileSync(legacyConfigPath, finalConfigPath);
+  }
+} catch (e) {}
+app.setName('Atelier CSB');
+
 // Une deuxième instance peut désormais s'ouvrir en parallèle (ex. deux fenêtres pour
 // travailler sur deux écrans) : elle reçoit son propre dossier de données (config, email,
 // caches locaux) distinct de la première, pour ne jamais faire cohabiter deux processus sur
@@ -221,6 +239,25 @@ ipcMain.handle('csb:save-axonaut-image', (_event, { filename, dataBase64 }) => {
   const fullPath = path.join(AXONAUT_IMAGES_DIR, safeName);
   fs.writeFileSync(fullPath, Buffer.from(dataBase64, 'base64'));
   return fullPath;
+});
+const AXONAUT_IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+// Retrouve la vignette d'un article (enregistrée par le handler ci-dessus, nommée d'après sa
+// référence) pour l'afficher dans les lignes de devis/commande — la référence ne connaît pas
+// l'extension d'origine, donc on cherche le premier fichier qui correspond, quelle qu'elle soit.
+ipcMain.handle('csb:get-axonaut-image', (_event, reference) => {
+  if (!reference) return null;
+  const safeName = String(reference).replace(/[^a-zA-Z0-9_-]/g, '_');
+  try {
+    const match = fs.readdirSync(AXONAUT_IMAGES_DIR).find((f) => path.parse(f).name === safeName);
+    if (!match) return null;
+    const ext = path.extname(match).toLowerCase();
+    const mime = AXONAUT_IMAGE_MIME[ext];
+    if (!mime) return null;
+    const data = fs.readFileSync(path.join(AXONAUT_IMAGES_DIR, match));
+    return `data:${mime};base64,${data.toString('base64')}`;
+  } catch (e) {
+    return null;
+  }
 });
 
 // ---------- Email (IMAP + mot de passe d'application) ----------
