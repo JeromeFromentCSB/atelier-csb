@@ -1198,10 +1198,10 @@ async function syncCommandesIndex(list){
       const key = String(r.contractId);
       const found = byContract[key];
       const facturee = Array.isArray(r.invoicesId) && r.invoicesId.length > 0;
-      const body = { contract_id: key, numero_commande: r.numeroCommande || '', client: r.clientCompany || r.nomSoc || '', facturee };
+      const body = { contract_id: key, numero_commande: r.numeroCommande || '', client: r.clientCompany || r.nomSoc || '', facturee, tel: r.tel || '', date: r.startDate || '' };
       if(!found){
         await CSBAuth.authedFetch(commandesIndexBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
-      }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee){
+      }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee || found.tel !== body.tel || found.date !== body.date){
         await CSBAuth.authedFetch(commandesIndexBase() + '/' + found.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
       }
     }

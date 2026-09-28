@@ -2,6 +2,11 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.33', items: [
+    "Appli mobile Photos commandes : nouveau bouton 📤 pour envoyer une photo déjà prise par email (pièce jointe, adresse par défaut mémorisable) ou par WhatsApp (lien, en attendant un correctif de leur bibliothèque pour l'envoi de photo directe)",
+    "Appli mobile Photos commandes : commandes regroupées par client (repliées par défaut, mémorisé sur le téléphone), date de la commande affichée",
+    "Nouveau petit serveur (whatsapp-server/) à lancer sur le PC de l'atelier pour ces envois — voir son README pour l'installation",
+  ]},
   { v: '0.2.32', items: [
     "Gestion Commande/Casaque : le numéro de version et le bouton Réglages, avant répétés dans chaque onglet, sont regroupés dans un seul onglet « ⚙ Paramètres »",
     "Gestion Commande : vignette de l'article affichée sur chaque ligne de Devis, Commande et Bon de fabrication (récupérée depuis la vraie image du produit dans Axonaut, avec le dossier réseau partagé en repli) ; cadre avec une croix bien visible quand aucune image n'est trouvée",

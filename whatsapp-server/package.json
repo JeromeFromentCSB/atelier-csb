@@ -1,0 +1,20 @@
+{
+  "name": "csb-whatsapp-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Petit serveur qui envoie des photos par WhatsApp à un contact — utilisé par la page mobile Photos commandes (mobile/photo.html). À lancer en continu sur le PC de l'atelier, comme PocketBase.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.7"
+  },
+  "allowScripts": {
+    "puppeteer": true
+  }
+}

@@ -23,10 +23,40 @@
   .row .info{ flex:1; min-width:0; }
   .row .numero{ font-weight:700; font-size:.95rem; }
   .row .client{ color:var(--muted); font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .date{ color:var(--muted); font-size:.78rem; }
   .row .photobtn{ flex-shrink:0; width:52px; height:52px; border-radius:50%; border:none; background:var(--poste-yellow); font-size:1.4rem; display:flex; align-items:center; justify-content:center; }
   .row .photobtn.busy{ background:var(--muted); }
   .row .count{ flex-shrink:0; font-size:.72rem; color:var(--silk-green); font-weight:700; min-width:16px; text-align:center; }
   .empty, .hint{ color:var(--muted); text-align:center; padding:30px 10px; font-size:.9rem; }
+  .group-header{ display:flex; align-items:center; gap:8px; margin:16px 0 6px; padding:8px 2px; cursor:pointer; user-select:none; }
+  .group-header:first-child{ margin-top:0; }
+  .group-header .chevron{ font-size:.7rem; color:var(--muted); transition:transform .15s; flex-shrink:0; }
+  .group-header.collapsed .chevron{ transform:rotate(-90deg); }
+  .group-header .name{ font-weight:700; font-size:.92rem; text-transform:uppercase; letter-spacing:.02em; }
+  .group-header .n{ color:var(--muted); font-size:.78rem; }
+  .group-rows.collapsed{ display:none; }
+  .row .wabtn{ flex-shrink:0; width:40px; height:40px; border-radius:50%; border:none; background:var(--silk-green); color:#fff; font-size:1.1rem; display:flex; align-items:center; justify-content:center; }
+  .row .wabtn.busy{ background:var(--muted); }
+  #waOverlay{ display:none; position:fixed; inset:0; background:rgba(35,35,32,.6); z-index:50; align-items:flex-end; justify-content:center; }
+  #waOverlay.show{ display:flex; }
+  #waSheet{ background:#fff; border-radius:16px 16px 0 0; width:100%; max-width:480px; max-height:80vh; overflow-y:auto; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #waSheet h2{ margin:0 0 4px; font-size:1.02rem; }
+  #waSheet .sub{ color:var(--muted); font-size:.82rem; margin-bottom:12px; }
+  #waSheet input[type=tel], #waSheet input[type=email]{ width:100%; padding:12px 14px; font-size:1rem; border:1px solid var(--line); border-radius:10px; margin-bottom:12px; }
+  #waChannel{ display:flex; gap:8px; margin-bottom:12px; }
+  #waChannel button{ flex:1; padding:10px; border-radius:10px; border:1px solid var(--line); background:#fff; font-size:.92rem; font-weight:600; color:var(--muted); }
+  #waChannel button.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  #waEmailRow{ display:flex; gap:8px; align-items:flex-start; }
+  #waEmailRow input{ flex:1; }
+  #waEmailDefaultBtn{ flex-shrink:0; padding:12px 12px; border-radius:10px; border:1px solid var(--line); background:var(--paper-2); font-size:.85rem; }
+  #waPhotos{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  #waPhotos img{ width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; border:2px solid transparent; }
+  #waPhotos img.selected{ border-color:var(--silk-green); }
+  #waSheet .actions{ display:flex; gap:10px; }
+  #waSheet button.big{ flex:1; padding:13px; border-radius:10px; border:none; font-size:.95rem; font-weight:700; }
+  #waSendBtn{ background:var(--silk-green); color:#fff; }
+  #waCancelBtn{ background:var(--paper-2); color:var(--ink); }
+  #waSendBtn:disabled{ opacity:.5; }
   #toast{ position:fixed; left:14px; right:14px; bottom:calc(16px + env(safe-area-inset-bottom)); padding:12px 16px; border-radius:10px; font-size:.9rem; text-align:center; color:#fff; opacity:0; transform:translateY(20px); transition:all .25s; pointer-events:none; }
   #toast.show{ opacity:1; transform:translateY(0); }
   #toast.ok{ background:var(--silk-green); }
@@ -49,6 +79,27 @@
 <div id="toast"></div>
 <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
 
+<div id="waOverlay">
+  <div id="waSheet">
+    <h2>📤 Envoyer la photo</h2>
+    <div class="sub" id="waSub"></div>
+    <div id="waChannel">
+      <button type="button" data-channel="email" class="active">✉️ Email</button>
+      <button type="button" data-channel="whatsapp">WhatsApp</button>
+    </div>
+    <div id="waPhotos"><div class="hint">Chargement des photos…</div></div>
+    <div id="waEmailRow">
+      <input type="email" id="waEmail" placeholder="Adresse email du destinataire" autocapitalize="off" autocorrect="off">
+      <button type="button" id="waEmailDefaultBtn" title="Utiliser cette adresse par défaut à chaque envoi">☆ Par défaut</button>
+    </div>
+    <input type="tel" id="waPhone" placeholder="Numéro de téléphone (ex. 06 12 34 56 78)" style="display:none;">
+    <div class="actions">
+      <button class="big" id="waCancelBtn">Annuler</button>
+      <button class="big" id="waSendBtn" disabled>Envoyer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Page servie par PocketBase lui-même (dossier pb_public) : les appels /api/... sont donc
 // toujours sur la même origine que cette page, pas besoin de configurer d'URL.
@@ -56,6 +107,53 @@ let items = [];
 let pendingContract = null;
 let currentFilter = 'all';
 const fileInput = document.getElementById('fileInput');
+
+// Clients dont le groupe est déplié — repliés par défaut, mémorisé sur ce téléphone d'une
+// ouverture à l'autre (seuls ceux explicitement dépliés sont retenus).
+const EXPANDED_CLIENTS_KEY = 'csb_photo_expanded_clients';
+let expandedClients = new Set();
+try{ expandedClients = new Set(JSON.parse(localStorage.getItem(EXPANDED_CLIENTS_KEY)) || []); }catch(e){}
+function saveExpandedClients(){
+  try{ localStorage.setItem(EXPANDED_CLIENTS_KEY, JSON.stringify(Array.from(expandedClients))); }catch(e){}
+}
+
+// Le petit serveur d'envoi (whatsapp-server/, qui gère WhatsApp ET l'email) tourne sur le PC de
+// l'atelier (adresse fixe sur le réseau local), pas forcément sur la même machine que PocketBase
+// (qui sert cette page) — donc pas de raccourci via location.hostname ici, il faut la vraie
+// adresse de ce PC.
+const WHATSAPP_BASE = 'http://192.168.1.32:8092';
+const POCKETBASE_LAN = 'http://192.168.1.142:8090';
+let waContractId = null;
+let waSelectedUrl = null;
+const waOverlay = document.getElementById('waOverlay');
+const waPhotos = document.getElementById('waPhotos');
+const waPhone = document.getElementById('waPhone');
+const waEmail = document.getElementById('waEmail');
+const waSendBtn = document.getElementById('waSendBtn');
+
+// Canal d'envoi (email par défaut : l'envoi de photo par WhatsApp est cassé pour le moment côté
+// bibliothèque) et adresse email par défaut, mémorisés sur ce téléphone.
+const CHANNEL_KEY = 'csb_send_channel';
+const DEFAULT_EMAIL_KEY = 'csb_default_email';
+let waChannel = 'email';
+try{ waChannel = localStorage.getItem(CHANNEL_KEY) === 'whatsapp' ? 'whatsapp' : 'email'; }catch(e){}
+function applyChannel(channel){
+  waChannel = channel;
+  try{ localStorage.setItem(CHANNEL_KEY, channel); }catch(e){}
+  document.querySelectorAll('#waChannel button').forEach(b => b.classList.toggle('active', b.dataset.channel === channel));
+  document.getElementById('waEmailRow').style.display = channel === 'email' ? 'flex' : 'none';
+  waPhone.style.display = channel === 'whatsapp' ? 'block' : 'none';
+}
+document.querySelectorAll('#waChannel button').forEach(b => {
+  b.addEventListener('click', () => applyChannel(b.dataset.channel));
+});
+document.getElementById('waEmailDefaultBtn').addEventListener('click', () => {
+  const v = waEmail.value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ showToast('✘ Saisis d\'abord une adresse email valide', false); return; }
+  try{ localStorage.setItem(DEFAULT_EMAIL_KEY, v); showToast('✔ Adresse mémorisée par défaut', true); }
+  catch(e){ showToast('✘ Impossible de mémoriser sur ce téléphone', false); }
+});
+applyChannel(waChannel);
 
 function showToast(msg, ok){
   const t = document.getElementById('toast');
@@ -92,22 +190,57 @@ function render(){
     box.innerHTML = '<div class="empty">Aucune commande. Ouvre l\'onglet Commande sur le PC et clique sur « Actualiser » pour synchroniser la liste.</div>';
     return;
   }
-  box.innerHTML = filtered.map(it => `
-    <div class="row" data-contract="${it.contract_id}">
-      <div class="info">
-        <div class="numero">${escapeHtml(it.numero_commande || '(sans numéro)')}</div>
-        <div class="client">${escapeHtml(it.client || '')}</div>
-      </div>
-      <span class="count" data-count="${it.contract_id}"></span>
-      <button class="photobtn" data-take="${it.contract_id}">📷</button>
+  // Regroupement par client : un en-tête par client (ordre alphabétique), les commandes de
+  // chacun gardant leur ordre d'origine (plus récentes en premier) à l'intérieur du groupe.
+  const groups = new Map();
+  filtered.forEach(it => {
+    const key = (it.client || '').trim() || '(Sans client)';
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(it);
+  });
+  const sortedClients = Array.from(groups.keys()).sort((a, b) =>
+    a === '(Sans client)' ? 1 : b === '(Sans client)' ? -1 : a.localeCompare(b, 'fr', { sensitivity:'base' })
+  );
+  box.innerHTML = sortedClients.map(client => {
+    const collapsed = !expandedClients.has(client);
+    return `
+    <div class="group-header${collapsed ? ' collapsed' : ''}" data-group="${escapeHtml(client)}">
+      <span class="chevron">▾</span><span class="name">${escapeHtml(client)}</span><span class="n">${groups.get(client).length}</span>
     </div>
-  `).join('');
+    <div class="group-rows${collapsed ? ' collapsed' : ''}">
+      ${groups.get(client).map(it => `
+        <div class="row" data-contract="${it.contract_id}">
+          <div class="info">
+            <div class="numero">${escapeHtml(it.numero_commande || '(sans numéro)')}</div>
+            ${it.date ? `<div class="date">${escapeHtml(formatDateFR(it.date))}</div>` : ''}
+          </div>
+          <span class="count" data-count="${it.contract_id}"></span>
+          <button class="wabtn" data-wa="${it.contract_id}" title="Envoyer la photo (email / WhatsApp)">📤</button>
+          <button class="photobtn" data-take="${it.contract_id}">📷</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  }).join('');
+  box.querySelectorAll('.group-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const client = header.dataset.group;
+      if(expandedClients.has(client)) expandedClients.delete(client);
+      else expandedClients.add(client);
+      saveExpandedClients();
+      header.classList.toggle('collapsed');
+      header.nextElementSibling.classList.toggle('collapsed');
+    });
+  });
   box.querySelectorAll('[data-take]').forEach(btn => {
     btn.addEventListener('click', () => {
       pendingContract = btn.dataset.take;
       fileInput.value = '';
       fileInput.click();
     });
+  });
+  box.querySelectorAll('[data-wa]').forEach(btn => {
+    btn.addEventListener('click', () => openWhatsAppSheet(btn.dataset.wa));
   });
   loadCounts(filtered.map(it => it.contract_id));
 }
@@ -138,12 +271,100 @@ fileInput.addEventListener('change', async () => {
     if(!res.ok) throw new Error('HTTP ' + res.status);
     showToast('✔ Photo enregistrée', true);
     loadCounts([contractId]);
+    if(confirm('Photo enregistrée. L\'envoyer maintenant (email ou WhatsApp) ?')){
+      openWhatsAppSheet(contractId, { autoSelectLatest:true });
+    }
   }catch(e){
     showToast('✘ Échec : ' + e.message, false);
   }
   if(btn){ btn.disabled = false; btn.classList.remove('busy'); btn.textContent = '📷'; }
   pendingContract = null;
 });
+
+// ---------- Envoi WhatsApp ----------
+async function openWhatsAppSheet(contractId, opts){
+  waContractId = contractId;
+  waSelectedUrl = null;
+  waSendBtn.disabled = true;
+  const it = items.find(x => String(x.contract_id) === String(contractId));
+  document.getElementById('waSub').textContent = (it && (it.numero_commande || it.client)) ? `${it.numero_commande || ''} ${it.client ? '— ' + it.client : ''}`.trim() : '';
+  waPhone.value = (it && it.tel) || '';
+  try{ waEmail.value = localStorage.getItem(DEFAULT_EMAIL_KEY) || ''; }catch(e){ waEmail.value = ''; }
+  waPhotos.innerHTML = '<div class="hint">Chargement des photos…</div>';
+  waOverlay.classList.add('show');
+  try{
+    const filter = encodeURIComponent(`contract_id='${contractId}'`);
+    const res = await fetch(`/api/collections/commande_photos/records?filter=(${filter})&sort=-created&perPage=30`);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const photoItems = (await res.json()).items || [];
+    if(!photoItems.length){
+      waPhotos.innerHTML = '<div class="hint">Aucune photo pour cette commande.</div>';
+      return;
+    }
+    waPhotos.innerHTML = photoItems.map(p => {
+      const url = `/api/files/${p.collectionId}/${p.id}/${p.photo}`;
+      return `<img src="${url}?thumb=200x200" data-full="${url}">`;
+    }).join('');
+    waPhotos.querySelectorAll('img').forEach(img => {
+      img.addEventListener('click', () => selectWaPhoto(img));
+    });
+    if(opts && opts.autoSelectLatest){
+      const first = waPhotos.querySelector('img');
+      if(first) selectWaPhoto(first);
+    }
+  }catch(e){
+    waPhotos.innerHTML = `<div class="hint">Erreur de chargement : ${escapeHtml(e.message)}</div>`;
+  }
+}
+function selectWaPhoto(img){
+  waPhotos.querySelectorAll('img').forEach(i => i.classList.remove('selected'));
+  img.classList.add('selected');
+  waSelectedUrl = img.dataset.full;
+  waSendBtn.disabled = false;
+}
+function closeWhatsAppSheet(){
+  waOverlay.classList.remove('show');
+  waContractId = null;
+  waSelectedUrl = null;
+}
+document.getElementById('waCancelBtn').addEventListener('click', closeWhatsAppSheet);
+waOverlay.addEventListener('click', (e) => { if(e.target === waOverlay) closeWhatsAppSheet(); });
+waSendBtn.addEventListener('click', async () => {
+  const byEmail = waChannel === 'email';
+  if(!waSelectedUrl){ showToast('✘ Touche d\'abord une photo pour la sélectionner', false); return; }
+  if(byEmail && !waEmail.value.trim()){ showToast('✘ Indique une adresse email', false); return; }
+  if(!byEmail && !waPhone.value.trim()){ showToast('✘ Indique un numéro de téléphone', false); return; }
+  waSendBtn.disabled = true;
+  waSendBtn.textContent = 'Envoi…';
+  try{
+    // Le serveur d'envoi (sur le PC de l'atelier) va chercher la photo lui-même : on lui donne
+    // toujours l'adresse locale de PocketBase, jamais celle utilisée par le téléphone (qui peut
+    // être l'adresse Tailscale hors de l'atelier, que ce PC ne sait pas joindre).
+    const photoUrl = POCKETBASE_LAN + waSelectedUrl;
+    const it = items.find(x => String(x.contract_id) === String(waContractId));
+    const orderLabel = it ? `${it.numero_commande || ''} ${it.client ? '— ' + it.client : ''}`.trim() : '';
+    const res = await fetch(WHATSAPP_BASE + (byEmail ? '/send-email' : '/send'), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(byEmail
+        ? { to: waEmail.value.trim(), photoUrl, subject: 'Photo commande' + (orderLabel ? ' ' + orderLabel : '') + ' — Atelier CSB' }
+        : { phone: waPhone.value.trim(), photoUrl })
+    });
+    const json = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
+    showToast(byEmail ? '✔ Envoyé par email' : '✔ Envoyé sur WhatsApp', true);
+    closeWhatsAppSheet();
+  }catch(e){
+    showToast('✘ Échec de l\'envoi : ' + e.message, false);
+    waSendBtn.disabled = false;
+  }
+  waSendBtn.textContent = 'Envoyer';
+});
+
+function formatDateFR(iso){
+  const d = new Date(iso);
+  if(isNaN(d)) return '';
+  return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
 
 function escapeHtml(str){
   return (str == null ? '' : String(str)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
