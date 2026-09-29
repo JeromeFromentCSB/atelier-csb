@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.34', items: [
+    "Appli mobile Photos commandes : filtre « Non facturées » actif par défaut à l'ouverture",
+    "Appli mobile Photos commandes : icône 👁 sur chaque commande pour voir le détail des lignes (titre, référence, quantité)",
+    "Appli mobile Photos commandes : bouton pour supprimer une ligne de commande vide ou en double — si des photos y sont déjà associées, propose de les rattacher d'abord à une autre commande du même client",
+    "Gestion Commande : les lignes de la commande sont affichées après les photos et les documents (fabrication / demande de prix) au lieu d'avant",
+  ]},
   { v: '0.2.33', items: [
     "Appli mobile Photos commandes : nouveau bouton 📤 pour envoyer une photo déjà prise par email (pièce jointe, adresse par défaut mémorisable) ou par WhatsApp (lien, en attendant un correctif de leur bibliothèque pour l'envoi de photo directe)",
     "Appli mobile Photos commandes : commandes regroupées par client (repliées par défaut, mémorisé sur le téléphone), date de la commande affichée",

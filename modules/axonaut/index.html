@@ -756,8 +756,6 @@
           <div id="blShipmentsList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;"></div>
           <button class="btn ghost" id="blAddShipmentBtn" style="display:none;"></button>
         </div>
-        <div id="blLinesList"></div>
-        <div class="col-result" id="blResult" style="margin-top:12px;"></div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">📷 Photos (prises depuis le mobile)</div>
         <div id="blPhotosGallery" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents de fabrication</div>
@@ -766,6 +764,9 @@
           <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents demande de prix</div>
           <div id="blDemandePrixDocs"></div>
         </div>
+        <div class="col-result" id="blResult" style="margin-top:16px;"></div>
+        <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">📋 Lignes de la commande</div>
+        <div id="blLinesList"></div>
       </div>
     </div>
   </div>
@@ -1192,16 +1193,42 @@ async function syncCommandesIndex(list){
     const res = await CSBAuth.authedFetch(commandesIndexBase() + '?perPage=500');
     if(!res.ok) return; // collection absente ou PocketBase injoignable : on abandonne silencieusement
     const existing = (await res.json()).items || [];
+    // Auto-nettoyage : s'il existe déjà plusieurs lignes pour le même contract_id (doublon —
+    // peut arriver si la synchro tourne deux fois en même temps, deux postes ouverts par
+    // exemple), on ne garde que la plus complète et on supprime les autres.
     const byContract = {};
-    existing.forEach(it => { byContract[String(it.contract_id)] = it; });
+    existing.forEach(it => {
+      const key = String(it.contract_id);
+      const prev = byContract[key];
+      if(!prev){ byContract[key] = it; return; }
+      const score = (rec) => (rec.numero_commande ? 1 : 0) + (rec.client ? 1 : 0) + (rec.lignes_json ? 1 : 0);
+      const keep = score(it) >= score(prev) ? it : prev;
+      const drop = keep === it ? prev : it;
+      byContract[key] = keep;
+      CSBAuth.authedFetch(commandesIndexBase() + '/' + drop.id, { method:'DELETE' }).catch(()=>{});
+    });
     for(const r of list){
       const key = String(r.contractId);
       const found = byContract[key];
       const facturee = Array.isArray(r.invoicesId) && r.invoicesId.length > 0;
-      const body = { contract_id: key, numero_commande: r.numeroCommande || '', client: r.clientCompany || r.nomSoc || '', facturee, tel: r.tel || '', date: r.startDate || '' };
+      // Les lignes de la commande (pour le détail affiché côté page mobile) viennent du devis lié
+      // — un appel Axonaut de plus par commande, donc on ne le refait que pour une commande
+      // nouvelle ou dont on n'a encore aucune ligne enregistrée (elles ne changent presque
+      // jamais après coup), pas à chaque synchro.
+      let lignesJson = found ? (found.lignes_json || '') : '';
+      if(r.quotationId && (!found || !found.lignes_json)){
+        try{
+          const qRes = await callAxonaut('/quotations/' + r.quotationId);
+          const qLines = (qRes.ok && qRes.parsed && qRes.parsed.quotation_lines) || [];
+          lignesJson = JSON.stringify(qLines.map(l => ({
+            titre: l.title || l.product_name || '', qte: l.quantity || 0, unite: l.unit || '', ref: l.product_code || ''
+          })));
+        }catch(e){ /* pas grave, on retentera à la prochaine synchro */ }
+      }
+      const body = { contract_id: key, numero_commande: r.numeroCommande || '', client: r.clientCompany || r.nomSoc || '', facturee, tel: r.tel || '', date: r.startDate || '', lignes_json: lignesJson };
       if(!found){
         await CSBAuth.authedFetch(commandesIndexBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
-      }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee || found.tel !== body.tel || found.date !== body.date){
+      }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee || found.tel !== body.tel || found.date !== body.date || found.lignes_json !== body.lignes_json){
         await CSBAuth.authedFetch(commandesIndexBase() + '/' + found.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
       }
     }

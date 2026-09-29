@@ -37,6 +37,30 @@
   .group-rows.collapsed{ display:none; }
   .row .wabtn{ flex-shrink:0; width:40px; height:40px; border-radius:50%; border:none; background:var(--silk-green); color:#fff; font-size:1.1rem; display:flex; align-items:center; justify-content:center; }
   .row .wabtn.busy{ background:var(--muted); }
+  .row .eyebtn{ flex-shrink:0; width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:#fff; color:var(--ink); font-size:1.1rem; display:flex; align-items:center; justify-content:center; }
+  #detailOverlay{ display:none; position:fixed; inset:0; background:rgba(35,35,32,.6); z-index:50; align-items:flex-end; justify-content:center; }
+  #detailOverlay.show{ display:flex; }
+  #detailSheet{ background:#fff; border-radius:16px 16px 0 0; width:100%; max-width:480px; max-height:80vh; overflow-y:auto; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #detailSheet h2{ margin:0 0 2px; font-size:1.02rem; }
+  #detailSheet .sub{ color:var(--muted); font-size:.82rem; margin-bottom:14px; }
+  .detail-line{ display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--paper-2); }
+  .detail-line:last-child{ border-bottom:none; }
+  .detail-line .titre{ font-weight:600; font-size:.9rem; }
+  .detail-line .ref{ color:var(--muted); font-size:.76rem; margin-top:2px; }
+  .detail-line .qte{ flex-shrink:0; font-size:.88rem; color:var(--muted); white-space:nowrap; }
+  #detailCloseBtn{ width:100%; padding:13px; border-radius:10px; border:none; background:var(--paper-2); color:var(--ink); font-size:.95rem; font-weight:600; margin-top:8px; }
+  #detailDeleteBtn{ width:100%; padding:13px; border-radius:10px; border:1px solid var(--silk-red); background:#fff; color:var(--silk-red); font-size:.88rem; font-weight:600; margin-top:14px; }
+  #reassignOverlay{ display:none; position:fixed; inset:0; background:rgba(35,35,32,.6); z-index:60; align-items:flex-end; justify-content:center; }
+  #reassignOverlay.show{ display:flex; }
+  #reassignSheet{ background:#fff; border-radius:16px 16px 0 0; width:100%; max-width:480px; max-height:85vh; overflow-y:auto; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #reassignSheet h2{ margin:0 0 2px; font-size:1.02rem; }
+  #reassignSheet .sub{ color:var(--muted); font-size:.82rem; margin-bottom:12px; }
+  #reassignSearch{ width:100%; padding:12px 14px; font-size:1rem; border:1px solid var(--line); border-radius:10px; margin-bottom:10px; }
+  #reassignList{ max-height:45vh; overflow-y:auto; margin-bottom:12px; }
+  .reassign-row{ padding:11px 8px; border-bottom:1px solid var(--paper-2); cursor:pointer; }
+  .reassign-row .numero{ font-weight:700; font-size:.9rem; }
+  .reassign-row .client{ color:var(--muted); font-size:.8rem; }
+  #reassignCancelBtn{ width:100%; padding:13px; border-radius:10px; border:none; background:var(--paper-2); color:var(--ink); font-size:.95rem; font-weight:600; }
   #waOverlay{ display:none; position:fixed; inset:0; background:rgba(35,35,32,.6); z-index:50; align-items:flex-end; justify-content:center; }
   #waOverlay.show{ display:flex; }
   #waSheet{ background:#fff; border-radius:16px 16px 0 0; width:100%; max-width:480px; max-height:80vh; overflow-y:auto; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); }
@@ -68,8 +92,8 @@
   <h1>📷 Photos par commande</h1>
   <input type="text" id="search" placeholder="Rechercher un client ou un n° de commande…">
   <div id="filters">
-    <button data-filter="all" class="active">Tous</button>
-    <button data-filter="non_facturees">Non facturées</button>
+    <button data-filter="all">Tous</button>
+    <button data-filter="non_facturees" class="active">Non facturées</button>
     <button data-filter="facturees">Facturées</button>
   </div>
 </header>
@@ -78,6 +102,26 @@
 </main>
 <div id="toast"></div>
 <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
+
+<div id="detailOverlay">
+  <div id="detailSheet">
+    <h2 id="detailTitle">Détail de la commande</h2>
+    <div class="sub" id="detailSub"></div>
+    <div id="detailLines"><div class="hint">Chargement…</div></div>
+    <button type="button" id="detailDeleteBtn">🗑 Supprimer cette ligne (doublon/vide)</button>
+    <button type="button" id="detailCloseBtn">Fermer</button>
+  </div>
+</div>
+
+<div id="reassignOverlay">
+  <div id="reassignSheet">
+    <h2>Réassocier les photos</h2>
+    <div class="sub" id="reassignSub"></div>
+    <input type="text" id="reassignSearch" placeholder="Rechercher un client ou un n° de commande…">
+    <div id="reassignList"></div>
+    <button type="button" id="reassignCancelBtn">Annuler</button>
+  </div>
+</div>
 
 <div id="waOverlay">
   <div id="waSheet">
@@ -105,7 +149,7 @@
 // toujours sur la même origine que cette page, pas besoin de configurer d'URL.
 let items = [];
 let pendingContract = null;
-let currentFilter = 'all';
+let currentFilter = 'non_facturees';
 const fileInput = document.getElementById('fileInput');
 
 // Clients dont le groupe est déplié — repliés par défaut, mémorisé sur ce téléphone d'une
@@ -215,6 +259,7 @@ function render(){
             ${it.date ? `<div class="date">${escapeHtml(formatDateFR(it.date))}</div>` : ''}
           </div>
           <span class="count" data-count="${it.contract_id}"></span>
+          <button class="eyebtn" data-detail="${it.contract_id}" title="Détail de la commande">👁</button>
           <button class="wabtn" data-wa="${it.contract_id}" title="Envoyer la photo (email / WhatsApp)">📤</button>
           <button class="photobtn" data-take="${it.contract_id}">📷</button>
         </div>
@@ -241,6 +286,9 @@ function render(){
   });
   box.querySelectorAll('[data-wa]').forEach(btn => {
     btn.addEventListener('click', () => openWhatsAppSheet(btn.dataset.wa));
+  });
+  box.querySelectorAll('[data-detail]').forEach(btn => {
+    btn.addEventListener('click', () => openDetailSheet(btn.dataset.detail));
   });
   loadCounts(filtered.map(it => it.contract_id));
 }
@@ -280,6 +328,126 @@ fileInput.addEventListener('change', async () => {
   if(btn){ btn.disabled = false; btn.classList.remove('busy'); btn.textContent = '📷'; }
   pendingContract = null;
 });
+
+// ---------- Détail de la commande (lignes) ----------
+let detailPbId = null;
+let detailContractId = null;
+function openDetailSheet(contractId){
+  const it = items.find(x => String(x.contract_id) === String(contractId));
+  detailPbId = it ? it.id : null;
+  detailContractId = contractId;
+  document.getElementById('detailTitle').textContent = (it && it.numero_commande) || 'Détail de la commande';
+  document.getElementById('detailSub').textContent = (it && it.client) || '';
+  const box = document.getElementById('detailLines');
+  let lignes = [];
+  try{ lignes = it && it.lignes_json ? JSON.parse(it.lignes_json) : []; }catch(e){ lignes = []; }
+  box.innerHTML = lignes.length
+    ? lignes.map(l => `
+        <div class="detail-line">
+          <div>
+            <div class="titre">${escapeHtml(l.titre || '(sans titre)')}</div>
+            ${l.ref ? `<div class="ref">Réf : ${escapeHtml(l.ref)}</div>` : ''}
+          </div>
+          <div class="qte">${l.qte || 0}${l.unite ? ' ' + escapeHtml(l.unite) : ''}</div>
+        </div>
+      `).join('')
+    : '<div class="hint">Aucune ligne trouvée pour cette commande — actualise l\'onglet Commande sur le PC.</div>';
+  document.getElementById('detailOverlay').classList.add('show');
+}
+document.getElementById('detailCloseBtn').addEventListener('click', () => {
+  document.getElementById('detailOverlay').classList.remove('show');
+});
+document.getElementById('detailOverlay').addEventListener('click', (e) => {
+  if(e.target.id === 'detailOverlay') e.target.classList.remove('show');
+});
+document.getElementById('detailDeleteBtn').addEventListener('click', async () => {
+  if(!detailPbId) return;
+  try{
+    const filter = encodeURIComponent(`contract_id='${detailContractId}'`);
+    const res = await fetch(`/api/collections/commande_photos/records?filter=(${filter})&perPage=200`);
+    const photos = res.ok ? ((await res.json()).items || []) : [];
+    if(photos.length){
+      openReassignSheet(photos);
+    }else{
+      if(!confirm('Supprimer cette ligne de commande de la liste ?')) return;
+      await deleteCommandeIndexLine();
+    }
+  }catch(e){
+    showToast('✘ Erreur : ' + e.message, false);
+  }
+});
+async function deleteCommandeIndexLine(){
+  try{
+    const res = await fetch(`/api/collections/commandes_index/records/${detailPbId}`, { method:'DELETE' });
+    if(!res.ok){
+      const body = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}${body ? ' — ' + body.slice(0,150) : ''}`);
+    }
+    items = items.filter(x => x.id !== detailPbId);
+    document.getElementById('detailOverlay').classList.remove('show');
+    showToast('✔ Ligne supprimée', true);
+    render();
+  }catch(e){
+    showToast('✘ Échec de la suppression : ' + e.message, false);
+  }
+}
+
+// ---------- Réassociation des photos avant suppression d'une ligne en double ----------
+const reassignOverlay = document.getElementById('reassignOverlay');
+const reassignList = document.getElementById('reassignList');
+let reassignPhotos = [];
+function openReassignSheet(photos){
+  reassignPhotos = photos;
+  const deletedIt = items.find(x => String(x.contract_id) === String(detailContractId));
+  reassignClient = (deletedIt && deletedIt.client || '').trim();
+  document.getElementById('reassignSub').textContent = reassignClient
+    ? `${photos.length} photo${photos.length > 1 ? 's' : ''} sur cette ligne — choisis parmi les commandes de « ${reassignClient} » celle à laquelle les rattacher.`
+    : `${photos.length} photo${photos.length > 1 ? 's' : ''} sur cette ligne — cette ligne n'a pas de client renseigné, choisis la commande à laquelle les rattacher parmi toutes.`;
+  document.getElementById('reassignSearch').value = '';
+  renderReassignList('');
+  reassignOverlay.classList.add('show');
+}
+let reassignClient = '';
+function renderReassignList(q){
+  const query = q.trim().toLowerCase();
+  const candidates = items.filter(it => String(it.contract_id) !== String(detailContractId) &&
+    (!reassignClient || (it.client || '').trim().toLowerCase() === reassignClient.toLowerCase()) &&
+    (!query || (it.numero_commande || '').toLowerCase().includes(query) || (it.client || '').toLowerCase().includes(query)));
+  reassignList.innerHTML = candidates.length
+    ? candidates.map(it => `
+        <div class="reassign-row" data-target="${it.contract_id}">
+          <div class="numero">${escapeHtml(it.numero_commande || '(sans numéro)')}</div>
+          <div class="client">${escapeHtml(it.client || '')}</div>
+        </div>
+      `).join('')
+    : '<div class="hint">Aucune commande trouvée.</div>';
+  reassignList.querySelectorAll('[data-target]').forEach(row => {
+    row.addEventListener('click', () => confirmReassign(row.dataset.target));
+  });
+}
+document.getElementById('reassignSearch').addEventListener('input', (e) => renderReassignList(e.target.value));
+document.getElementById('reassignCancelBtn').addEventListener('click', () => reassignOverlay.classList.remove('show'));
+reassignOverlay.addEventListener('click', (e) => { if(e.target === reassignOverlay) reassignOverlay.classList.remove('show'); });
+async function confirmReassign(targetContractId){
+  const target = items.find(it => String(it.contract_id) === String(targetContractId));
+  if(!confirm(`Rattacher ${reassignPhotos.length} photo(s) à « ${target ? (target.numero_commande || target.client) : targetContractId} » puis supprimer cette ligne ?`)) return;
+  try{
+    for(const p of reassignPhotos){
+      const res = await fetch(`/api/collections/commande_photos/records/${p.id}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ contract_id: targetContractId })
+      });
+      if(!res.ok){
+        const body = await res.text().catch(() => '');
+        throw new Error(`réattribution photo — HTTP ${res.status}${body ? ' — ' + body.slice(0,150) : ''}`);
+      }
+    }
+    reassignOverlay.classList.remove('show');
+    await deleteCommandeIndexLine();
+  }catch(e){
+    showToast('✘ Échec de la réattribution : ' + e.message, false);
+  }
+}
 
 // ---------- Envoi WhatsApp ----------
 async function openWhatsAppSheet(contractId, opts){
