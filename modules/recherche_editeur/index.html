@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recherche / Éditeur · L'Atelier CSB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="../../src/shared/csb-prompt.js"></script>
+<script src="../../src/shared/embroidery-codec.js"></script>
+<style>
+  :root{
+    --ink:#211C16; --paper:#F5F2EC; --paper-2:#EDE6D9; --line:#E7E0D3; --muted:#8A8074;
+    --accent:#B5452F; --accent-soft:#F7E3DC; --white:#fff;
+    --shadow:0 1px 2px rgba(33,28,22,.05), 0 8px 24px rgba(33,28,22,.07);
+    --font-display:'Fraunces', Georgia, serif;
+    font-size:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Public Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex; flex-direction:column;
+  }
+  header{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 16px; border-bottom:2px solid var(--ink); background:var(--paper);
+  }
+  header h1{font-family:var(--font-display); font-size:19px; margin:0 12px 0 0; font-weight:600;}
+  .muted{color:var(--muted);}
+  small.hint{color:var(--muted); font-size:12px; display:block; margin-top:6px; line-height:1.45;}
+
+  button{
+    font:inherit; font-size:13px; cursor:pointer;
+    border:1px solid var(--line); background:var(--white); color:var(--ink);
+    border-radius:8px; padding:6px 11px; line-height:1.2;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  button:hover{border-color:var(--ink);}
+  button:disabled{opacity:.4; cursor:default; border-color:var(--line);}
+  button.primary{background:linear-gradient(135deg, var(--ink), var(--accent)); color:#fff; border-color:transparent;}
+  button.primary:hover{filter:brightness(1.08);}
+  button.ghost{background:transparent; border-color:transparent; color:var(--muted); padding:5px 8px;}
+  button.ghost:hover{color:var(--ink);}
+  button.icon{padding:4px 7px; font-size:13px;}
+
+  main{flex:1; min-height:0; display:flex; gap:0;}
+  .explorer-col{flex:1.15 1 0; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--line); background:var(--paper);}
+  .editor-col{flex:1 1 0; min-width:0; overflow-y:auto; padding:16px 20px; background:var(--paper-2);}
+  @media (max-width: 900px){
+    main{flex-direction:column;}
+    .explorer-col{border-right:none; border-bottom:1px solid var(--line); max-height:52vh;}
+  }
+
+  .tree-panel{flex:0 0 auto; max-height:34vh; display:flex; flex-direction:column; border-bottom:1px solid var(--line);}
+  .tree-panel-header{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 14px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted);}
+  .tree-body{flex:1; min-height:60px; overflow-y:auto; padding:2px 8px 10px;}
+  .tree-group-label{display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:9px 4px 3px;}
+  .tree-group-label button{padding:1px 6px; font-size:12px; line-height:1.3; border-radius:4px;}
+  .tree-empty-hint{font-size:12px; color:var(--muted); padding-left:6px; display:block;}
+  .tree-node-row{display:flex; align-items:center; gap:4px; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:12.5px; white-space:nowrap;}
+  .tree-node-row:hover{background:var(--paper-2);}
+  .tree-node-row.selected{background:var(--accent-soft); color:var(--accent); font-weight:600;}
+  .tree-toggle{width:14px; flex:none; text-align:center; color:var(--muted);}
+  .tree-toggle:empty::before{content:'·'; visibility:hidden;}
+  .tree-label{overflow:hidden; text-overflow:ellipsis;}
+  .tree-remove{margin-left:auto; flex:none; color:var(--muted); padding:0 4px; border-radius:3px; font-size:11px;}
+  .tree-remove:hover{color:var(--accent); background:var(--accent-soft);}
+  .tree-children{margin-left:16px; display:none;}
+  .tree-children.open{display:block;}
+
+  .search-panel{padding:10px 14px; border-bottom:1px solid var(--line);}
+  .search-panel input[type=text]{
+    width:100%; font:inherit; font-size:13px; border:1px solid var(--line); border-radius:7px;
+    padding:6px 9px; background:var(--white); color:var(--ink);
+  }
+  .search-panel input[type=text]:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent;}
+
+  .filter-tabs{display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:8px 14px;}
+  .filter-tab{font-size:11.5px; padding:4px 11px; border-radius:999px; border:1px solid var(--line); background:var(--white); cursor:pointer; color:var(--muted);}
+  .filter-tab:hover{color:var(--ink);}
+  .filter-tab.active{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+  .view-mode-btn{font-size:15px; padding:4px 8px;}
+  .view-mode-btn.active{background:var(--paper-2); color:var(--ink); border-color:var(--line);}
+  .current-dir-path-row{padding:0 14px 8px; border-bottom:1px solid var(--line);}
+  .current-dir-path{font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;}
+
+  .explorer-body{flex:1; min-height:0; overflow-y:auto; padding:14px;}
+  .explorer-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:10px;}
+  .explorer-tile{
+    display:flex; flex-direction:column; align-items:center; gap:5px; padding:8px 6px;
+    border:1px solid transparent; border-radius:8px; cursor:pointer; text-align:center; user-select:none;
+  }
+  .explorer-tile:hover{background:var(--white); border-color:var(--line);}
+  .explorer-tile.selected{background:var(--accent-soft); border-color:var(--accent);}
+  .explorer-thumb{
+    width:100%; aspect-ratio:1; border-radius:6px; background:var(--white); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:28px;
+  }
+  .explorer-thumb canvas, .explorer-thumb img{width:100%; height:100%; object-fit:contain;}
+  .explorer-tile .name{font-size:11px; line-height:1.3; word-break:break-word; max-width:100%; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
+  .explorer-tile .sub-path{font-size:9px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;}
+  .explorer-tile .ext-pill{font-size:9px; font-weight:700; letter-spacing:.03em; padding:1px 5px; border-radius:999px; background:var(--paper-2); color:var(--muted);}
+
+  /* ---- Mode "Liste simple" (icône + nom, colonnes façon Explorateur) ---- */
+  .explorer-simple-list{column-width:230px; column-gap:4px;}
+  .explorer-simple-row{display:flex; align-items:center; gap:6px; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:12.5px; break-inside:avoid; -webkit-column-break-inside:avoid;}
+  .explorer-simple-row:hover{background:var(--white);}
+  .explorer-simple-row.selected{background:var(--accent-soft); color:var(--accent); font-weight:600;}
+  .explorer-simple-row .row-icon{flex:none; font-size:14px;}
+  .explorer-simple-row .row-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  /* ---- Mode "Liste détaillée" (colonnes Nom/Modifié le/Type/Taille) ---- */
+  .explorer-details-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  .explorer-details-table thead th{text-align:left; font-size:11px; font-weight:700; color:var(--muted); padding:6px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--paper); z-index:1;}
+  .explorer-details-table tbody tr{cursor:pointer;}
+  .explorer-details-table tbody tr:hover{background:var(--white);}
+  .explorer-details-table tbody tr.selected{background:var(--accent-soft);}
+  .explorer-details-table td{padding:5px 10px; border-bottom:1px solid var(--paper-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0;}
+  .explorer-details-table td.col-name{max-width:260px;}
+  .explorer-details-table td .row-icon{margin-right:6px;}
+  .explorer-details-table td.col-date, .explorer-details-table td.col-type, .explorer-details-table td.col-size{color:var(--muted); max-width:140px;}
+  .explorer-empty{color:var(--muted); font-style:italic; padding:30px; text-align:center;}
+  .search-result-notice{font-size:11.5px; color:var(--muted); margin-bottom:8px;}
+
+  .context-menu{position:fixed; z-index:5000; display:none; background:var(--white); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); padding:4px; min-width:170px;}
+  .context-menu button{display:flex; width:100%; align-items:center; gap:8px; text-align:left; border:none; background:none; padding:7px 10px; border-radius:6px; font-size:13px; cursor:pointer; color:var(--ink);}
+  .context-menu button:hover{background:var(--paper-2);}
+  .context-menu button.danger:hover{background:#fbe4e1; color:var(--accent);}
+  .context-menu hr{border:none; border-top:1px solid var(--line); margin:4px 2px;}
+
+  body.busy, body.busy *{cursor:wait !important;}
+
+  .editor-col section.card{background:var(--white); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:16px; box-shadow:var(--shadow);}
+  .editor-col h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  #vizDropzone{border:2px dashed var(--line); border-radius:8px; padding:22px 12px; text-align:center; color:var(--muted); font-size:12.5px; margin-bottom:12px; transition:.15s;}
+  #vizDropzone.over{border-color:var(--accent); background:var(--accent-soft); color:var(--accent);}
+  #vizFileInput{display:none;}
+  .preview-frame{position:relative; display:inline-block; max-width:100%; text-align:center;}
+  .preview-frame-label{position:absolute; top:6px; left:6px; font-size:11px; font-weight:600; color:var(--ink); background:rgba(255,255,255,.85); padding:2px 7px; border-radius:4px; pointer-events:none; z-index:2; max-width:calc(100% - 16px); text-align:left;}
+  #vizCanvas{background:#fdfcf9; border:1px solid var(--line); border-radius:8px; display:block; max-width:100%; max-height:440px; width:auto; height:auto; cursor:grab; touch-action:none;}
+  #vizIconImg{display:block; margin:0 auto; max-width:100%; max-height:300px; border:1px solid var(--line); border-radius:8px; background:#fdfcf9;}
+  .preview-zoom-controls{display:flex; gap:4px; align-items:center; margin-top:8px; justify-content:center;}
+  .preview-zoom-controls button{padding:4px 9px; font-size:12px;}
+  .color-swatch-dot{display:inline-block; width:13px; height:13px; border-radius:4px; border:1px solid rgba(0,0,0,.2); vertical-align:-2px; margin-right:5px;}
+
+  #vizInfoCol table{width:100%; border-collapse:collapse; table-layout:auto; font-size:13px; min-width:0;}
+  #vizInfoCol td{padding:4px 8px 4px 0; border-bottom:1px solid var(--line); vertical-align:top; overflow:visible; white-space:normal;}
+  #vizInfoCol td:first-child{color:var(--muted); white-space:nowrap; padding-right:12px; width:1%;}
+  #vizInfoCol h3{font-size:13px; margin:14px 0 6px;}
+  #vizInfoCol h3:first-child{margin-top:0;}
+  .viz-ops-scroll{max-height:340px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; padding:0 8px;}
+  .viz-ops-scroll table{margin:0;}
+  .viz-op-thumb{width:34px; height:26px; background:#fbfaf7; border:1px solid var(--line); border-radius:4px; display:block; flex:none; vertical-align:middle; margin-right:6px;}
+  tr.viz-op-row-color td{background:#fdf6e3; font-weight:600; border-top:2px solid #c9a227; border-bottom:2px solid #c9a227; padding-top:6px; padding-bottom:6px;}
+  tr.viz-op-row-clickable{cursor:pointer;}
+  tr.viz-op-row-clickable:hover td{background:#f4f1ec;}
+  tr.viz-op-selected td{background:#f4e2e4 !important;}
+  .viz-op-el{display:flex; align-items:center;}
+  .viz-btn-set-trim{font-size:11px; padding:2px 7px; margin-top:2px;}
+  tr.viz-op-row-trim td{padding-top:0; font-size:12px;}
+  .viz-edit-toolbar{display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔎 Recherche / Éditeur</h1>
+  <span class="muted" style="font-size:12.5px;">Explorateur de programmes de broderie (.DST, .PES, .PXF) avec aperçu et édition</span>
+</header>
+
+<main>
+  <div class="explorer-col">
+    <div class="tree-panel">
+      <div class="tree-panel-header">
+        <span>Arborescence</span>
+        <button type="button" class="ghost icon" id="btnPickFolder" title="Ouvrir un dossier précis…">📁</button>
+      </div>
+      <div class="tree-body" id="treeBody"><span class="muted" style="font-size:12px;">Chargement…</span></div>
+    </div>
+    <div class="search-panel">
+      <input type="text" id="searchInput" placeholder="🔎 Rechercher un fichier (nom ou partie du nom)…">
+    </div>
+    <div class="filter-tabs">
+      <button type="button" class="filter-tab active" data-ext="tous">Tous</button>
+      <button type="button" class="filter-tab" data-ext="dst">.DST</button>
+      <button type="button" class="filter-tab" data-ext="pes">.PES</button>
+      <button type="button" class="filter-tab" data-ext="pxf">.PXF</button>
+      <span class="view-mode-group" style="margin-left:auto; display:flex; gap:2px;">
+        <button type="button" class="ghost icon view-mode-btn active" data-mode="thumbnails" title="Vignettes">▦</button>
+        <button type="button" class="ghost icon view-mode-btn" data-mode="details" title="Liste détaillée">☰</button>
+        <button type="button" class="ghost icon view-mode-btn" data-mode="list" title="Liste simple">▤</button>
+      </span>
+      <button type="button" class="ghost icon" id="btnRefreshDir" title="Actualiser" disabled>⟳</button>
+    </div>
+    <div class="current-dir-path-row" id="currentDirPathRow">
+      <span class="current-dir-path" id="currentDirPath"></span>
+    </div>
+    <div class="explorer-body" id="explorerBody">
+      <div class="explorer-empty">Choisis un dossier dans l'arborescence pour parcourir ses programmes de broderie.</div>
+    </div>
+  </div>
+
+  <div class="editor-col">
+    <section class="card">
+      <h2>Aperçu / Éditeur</h2>
+      <div id="vizDropzone">
+        <span id="vizDropzoneText">Choisis un fichier dans l'explorateur à gauche, ou glisse un .DST, .PES, .PXF ou .VP3 ici, ou<br>
+        <button id="vizBtnImport" type="button">choisir un fichier…</button></span>
+        <span id="vizDropzoneStatus" class="muted" style="display:none;"></span>
+        <input type="file" id="vizFileInput" accept=".dst,.pxf,.pes,.vp3">
+      </div>
+      <div class="preview-frame" id="vizPreviewFrame" style="display:none;">
+        <span class="preview-frame-label" id="vizPreviewLabel"></span>
+        <canvas id="vizCanvas" width="700" height="560"></canvas>
+      </div>
+      <img id="vizIconImg" style="display:none;">
+      <div class="preview-zoom-controls" id="vizZoomControls" style="display:none;">
+        <button id="vizBtnZoomOut" class="ghost icon" title="Zoom arrière">−</button>
+        <button id="vizBtnZoomReset" class="ghost" title="Réinitialiser vue">100%</button>
+        <button id="vizBtnZoomIn" class="ghost icon" title="Zoom avant">+</button>
+        <span class="muted" style="font-size:10.5px;">molette = zoom, glisser = déplacer</span>
+      </div>
+      <div class="muted" id="vizMarkerLegend" style="font-size:10.5px;text-align:center;margin-top:4px;display:none;">
+        <span style="color:#d2232a;">●✕</span> coupe-fil &nbsp; <span style="color:#5b6b8c;">○</span> saut simple
+        &nbsp; <label style="cursor:pointer;"><input type="checkbox" id="vizShowMarkersCb" checked style="vertical-align:middle;"> afficher les repères</label>
+      </div>
+      <div class="preview-zoom-controls" id="vizTransformControls" style="display:none;margin-top:6px;">
+        <button id="vizBtnFlipH" class="ghost icon" title="Symétrie horizontale (miroir gauche-droite)">⇋</button>
+        <button id="vizBtnFlipV" class="ghost icon" title="Symétrie verticale (miroir haut-bas)">⇵</button>
+        <button id="vizBtnRot90Ccw" class="ghost icon" title="Rotation 90° antihoraire">↺</button>
+        <button id="vizBtnRot90Cw" class="ghost icon" title="Rotation 90° horaire">↻</button>
+        <button id="vizBtnRot180" class="ghost icon" title="Rotation 180°">180°</button>
+      </div>
+    </section>
+    <section class="card">
+      <div id="vizInfoCol">
+        <span class="muted">Ouvre un fichier pour voir ses informations ici.</span>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="context-menu" id="fileContextMenu">
+  <button type="button" data-action="preview">👁 Aperçu</button>
+  <button type="button" data-action="open">📂 Ouvrir</button>
+  <hr>
+  <button type="button" class="danger" data-action="delete">🗑 Supprimer</button>
+</div>
+
+<script>
+'use strict';
+
+function escapeHtml(str){
+  return (str ?? '').toString()
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Formatage d'un colorId ("<bobine France Galop>" ou "custom:#RRGGBB") en
+// libellé lisible — même convention que Gestion Casaque, réimplémenté ici en
+// local pour ne pas dépendre de l'état d'assemblage propre à ce module-là.
+// Curseur sablier (cursor:wait) pendant toute opération asynchrone un peu
+// longue (recherche, navigation dans l'arborescence, ouverture/suppression
+// d'un fichier...). Compteur plutôt que booléen : plusieurs opérations
+// peuvent se chevaucher (ex. une recherche qui continue pendant qu'on
+// déplie un dossier), le curseur ne doit redevenir normal que quand la
+// dernière se termine.
+let busyCount = 0;
+function setBusy(isBusy){
+  busyCount = Math.max(0, busyCount + (isBusy ? 1 : -1));
+  document.body.classList.toggle('busy', busyCount > 0);
+}
+
+function fgColorLabel(colorId){
+  if (!colorId) return '—';
+  if (colorId.startsWith('custom:')) return 'Libre ' + colorId.slice(7).toUpperCase();
+  const c = FRANCE_GALOP_COLORS.find(x => x.bobine === colorId);
+  return c ? c.nom + ' — Bobine ' + c.bobine : colorId;
+}
+
+/* ============================================================================
+   Arborescence : Dropbox détecté automatiquement, puis "Ce PC" (lecteurs
+   locaux/réseau mappés + dossiers choisis via le bouton 📁), puis "Réseau"
+   (ordinateurs détectés automatiquement via "net view", best-effort — selon
+   les réseaux la découverte NetBIOS/SMB peut être désactivée, d'où l'ajout
+   manuel d'un chemin \\serveur\partage en complément, persisté dans la
+   config de l'appli). Sous-dossiers/partages chargés à la demande quand on
+   déplie. Sert uniquement à choisir le dossier courant ; les fichiers de ce
+   dossier (et, si une recherche est en cours, de tous ses sous-dossiers)
+   s'affichent dans le panneau du dessous.
+============================================================================ */
+let dropboxRoots = [];       // [{name, path, kind:'dropbox', expanded, loaded, children:[...]}]
+let driveRoots = [];         // kind:'drive'|'dir' (lecteurs + dossiers pinglés via 📁)
+let networkComputers = [];   // kind:'computer', détectés via net view
+let networkPinned = [];      // kind:'dir', chemins réseau ajoutés à la main (persistés)
+let networkLoading = true;
+let selectedTreePath = null;
+
+function findTreeNode(targetPath, nodes){
+  const searchIn = nodes || [...dropboxRoots, ...driveRoots, ...networkComputers, ...networkPinned];
+  for (const n of searchIn) {
+    if (n.path === targetPath) return n;
+    const found = findTreeNode(targetPath, n.children);
+    if (found) return found;
+  }
+  return null;
+}
+
+function nodeIcon(node){
+  if (node.kind === 'computer') return '💻';
+  if (node.kind === 'dropbox') return '📦';
+  if (node.kind === 'drive') return node.isNetwork ? '🌐' : '💽';
+  return '📁';
+}
+
+async function initTree(){
+  try {
+    const drives = await window.csbHost.listDrives();
+    driveRoots = drives.map(d => ({ name: d.name, path: d.path, kind: 'drive', isNetwork: !!d.isNetwork, expanded: false, loaded: false, children: [] }));
+  } catch (e) { driveRoots = []; }
+  try {
+    const dbx = await window.csbHost.detectDropbox();
+    dropboxRoots = dbx.map(d => ({ name: d.name, path: d.path, kind: 'dropbox', expanded: false, loaded: false, children: [] }));
+  } catch (e) { dropboxRoots = []; }
+  try {
+    const cfg = await window.csbHost.getConfig();
+    const saved = (cfg && cfg.rechercheEditeurNetworkRoots) || [];
+    networkPinned = saved.map(p => ({ name: p, path: p, kind: 'dir', expanded: false, loaded: false, children: [] }));
+  } catch (e) { networkPinned = []; }
+  renderTree();
+
+  // La découverte réseau peut prendre plusieurs secondes (ou ne rien
+  // trouver) : affichée séparément pour ne pas retarder le reste de
+  // l'arborescence.
+  try {
+    const computers = await window.csbHost.listNetworkComputers();
+    networkComputers = computers.map(c => ({ name: c, path: '\\\\' + c, kind: 'computer', expanded: false, loaded: false, children: [] }));
+  } catch (e) { networkComputers = []; }
+  networkLoading = false;
+  renderTree();
+}
+
+function renderTree(){
+  const body = document.getElementById('treeBody');
+  let html = '';
+  if (dropboxRoots.length) html += renderTreeNodes(dropboxRoots);
+  html += '<div class="tree-group-label">Ce PC</div>' +
+    (driveRoots.length ? renderTreeNodes(driveRoots) : '<span class="tree-empty-hint">Aucun lecteur trouvé.</span>');
+  html += '<div class="tree-group-label">Réseau <button type="button" class="ghost icon" id="btnAddNetworkRoot" title="Ajouter un chemin réseau (ex. \\\\SERVEUR\\Partage)">+ Ajouter</button></div>';
+  if (networkLoading) {
+    html += '<span class="tree-empty-hint">Recherche des ordinateurs du réseau…</span>';
+  } else if (!networkComputers.length && !networkPinned.length) {
+    html += '<span class="tree-empty-hint">Aucun ordinateur détecté automatiquement — ajoute un chemin réseau manuellement.</span>';
+  } else {
+    html += renderTreeNodes(networkComputers) + renderTreeNodes(networkPinned, true);
+  }
+  body.innerHTML = html;
+  attachTreeHandlers(body);
+  const addBtn = document.getElementById('btnAddNetworkRoot');
+  if (addBtn) addBtn.addEventListener('click', (e) => { e.stopPropagation(); addNetworkRoot(); });
+}
+
+function renderTreeNodes(nodes, removable){
+  return nodes.map(node => {
+    const arrow = node.expanded ? '▾' : '▸';
+    return '<div class="tree-node">' +
+      '<div class="tree-node-row' + (node.path === selectedTreePath ? ' selected' : '') + '" data-path="' + escapeHtml(node.path) + '" data-kind="' + node.kind + '">' +
+        '<span class="tree-toggle" data-toggle="' + escapeHtml(node.path) + '">' + arrow + '</span>' +
+        '<span class="tree-label" title="' + escapeHtml(node.path) + '">' + nodeIcon(node) + ' ' + escapeHtml(node.name) + '</span>' +
+        (removable ? '<span class="tree-remove" data-remove="' + escapeHtml(node.path) + '" title="Retirer ce chemin">✕</span>' : '') +
+      '</div>' +
+      '<div class="tree-children' + (node.expanded ? ' open' : '') + '">' +
+        (node.expanded ? renderTreeNodes(node.children) : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function attachTreeHandlers(container){
+  container.querySelectorAll('.tree-toggle').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); toggleTreeNode(el.dataset.toggle); });
+  });
+  container.querySelectorAll('.tree-remove').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); removeNetworkRoot(el.dataset.remove); });
+  });
+  container.querySelectorAll('.tree-node-row').forEach(el => {
+    el.addEventListener('click', () => {
+      // Un ordinateur réseau n'est pas un dossier consultable : un clic se
+      // contente de déplier ses partages, sans tenter de le charger comme
+      // dossier courant.
+      if (el.dataset.kind === 'computer') toggleTreeNode(el.dataset.path);
+      else selectTreeNode(el.dataset.path);
+    });
+  });
+}
+
+async function loadTreeChildren(node){
+  if (node.loaded) return;
+  if (node.kind === 'computer') {
+    let shares = [];
+    try { shares = await window.csbHost.listNetworkShares(node.name); } catch (e) { shares = []; }
+    node.children = shares.map(s => ({ name: s.name, path: s.path, kind: 'dir', expanded: false, loaded: false, children: [] }));
+  } else {
+    const res = await window.csbHost.listDir(node.path);
+    node.children = (res && !res.error)
+      ? res.entries.filter(e => e.isDir).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+          .map(e => ({ name: e.name, path: e.path, kind: 'dir', expanded: false, loaded: false, children: [] }))
+      : [];
+  }
+  node.loaded = true;
+}
+
+async function toggleTreeNode(path){
+  const node = findTreeNode(path);
+  if (!node) return;
+  setBusy(true);
+  try {
+    if (!node.expanded) { await loadTreeChildren(node); node.expanded = true; }
+    else node.expanded = false;
+  } finally { setBusy(false); }
+  renderTree();
+}
+
+async function selectTreeNode(path){
+  selectedTreePath = path;
+  const node = findTreeNode(path);
+  setBusy(true);
+  try {
+    if (node) { await loadTreeChildren(node); node.expanded = true; }
+    renderTree();
+    await loadDir(path);
+  } finally { setBusy(false); }
+}
+
+async function pickFolder(){
+  const dir = await window.csbHost.pickFolder();
+  if (!dir) return;
+  if (!findTreeNode(dir)) {
+    driveRoots.push({ name: dir, path: dir, kind: 'dir', expanded: false, loaded: false, children: [] });
+  }
+  await selectTreeNode(dir);
+}
+
+async function persistNetworkRoots(){
+  try { await window.csbHost.setConfig({ rechercheEditeurNetworkRoots: networkPinned.map(r => r.path) }); }
+  catch (e) { /* config non disponible (hors Electron) */ }
+}
+
+async function addNetworkRoot(){
+  const input = await customPrompt('Chemin réseau à ajouter (ex. \\\\SB-CONFECTION\\Atelier CSB) :', '\\\\');
+  if (!input) return;
+  const p = input.trim();
+  if (!p) return;
+  if (networkPinned.find(r => r.path === p)) { await selectTreeNode(p); return; }
+  networkPinned.push({ name: p, path: p, kind: 'dir', expanded: false, loaded: false, children: [] });
+  await persistNetworkRoots();
+  await selectTreeNode(p);
+}
+
+async function removeNetworkRoot(path){
+  networkPinned = networkPinned.filter(r => r.path !== path);
+  await persistNetworkRoots();
+  if (selectedTreePath === path) {
+    selectedTreePath = null;
+    currentDirPath = null;
+    currentEntries = [];
+    document.getElementById('currentDirPath').textContent = '';
+    document.getElementById('btnRefreshDir').disabled = true;
+    renderExplorer();
+  }
+  renderTree();
+}
+
+/* ============================================================================
+   Liste des fichiers — dossier courant seul par défaut ; dès qu'un mot est
+   saisi dans le champ de recherche, la recherche porte sur le dossier
+   courant ET tous ses sous-dossiers (recherche récursive côté main.js,
+   affichée progressivement au fur et à mesure des résultats). Le filtre par
+   extension (chips) est appliqué côté renderer sur les résultats déjà
+   reçus : changer de filtre ne relance donc PAS une recherche réseau, il ne
+   fait que réafficher le sous-ensemble déjà trouvé.
+============================================================================ */
+let currentDirPath = null;
+let currentEntries = [];    // dernière liste renvoyée par csbHost.listDir() (dossier courant, non récursif)
+let extFilter = 'tous';     // 'tous' | 'dst' | 'pes' | 'pxf'
+let searchToken = 0;        // ignore une réponse de recherche obsolète (nouvelle recherche lancée entre-temps)
+let searchDebounceTimer = null;
+let searchActive = false;       // une recherche (texte non vide) est en cours ou affichée
+let searchAccumulated = [];     // résultats recursifs bruts trouvés jusqu'ici, TOUTES extensions confondues
+let searchTruncated = false;
+let searchUnsubProgress = null;
+let searchUnsubDone = null;
+
+const PROGRAM_EXTS = ['dst', 'pes', 'pxf'];
+
+function applyExtFilter(list){
+  return extFilter === 'tous' ? list : list.filter(e => e.ext === extFilter);
+}
+
+function filteredEntries(){
+  const files = applyExtFilter(currentEntries.filter(e => !e.isDir && PROGRAM_EXTS.includes(e.ext)));
+  files.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  return files;
+}
+
+let searchBusyHeld = false;
+function setSearchBusy(isBusy){
+  if (isBusy && !searchBusyHeld) { searchBusyHeld = true; setBusy(true); }
+  else if (!isBusy && searchBusyHeld) { searchBusyHeld = false; setBusy(false); }
+}
+
+function detachSearchListeners(){
+  if (searchUnsubProgress) { searchUnsubProgress(); searchUnsubProgress = null; }
+  if (searchUnsubDone) { searchUnsubDone(); searchUnsubDone = null; }
+  setSearchBusy(false);
+}
+
+async function loadDir(dirPath){
+  const res = await window.csbHost.listDir(dirPath);
+  if (!res || res.error) {
+    alert('Impossible de lire ce dossier : ' + (res && res.error ? res.error : 'erreur inconnue'));
+    return;
+  }
+  currentDirPath = res.path;
+  currentEntries = res.entries;
+  document.getElementById('btnRefreshDir').disabled = false;
+  document.getElementById('currentDirPath').textContent = currentDirPath;
+  document.getElementById('currentDirPath').title = currentDirPath;
+  refreshView();
+}
+
+// Appelé quand le DOSSIER ou le TEXTE recherché change : relance une
+// recherche récursive côté main.js si un mot est saisi, sinon revient à la
+// simple liste du dossier courant. Ne jamais appeler ceci pour un simple
+// changement de filtre d'extension — voir renderCurrentView().
+function refreshView(){
+  const term = (document.getElementById('searchInput').value || '').trim();
+  if (term) startSearch(term); else { searchActive = false; detachSearchListeners(); renderExplorer(); }
+}
+
+// Appelé quand seul le filtre d'extension change (ou pour rafraîchir
+// l'affichage après une mise à jour des résultats déjà reçus) : ne relance
+// RIEN côté main.js, se contente de réappliquer le filtre aux données déjà
+// en mémoire (dossier courant ou résultats de recherche accumulés).
+function renderCurrentView(){
+  if (searchActive) renderExplorerList(applyExtFilter(searchAccumulated), { recursive: true, truncated: searchTruncated });
+  else renderExplorer();
+}
+
+async function startSearch(term){
+  if (!currentDirPath) {
+    searchActive = false;
+    document.getElementById('explorerBody').innerHTML = '<div class="explorer-empty">Choisis un dossier dans l\'arborescence avant de lancer une recherche.</div>';
+    return;
+  }
+  detachSearchListeners(); // coupe aussi le curseur sablier d'une éventuelle recherche précédente
+  searchActive = true;
+  searchAccumulated = [];
+  searchTruncated = false;
+  const token = ++searchToken;
+  setSearchBusy(true);
+  document.getElementById('explorerBody').innerHTML = '<div class="explorer-empty">Recherche en cours dans ce dossier et ses sous-dossiers…</div>';
+
+  let requestId;
+  try {
+    // Toujours TOUTES les extensions ici : le filtre (chips) s'applique
+    // ensuite côté renderer, sans avoir à relancer la recherche.
+    requestId = await window.csbHost.startSearchFiles(currentDirPath, term, PROGRAM_EXTS.slice());
+  } catch (e) {
+    if (token !== searchToken) return; // une recherche plus récente gère déjà son propre curseur
+    setSearchBusy(false);
+    document.getElementById('explorerBody').innerHTML = '<div class="explorer-empty">Erreur pendant la recherche : ' + escapeHtml(e.message || String(e)) + '</div>';
+    return;
+  }
+  if (token !== searchToken) return;
+
+  searchUnsubProgress = window.csbHost.onSearchFilesProgress((payload) => {
+    if (token !== searchToken || payload.requestId !== requestId) return;
+    searchAccumulated = searchAccumulated.concat(payload.results);
+    appendExplorerTiles(applyExtFilter(payload.results), applyExtFilter(searchAccumulated).length);
+  });
+  searchUnsubDone = window.csbHost.onSearchFilesDone((payload) => {
+    if (token !== searchToken || payload.requestId !== requestId) return;
+    searchTruncated = payload.truncated;
+    finishProgressiveSearch(applyExtFilter(searchAccumulated).length, searchTruncated);
+    detachSearchListeners();
+  });
+}
+
+function renderExplorer(){
+  if (!currentDirPath) { document.getElementById('explorerBody').innerHTML = '<div class="explorer-empty">Choisis un dossier dans l\'arborescence pour parcourir ses programmes de broderie.</div>'; return; }
+  renderExplorerList(filteredEntries(), { recursive: false });
+}
+
+function shortenDir(dir){
+  if (!currentDirPath) return dir;
+  if (dir === currentDirPath) return '(dossier courant)';
+  if (dir.startsWith(currentDirPath)) return '.' + dir.slice(currentDirPath.length);
+  return dir;
+}
+
+/* ---------- Mode d'affichage : vignettes / liste détaillée / liste simple ---------- */
+let viewMode = 'thumbnails'; // 'thumbnails' | 'details' | 'list'
+try { viewMode = localStorage.getItem('rechercheEditeurViewMode') || 'thumbnails'; } catch (e) { /* ignore */ }
+
+function formatFileSize(bytes){
+  if (bytes == null) return '';
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' Ko';
+  if (bytes < 1024 * 1024 * 1024) return (Math.round(bytes / 1024 / 1024 * 10) / 10) + ' Mo';
+  return (Math.round(bytes / 1024 / 1024 / 1024 * 10) / 10) + ' Go';
+}
+function formatFileDate(mtimeMs){
+  if (!mtimeMs) return '';
+  const d = new Date(mtimeMs);
+  return d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+function fileTypeLabel(ext){
+  return 'Fichier ' + ext.toUpperCase();
+}
+
+// Construit l'élément (tuile, ligne de tableau ou ligne simple) d'un fichier
+// selon le mode d'affichage courant. Le type d'élément DOM diffère (div/tr),
+// mais tous reçoivent data-path/data-name et sont ensuite câblés de façon
+// identique par bindItem().
+function createItemElement(e, recursive){
+  if (viewMode === 'details') {
+    const tr = document.createElement('tr');
+    tr.dataset.path = e.path; tr.dataset.name = e.name;
+    tr.innerHTML =
+      '<td class="col-name"><span class="row-icon">' + (e.ext === 'pxf' ? '🖼' : '🧵') + '</span>' + escapeHtml(e.name) + '</td>' +
+      '<td class="col-date">' + formatFileDate(e.mtimeMs) + '</td>' +
+      '<td class="col-type">' + fileTypeLabel(e.ext) + '</td>' +
+      '<td class="col-size">' + formatFileSize(e.size) + '</td>' +
+      (recursive ? '<td class="col-dir" title="' + escapeHtml(e.dir) + '">' + escapeHtml(shortenDir(e.dir)) + '</td>' : '');
+    return tr;
+  }
+  if (viewMode === 'list') {
+    const row = document.createElement('div');
+    row.className = 'explorer-simple-row';
+    row.dataset.path = e.path; row.dataset.name = e.name;
+    row.title = recursive ? e.name + '  —  ' + shortenDir(e.dir) : e.name;
+    row.innerHTML = '<span class="row-icon">' + (e.ext === 'pxf' ? '🖼' : '🧵') + '</span><span class="row-name">' + escapeHtml(e.name) + '</span>';
+    return row;
+  }
+  const wrap = document.createElement('div');
+  const subPath = recursive ? '<div class="sub-path" title="' + escapeHtml(e.dir) + '">' + escapeHtml(shortenDir(e.dir)) + '</div>' : '';
+  wrap.innerHTML = '<div class="explorer-tile" data-path="' + escapeHtml(e.path) + '" data-name="' + escapeHtml(e.name) + '">' +
+    '<div class="explorer-thumb" data-thumb-for="' + escapeHtml(e.path) + '">' + (e.ext === 'pxf' ? '🖼' : '🧵') + '</div>' +
+    '<div class="name">' + escapeHtml(e.name) + '</div>' +
+    subPath +
+    '<span class="ext-pill">' + e.ext.toUpperCase() + '</span>' +
+    '</div>';
+  return wrap.firstElementChild;
+}
+
+function bindItem(el){
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.explorer-tile.selected, .explorer-simple-row.selected, #explorerGrid tr.selected').forEach(t => t.classList.remove('selected'));
+    el.classList.add('selected');
+  });
+  el.addEventListener('dblclick', () => openEntry(el.dataset.path));
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.explorer-tile.selected, .explorer-simple-row.selected, #explorerGrid tr.selected').forEach(t => t.classList.remove('selected'));
+    el.classList.add('selected');
+    showContextMenu(e.clientX, e.clientY, el.dataset.path, el.dataset.name);
+  });
+}
+
+// Conteneur dans lequel les éléments sont ajoutés (id="explorerGrid" quel
+// que soit le mode — une grille, un <tbody>, ou une simple liste), pour que
+// le mode d'affichage puisse changer sans toucher à la logique de
+// recherche/ajout progressif.
+function containerSkeletonHtml(opts){
+  if (viewMode === 'details') {
+    const dirCol = opts.recursive ? '<th>Dossier</th>' : '';
+    return '<table class="explorer-details-table"><thead><tr><th>Nom</th><th>Modifié le</th><th>Type</th><th>Taille</th>' + dirCol + '</tr></thead><tbody id="explorerGrid"></tbody></table>';
+  }
+  if (viewMode === 'list') return '<div class="explorer-simple-list" id="explorerGrid"></div>';
+  return '<div class="explorer-grid" id="explorerGrid"></div>';
+}
+
+function renderExplorerList(list, opts){
+  opts = opts || {};
+  const body = document.getElementById('explorerBody');
+  if (!list.length) {
+    body.innerHTML = '<div class="explorer-empty">Aucun fichier' + (extFilter !== 'tous' ? ' ' + extFilter.toUpperCase() : '') +
+      (opts.recursive ? ' trouvé dans ce dossier ni ses sous-dossiers.' : ' trouvé dans ce dossier.') + '</div>';
+    return;
+  }
+  const notice = opts.recursive
+    ? '<div class="search-result-notice" id="searchResultNotice">' + list.length + ' résultat(s) dans ce dossier et ses sous-dossiers' + (opts.truncated ? ' (liste limitée aux ' + list.length + ' premiers)' : '') + '</div>'
+    : '';
+  body.innerHTML = notice + containerSkeletonHtml(opts);
+  const container = document.getElementById('explorerGrid');
+  const frag = document.createDocumentFragment();
+  list.forEach(e => {
+    const el = createItemElement(e, opts.recursive);
+    bindItem(el);
+    frag.appendChild(el);
+  });
+  container.appendChild(frag);
+
+  // Vignettes générées de façon asynchrone (décodage DST/PES/PXF) — seulement
+  // utile en mode "vignettes" (les deux modes liste utilisent une icône
+  // générique, comme l'Explorateur Windows en vues Liste/Détails).
+  if (viewMode === 'thumbnails') list.forEach(e => generateThumb(e));
+}
+
+// Variante incrémentale utilisée pendant une recherche récursive en cours :
+// n'ajoute que les nouveaux éléments reçus, sans redessiner (ni redécoder)
+// les vignettes déjà affichées.
+function appendExplorerTiles(newItems, filteredTotalSoFar){
+  const body = document.getElementById('explorerBody');
+  let container = document.getElementById('explorerGrid');
+  if (!container) {
+    body.innerHTML = '<div class="search-result-notice" id="searchResultNotice"></div>' + containerSkeletonHtml({ recursive: true });
+    container = document.getElementById('explorerGrid');
+  }
+  const notice = document.getElementById('searchResultNotice');
+  if (notice) notice.textContent = 'Recherche en cours… ' + filteredTotalSoFar + ' résultat(s) trouvé(s) pour l\'instant';
+  const frag = document.createDocumentFragment();
+  newItems.forEach(e => {
+    const el = createItemElement(e, true);
+    bindItem(el);
+    frag.appendChild(el);
+  });
+  container.appendChild(frag);
+  if (viewMode === 'thumbnails') newItems.forEach(e => generateThumb(e));
+}
+
+function finishProgressiveSearch(filteredTotal, truncated){
+  if (!filteredTotal) {
+    document.getElementById('explorerBody').innerHTML = '<div class="explorer-empty">Aucun fichier' + (extFilter !== 'tous' ? ' ' + extFilter.toUpperCase() : '') + ' trouvé dans ce dossier ni ses sous-dossiers.</div>';
+    return;
+  }
+  const notice = document.getElementById('searchResultNotice');
+  if (notice) notice.textContent = filteredTotal + ' résultat(s) dans ce dossier et ses sous-dossiers' + (truncated ? ' (liste limitée aux ' + filteredTotal + ' premiers)' : '');
+}
+
+async function generateThumb(entry){
+  const host = document.querySelector('.explorer-thumb[data-thumb-for="' + CSS.escape(entry.path) + '"]');
+  if (!host) return;
+  try {
+    const bytes = await window.csbHost.readFileBytes(entry.path);
+    const buf = new Uint8Array(bytes);
+    if (entry.ext === 'pxf') {
+      const info = await parsePxf(buf);
+      if (info.iconBytes) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(new Blob([info.iconBytes], { type: 'image/png' }));
+        host.innerHTML = '';
+        host.appendChild(img);
+      }
+      return;
+    }
+    const decoded = entry.ext === 'pes' ? decodePes(buf) : decodeDst(buf);
+    const canvas = document.createElement('canvas');
+    canvas.width = 110; canvas.height = 110;
+    drawStitchPath(canvas.getContext('2d'), canvas.width, canvas.height, decoded.stitches, decoded.bbox, '#555');
+    host.innerHTML = '';
+    host.appendChild(canvas);
+  } catch (e) { /* vignette indisponible : on garde l'icône générique */ }
+}
+
+async function openEntry(entryPath){
+  const entry = currentEntries.find(e => e.path === entryPath);
+  setBusy(true);
+  try {
+    const bytes = await window.csbHost.readFileBytes(entryPath);
+    await loadVisualiseurBytes(new Uint8Array(bytes), (entry && entry.name) || entryPath.split(/[\\/]/).pop());
+  } catch (e) {
+    alert('Impossible d\'ouvrir ce fichier : ' + e.message);
+  } finally { setBusy(false); }
+}
+
+// Ouvre le fichier dans l'application du système associée à son extension
+// (ex. le logiciel de broderie installé pour un .DST), au lieu de l'aperçu
+// interne.
+async function openInDefaultApp(entryPath, name){
+  setBusy(true);
+  let err = '';
+  try { err = await window.csbHost.openPath(entryPath); } catch (e) { err = e.message || String(e); }
+  finally { setBusy(false); }
+  if (err) alert('Impossible d\'ouvrir "' + name + '" avec l\'application associée :\n' + err);
+}
+
+// Déplace le fichier vers la corbeille (récupérable), après confirmation,
+// puis rafraîchit la liste (dossier courant ou recherche en cours).
+async function deleteEntry(entryPath, name){
+  if (!confirm('Supprimer « ' + name + ' » ?\n\nLe fichier sera déplacé vers la corbeille.')) return;
+  setBusy(true);
+  try {
+    await window.csbHost.trashFile(entryPath);
+  } catch (e) {
+    alert('Impossible de supprimer "' + name + '" : ' + (e.message || e));
+    return;
+  } finally { setBusy(false); }
+  if (currentDirPath) await loadDir(currentDirPath);
+}
+
+/* ---------- Menu contextuel (clic droit sur un fichier) ---------- */
+let contextMenuTarget = null;
+
+function hideContextMenu(){
+  document.getElementById('fileContextMenu').style.display = 'none';
+  document.removeEventListener('click', hideContextMenu);
+  document.removeEventListener('contextmenu', hideContextMenuOnOutsideRightClick);
+  document.removeEventListener('keydown', onContextMenuKeydown);
+}
+function onContextMenuKeydown(e){ if (e.key === 'Escape') hideContextMenu(); }
+function hideContextMenuOnOutsideRightClick(e){ if (!e.target.closest('.explorer-tile')) hideContextMenu(); }
+
+function showContextMenu(x, y, entryPath, name){
+  contextMenuTarget = { path: entryPath, name };
+  const menu = document.getElementById('fileContextMenu');
+  menu.style.display = 'block';
+  // Reste dans la fenêtre : on évite qu'il déborde à droite ou en bas.
+  const rect = menu.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width - 8;
+  const maxY = window.innerHeight - rect.height - 8;
+  menu.style.left = Math.max(4, Math.min(x, maxX)) + 'px';
+  menu.style.top = Math.max(4, Math.min(y, maxY)) + 'px';
+  setTimeout(() => {
+    document.addEventListener('click', hideContextMenu);
+    document.addEventListener('contextmenu', hideContextMenuOnOutsideRightClick);
+    document.addEventListener('keydown', onContextMenuKeydown);
+  }, 0);
+}
+
+document.getElementById('fileContextMenu').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn || !contextMenuTarget) return;
+  const { path: targetPath, name } = contextMenuTarget;
+  const action = btn.dataset.action;
+  hideContextMenu();
+  if (action === 'preview') await openEntry(targetPath);
+  else if (action === 'open') await openInDefaultApp(targetPath, name);
+  else if (action === 'delete') await deleteEntry(targetPath, name);
+});
+
+document.getElementById('btnPickFolder').addEventListener('click', pickFolder);
+document.getElementById('btnRefreshDir').addEventListener('click', () => { if (currentDirPath) loadDir(currentDirPath); });
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(refreshView, 250);
+});
+document.querySelectorAll('.filter-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    extFilter = btn.dataset.ext;
+    document.querySelectorAll('.filter-tab').forEach(b => b.classList.toggle('active', b === btn));
+    renderCurrentView();
+  });
+});
+document.querySelectorAll('.view-mode-btn').forEach(btn => {
+  btn.classList.toggle('active', btn.dataset.mode === viewMode);
+  btn.addEventListener('click', () => {
+    viewMode = btn.dataset.mode;
+    try { localStorage.setItem('rechercheEditeurViewMode', viewMode); } catch (e) { /* ignore */ }
+    document.querySelectorAll('.view-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+    renderCurrentView();
+  });
+});
+
+/* ============================================================================
+   Aperçu / Éditeur — repris de l'ancien onglet Visualiseur de Gestion Casaque
+   (ouverture indépendante d'un fichier DST/PES/PXF/VP3, aperçu zoomable et
+   fiche d'informations, avec édition des coupe-fils). N'écrit rien en base —
+   purement une inspection/édition à la volée. Réutilise le codec partagé
+   src/shared/embroidery-codec.js (commun avec Gestion Casaque).
+============================================================================ */
+let vizDecoded = null;
+let vizZoom = 1;
+let vizPanX = 0, vizPanY = 0;
+let vizSelectedOpIdx = -1;
+let vizLastBaseOx = 0, vizLastBaseOy = 0, vizLastScale = 1, vizLastCanvasH = 0;
+let vizShowMarkers = true;
+
+function initVisualiseur() {
+  const dz = document.getElementById('vizDropzone');
+  const input = document.getElementById('vizFileInput');
+  document.getElementById('vizBtnImport').addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if (input.files[0]) loadVisualiseurFile(input.files[0]); });
+  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('over'); }));
+  dz.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) loadVisualiseurFile(e.dataTransfer.files[0]); });
+
+  document.getElementById('vizBtnZoomIn').addEventListener('click', () => setVizZoom(vizZoom * 1.3));
+  document.getElementById('vizBtnZoomOut').addEventListener('click', () => setVizZoom(vizZoom / 1.3));
+  document.getElementById('vizBtnZoomReset').addEventListener('click', resetVizView);
+
+  document.getElementById('vizBtnFlipH').addEventListener('click', () => vizTransform('flipH'));
+  document.getElementById('vizBtnFlipV').addEventListener('click', () => vizTransform('flipV'));
+  document.getElementById('vizBtnRot90Cw').addEventListener('click', () => vizTransform('rot90cw'));
+  document.getElementById('vizBtnRot90Ccw').addEventListener('click', () => vizTransform('rot90ccw'));
+  document.getElementById('vizBtnRot180').addEventListener('click', () => vizTransform('rot180'));
+
+  const canvas = document.getElementById('vizCanvas');
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    setVizZoom(vizZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
+  }, { passive: false });
+  let dragging = false, lastX = 0, lastY = 0, dragMoved = 0;
+  canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; dragMoved = 0; canvas.style.cursor = 'grabbing'; });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const ratio = canvas.width / canvas.clientWidth;
+    vizPanX += (e.clientX - lastX) * ratio;
+    vizPanY += (e.clientY - lastY) * ratio;
+    dragMoved += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+    lastX = e.clientX; lastY = e.clientY;
+    drawVizPreview();
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (dragging && dragMoved < 4 && e.target === canvas) vizHandleCanvasClick(e);
+    dragging = false; canvas.style.cursor = 'grab';
+  });
+
+  document.getElementById('vizInfoCol').addEventListener('click', (e) => {
+    const trimBtn = e.target.closest('.viz-btn-set-trim');
+    if (trimBtn) { vizSetTrimAfter(parseInt(trimBtn.dataset.opIdx, 10), trimBtn.dataset.newState); return; }
+    if (e.target.closest('#vizBtnAllTrims')) { vizConvertAllJumpsToTrims(); return; }
+    if (e.target.closest('#vizBtnSaveModified')) { vizSaveModifiedProgram(); return; }
+    if (e.target.closest('#vizBtnResetModified')) { vizResetModifications(); return; }
+    const clickableRow = e.target.closest('.viz-op-row-clickable');
+    if (clickableRow) { vizSelectOp(parseInt(clickableRow.dataset.rowIdx, 10)); return; }
+  });
+
+  const showMarkersCb = document.getElementById('vizShowMarkersCb');
+  if (showMarkersCb) showMarkersCb.addEventListener('change', () => { vizShowMarkers = showMarkersCb.checked; drawVizPreview(); });
+}
+
+async function loadVisualiseurFile(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  await loadVisualiseurBytes(buf, file.name);
+}
+
+async function loadVisualiseurBytes(buf, name) {
+  const statusEl = document.getElementById('vizDropzoneStatus');
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Lecture de ' + name + '…';
+  document.getElementById('vizPreviewFrame').style.display = 'none';
+  document.getElementById('vizZoomControls').style.display = 'none';
+  document.getElementById('vizMarkerLegend').style.display = 'none';
+  document.getElementById('vizTransformControls').style.display = 'none';
+  document.getElementById('vizIconImg').style.display = 'none';
+  vizDecoded = null;
+  vizSelectedOpIdx = -1;
+  resetVizView();
+
+  try {
+    let type = sniffType(buf);
+    if (!type) {
+      // Signature VP3 : "%vsm%" en tout début de fichier.
+      const head6 = new TextDecoder('ascii').decode(buf.slice(0, 6));
+      if (head6 === '%vsm%\0') type = 'vp3';
+    }
+    if (!type) throw new Error('Format non reconnu (DST, PES, PXF ou VP3 attendu).');
+
+    if (type === 'pxf') {
+      const info = await parsePxf(buf);
+      vizDecoded = { type, name, pxfInfo: info };
+      if (info.iconBytes) {
+        const img = document.getElementById('vizIconImg');
+        img.src = URL.createObjectURL(new Blob([info.iconBytes], { type: 'image/png' }));
+        img.style.display = 'block';
+      }
+    } else {
+      const decoded = type === 'pes' ? decodePes(buf) : type === 'vp3' ? decodeVp3(buf) : decodeDst(buf);
+      let pesColors = [];
+      if (type === 'pes') {
+        const text = new TextDecoder('latin1').decode(buf.slice(0, Math.min(buf.length, 300000)));
+        const laIdx = text.indexOf('LA:');
+        if (laIdx > 0) pesColors = extractPesColorTable(buf, laIdx);
+      } else if (type === 'vp3' && decoded.threads) {
+        pesColors = decoded.threads.map(t => ({ r: (t.color >> 16) & 0xFF, g: (t.color >> 8) & 0xFF, b: t.color & 0xFF }));
+      }
+      vizDecoded = Object.assign({ type, name, pesColors, modified: false }, decoded);
+      vizDecoded.originalStitches = decoded.stitches.map(s => ({ x: s.x, y: s.y, type: s.type }));
+      document.getElementById('vizPreviewFrame').style.display = 'inline-block';
+      document.getElementById('vizPreviewLabel').textContent = name;
+      document.getElementById('vizZoomControls').style.display = 'flex';
+      document.getElementById('vizMarkerLegend').style.display = 'block';
+      document.getElementById('vizTransformControls').style.display = 'flex';
+      drawVizPreview();
+    }
+    statusEl.style.display = 'none';
+  } catch (e) {
+    statusEl.textContent = 'Erreur : ' + e.message;
+  }
+  renderVizInfo();
+}
+
+function setVizZoom(z) { vizZoom = Math.max(0.2, Math.min(10, z)); drawVizPreview(); }
+function resetVizView() { vizZoom = 1; vizPanX = 0; vizPanY = 0; drawVizPreview(); }
+
+function vizSelectOp(idx) {
+  vizSelectedOpIdx = idx;
+  drawVizPreview();
+  renderVizInfo();
+  if (idx >= 0) {
+    const row = document.querySelector('#vizInfoCol tr[data-row-idx="' + idx + '"]');
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function vizHandleCanvasClick(e) {
+  if (!vizDecoded || !vizDecoded.stitches) return;
+  const canvas = document.getElementById('vizCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const ratio = canvas.width / rect.width;
+  const px = (e.clientX - rect.left) * ratio;
+  const py = (e.clientY - rect.top) * ratio;
+  const fx = (px - vizLastBaseOx) / vizLastScale;
+  const fy = (vizLastCanvasH - py - vizLastBaseOy) / vizLastScale;
+
+  const ops = vizBuildOperations(vizDecoded.stitches);
+  let bestIdx = -1, bestDist = Infinity;
+  const threshold = 16 / vizLastScale;
+  ops.forEach((op, idx) => {
+    if (op.kind !== 'stitch') return;
+    for (let i = op.stitchStartIdx; i < op.stitchEndIdx; i++) {
+      const s = vizDecoded.stitches[i];
+      const d = Math.hypot(s.x - fx, s.y - fy);
+      if (d < bestDist) { bestDist = d; bestIdx = idx; }
+    }
+  });
+  if (bestIdx >= 0 && bestDist <= threshold) vizSelectOp(bestIdx);
+}
+
+function vizTransform(kind) {
+  if (!vizDecoded || !vizDecoded.stitches) return;
+  const stitches = vizDecoded.stitches;
+  for (const s of stitches) {
+    if (s.type === END) continue;
+    const x = s.x, y = s.y;
+    if (kind === 'flipH') { s.x = -x; }
+    else if (kind === 'flipV') { s.y = -y; }
+    else if (kind === 'rot90cw') { s.x = y; s.y = -x; }
+    else if (kind === 'rot90ccw') { s.x = -y; s.y = x; }
+    else if (kind === 'rot180') { s.x = -x; s.y = -y; }
+  }
+  let minx = 0, maxx = 0, miny = 0, maxy = 0;
+  for (const s of stitches) {
+    if (s.type === END) continue;
+    minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x);
+    miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
+  }
+  vizDecoded.bbox = { minx, maxx, miny, maxy };
+  vizDecoded.modified = true;
+  resetVizView();
+  renderVizInfo();
+}
+
+function vizSetTrimAfter(opIdx, newState) {
+  if (!vizDecoded || !vizDecoded.lastOps) return;
+  const op = vizDecoded.lastOps[opIdx];
+  if (!op || op.kind !== 'stitch') return;
+  const stitches = vizDecoded.stitches;
+  const runStart = op.stitchEndIdx;
+  const before = stitches[runStart - 1];
+  if (!before) return;
+
+  let runEnd = runStart;
+  while (runEnd < stitches.length && stitches[runEnd].type === JUMP) runEnd++;
+  const currentRun = stitches.slice(runStart, runEnd);
+  const dest = currentRun.length ? currentRun[currentRun.length - 1] : before;
+
+  let newRun = [];
+  if (newState !== 'aucun') {
+    const steps = splitLongJump(dest.x - before.x, dest.y - before.y);
+    let cx = before.x, cy = before.y;
+    newRun = steps.map(([sx, sy]) => { cx += sx; cy += sy; return { x: cx, y: cy, type: JUMP }; });
+    if (newState === 'trim') { while (newRun.length < 3) newRun.push({ x: dest.x, y: dest.y, type: JUMP }); }
+  }
+
+  stitches.splice(runStart, runEnd - runStart, ...newRun);
+  vizDecoded.modified = true;
+  drawVizPreview();
+  renderVizInfo();
+}
+
+function vizConvertAllJumpsToTrims() {
+  if (!vizDecoded || !vizDecoded.stitches) return;
+  const old = vizDecoded.stitches;
+  const n = old.length;
+  const result = [];
+  let changed = false;
+  let i = 0;
+  while (i < n) {
+    const s = old[i];
+    if (s.type !== JUMP) { result.push(s); i++; continue; }
+    let j = i;
+    while (j < n && old[j].type === JUMP) j++;
+    const runLen = j - i;
+    if (runLen > 0 && runLen < 3) {
+      const last = old[j - 1];
+      for (let k = i; k < j; k++) result.push(old[k]);
+      for (let k = runLen; k < 3; k++) result.push({ x: last.x, y: last.y, type: JUMP });
+      changed = true;
+    } else {
+      for (let k = i; k < j; k++) result.push(old[k]);
+    }
+    i = j;
+  }
+  if (!changed) { alert('Aucun saut simple à convertir : tous les sauts sont déjà des coupe-fils.'); return; }
+  if (!confirm('Convertir tous les sauts simples du programme en coupe-fils ?')) return;
+  vizDecoded.stitches = result;
+  let minx = 0, maxx = 0, miny = 0, maxy = 0;
+  for (const s of result) {
+    if (s.type === END) continue;
+    minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x);
+    miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
+  }
+  vizDecoded.bbox = { minx, maxx, miny, maxy };
+  vizDecoded.modified = true;
+  drawVizPreview();
+  renderVizInfo();
+}
+
+function vizSaveModifiedProgram() {
+  if (!vizDecoded || !vizDecoded.stitches) return;
+  const records = vizDecoded.stitches.filter(s => s.type !== END);
+  if (!records.length) return;
+  const baseName = (vizDecoded.name || 'PROGRAMME').replace(/\.\w+$/, '');
+  const outName = (baseName.replace(/[^A-Za-z0-9_-]/g, '').toUpperCase().slice(0, 16)) || 'PROGRAMME';
+  let dstBytes;
+  try {
+    dstBytes = encodeDst(records, { name: outName });
+  } catch (e) {
+    alert('Erreur lors de l\'enregistrement : ' + e.message);
+    return;
+  }
+  const blob = new Blob([dstBytes], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const fname = outName + (vizDecoded.modified ? '_MODIFIE' : '') + '.DST';
+  const a = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function vizResetModifications() {
+  if (!vizDecoded || !vizDecoded.originalStitches) return;
+  vizDecoded.stitches = vizDecoded.originalStitches.map(s => ({ x: s.x, y: s.y, type: s.type }));
+  vizDecoded.modified = false;
+  drawVizPreview();
+  renderVizInfo();
+}
+
+function countVizTrims(stitches) {
+  let trims = 0, run = 0;
+  for (const s of stitches) {
+    if (s.type === END) break;
+    if (s.type === JUMP) { run++; }
+    else { if (run >= 3) trims++; run = 0; }
+  }
+  if (run >= 3) trims++;
+  return trims;
+}
+
+const VIZ_AUTO_PALETTE = FRANCE_GALOP_COLORS.filter(c => c.hex.toUpperCase() !== '#FFFFFF');
+
+function vizVisualSegments(stitches) {
+  const segments = [];
+  let current = [];
+  let i = 0;
+  const n = stitches.length;
+  while (i < n) {
+    const s = stitches[i];
+    if (s.type === END) break;
+    if (s.type === COLOR) { segments.push(current); current = []; i++; continue; }
+    if (s.type === JUMP) {
+      let j = i;
+      while (j < n && stitches[j].type === JUMP) j++;
+      if ((j - i) >= 3) { segments.push(current); current = []; }
+      i = j;
+      continue;
+    }
+    current.push(s);
+    i++;
+  }
+  segments.push(current);
+  return segments.filter(seg => seg.length > 0);
+}
+
+function vizSegmentColors(n) {
+  return Array.from({ length: n }, (_, i) => VIZ_AUTO_PALETTE[i % VIZ_AUTO_PALETTE.length].hex);
+}
+
+function drawVizPreview() {
+  const canvas = document.getElementById('vizCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!vizDecoded || !vizDecoded.stitches) return;
+
+  const w = canvas.width, h = canvas.height, pad = 14;
+  const bbox = vizDecoded.bbox;
+  const bw = (bbox.maxx - bbox.minx) || 1, bh = (bbox.maxy - bbox.miny) || 1;
+  const fitScale = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
+  const scale = fitScale * vizZoom;
+  const baseOx = pad + (w - pad * 2 - bw * scale) / 2 - bbox.minx * scale + vizPanX;
+  const baseOy = pad + (h - pad * 2 - bh * scale) / 2 - bbox.miny * scale - vizPanY;
+  vizLastBaseOx = baseOx; vizLastBaseOy = baseOy; vizLastScale = scale; vizLastCanvasH = h;
+
+  const segments = vizVisualSegments(vizDecoded.stitches);
+  const colors = vizSegmentColors(segments.length);
+
+  segments.forEach((seg, i) => {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = colors[i];
+    ctx.beginPath();
+    let started = false;
+    for (const s of seg) {
+      const px = baseOx + s.x * scale, py = h - (baseOy + s.y * scale);
+      if (s.type === JUMP) { ctx.moveTo(px, py); started = true; continue; }
+      if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
+    }
+    ctx.stroke();
+  });
+
+  const ops = vizBuildOperations(vizDecoded.stitches);
+
+  if (vizSelectedOpIdx >= 0 && ops[vizSelectedOpIdx] && ops[vizSelectedOpIdx].kind === 'stitch') {
+    const op = ops[vizSelectedOpIdx];
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#1f2420';
+    ctx.beginPath();
+    let started = false;
+    for (let i = op.stitchStartIdx; i < op.stitchEndIdx; i++) {
+      const s = vizDecoded.stitches[i];
+      const px = baseOx + s.x * scale, py = h - (baseOy + s.y * scale);
+      if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
+    }
+    ctx.stroke();
+  }
+
+  if (vizShowMarkers) {
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textBaseline = 'middle';
+    ops.forEach((op, idx) => {
+      if (op.kind !== 'stitch' || op.trimAfter === 'aucun') return;
+      const ref = vizDecoded.stitches[op.stitchEndIdx - 1];
+      if (!ref) return;
+      const px = baseOx + ref.x * scale, py = h - (baseOy + ref.y * scale);
+      if (op.trimAfter === 'trim') {
+        ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#d2232a'; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(px - 2.6, py - 2.6); ctx.lineTo(px + 2.6, py + 2.6);
+        ctx.moveTo(px + 2.6, py - 2.6); ctx.lineTo(px - 2.6, py + 2.6);
+        ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.strokeStyle = '#5b6b8c'; ctx.lineWidth = 1.4; ctx.stroke();
+      }
+      const label = String(idx + 1);
+      ctx.lineWidth = 3; ctx.strokeStyle = '#fff';
+      ctx.strokeText(label, px + 8, py);
+      ctx.fillStyle = '#1f2420';
+      ctx.fillText(label, px + 8, py);
+    });
+  }
+}
+
+function vizInfoRow(label, value) {
+  return '<tr><td>' + label + '</td><td>' + value + '</td></tr>';
+}
+
+function renderVizInfo() {
+  const col = document.getElementById('vizInfoCol');
+  if (!vizDecoded) {
+    col.innerHTML = '<span class="muted">Ouvre un fichier pour voir ses informations ici.</span>';
+    return;
+  }
+
+  if (vizDecoded.type === 'pxf') {
+    const info = vizDecoded.pxfInfo;
+    col.innerHTML =
+      '<h3>Fichier</h3><table>' +
+        vizInfoRow('Nom', escapeHtml(vizDecoded.name)) +
+        vizInfoRow('Format', 'PXF (Tajima Pulse)') +
+        vizInfoRow('Points (estimation)', info.stitchCount != null ? info.stitchCount : '—') +
+        vizInfoRow('Changements de couleur (estimation)', info.colorChanges != null ? info.colorChanges : '—') +
+        vizInfoRow('Dimensions (estimation)', (info.width_mm != null && info.height_mm != null) ? (info.width_mm + ' × ' + info.height_mm + ' mm') : '—') +
+      '</table>' +
+      '<small class="hint">Géométrie des points chiffrée par Tajima Pulse : seules les métadonnées et la vignette intégrée au fichier sont accessibles, pas de tracé.</small>';
+    return;
+  }
+
+  const { header, stitches, bbox, name, pesColors } = vizDecoded;
+  const widthMm = Math.round((bbox.maxx - bbox.minx) / 10 * 10) / 10;
+  const heightMm = Math.round((bbox.maxy - bbox.miny) / 10 * 10) / 10;
+  const colorChangesActual = stitches.filter(s => s.type === COLOR).length;
+  const trimsCount = countVizTrims(stitches);
+
+  let html = '<h3>Fichier</h3><table>' +
+    vizInfoRow('Nom', escapeHtml(name)) +
+    vizInfoRow('Format', vizDecoded.type === 'pes' ? 'PES (Brother / Babylock)' : vizDecoded.type === 'vp3' ? 'VP3 (Husqvarna Viking / Pfaff)' : 'DST (Tajima)') +
+    (header.name ? vizInfoRow('Nom interne', escapeHtml(header.name)) : '') +
+    vizInfoRow('Points', stitches.length - 1) +
+    vizInfoRow('Changements de couleur', colorChangesActual) +
+    vizInfoRow('Coupe-fils détectés', trimsCount) +
+    vizInfoRow('Dimensions', widthMm + ' × ' + heightMm + ' mm') +
+    '</table>';
+
+  if ((vizDecoded.type === 'pes' || vizDecoded.type === 'vp3') && pesColors && pesColors.length) {
+    const threads = vizDecoded.threads;
+    html += '<h3>Table de couleurs déclarée (' + pesColors.length + ')</h3><table>' +
+      pesColors.map((c, i) => {
+        const hex = '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('');
+        const resolved = closestFranceGalopColorId(c.r, c.g, c.b);
+        const t = threads && threads[i];
+        const extra = t && (t.brand || t.description || t.catalogNumber)
+          ? ' — ' + [t.brand, t.description, t.catalogNumber].filter(Boolean).map(escapeHtml).join(' · ')
+          : '';
+        return vizInfoRow((i + 1) + '.', '<span class="color-swatch-dot" style="background:' + hex + '"></span>' + fgColorLabel(resolved.colorId) + extra);
+      }).join('') +
+      '</table>' +
+      '<small class="hint">Teintes déclarées dans le fichier, rapprochées automatiquement de la palette France Galop' + (vizDecoded.type === 'vp3' ? ' (marque/référence fil affichées quand le fichier les fournit)' : '') + '. L\'aperçu et les vignettes ci-contre utilisent des teintes distinctes arbitraires (pas ces couleurs réelles) pour bien séparer visuellement chaque morceau, y compris de part et d\'autre d\'un coupe-fil.</small>';
+  } else if (vizDecoded.type === 'dst') {
+    html += '<small class="hint">Format DST : pas de table de couleurs intégrée — les changements ci-dessus sont de simples arrêts machine, sans référence de teinte. L\'aperçu attribue automatiquement une couleur différente à chaque segment détecté (changement de couleur ou coupe-fil), pour bien les distinguer visuellement (teintes arbitraires, pas les couleurs réelles).</small>';
+  }
+
+  const ops = vizBuildOperations(stitches);
+  vizDecoded.lastOps = ops;
+  const segColors = vizSegmentColors(vizVisualSegments(stitches).length);
+  html += '<h3>Éléments du programme (' + ops.length + ')</h3>' +
+    '<div class="viz-edit-toolbar">' +
+      '<button type="button" class="ghost" id="vizBtnAllTrims">✂ Tous les sauts simples → coupe-fil</button>' +
+      '<button type="button" class="ghost" id="vizBtnSaveModified">💾 Enregistrer le programme (.DST)</button>' +
+      (vizDecoded.modified ? '<button type="button" class="ghost" id="vizBtnResetModified">↺ Annuler les modifications</button><span class="muted">modifié</span>' : '') +
+    '</div>' +
+    '<div class="viz-ops-scroll"><table>' +
+      '<thead><tr><th>#</th><th>Élément</th><th>Détails</th></tr></thead>' +
+      '<tbody>' + ops.map((op, i) => vizOpRowHtml(op, i, segColors)).join('') + '</tbody>' +
+    '</table></div>' +
+    '<small class="hint">Repérage séquentiel de tout ce qui est détectable dans le fichier : piqûres réelles, sauts machine, coupe-fils (3 sauts consécutifs ou plus) et changements de couleur, dans l\'ordre où la machine les exécute. Un saut peut être converti en coupe-fil et inversement, dans les deux sens, même après une première conversion.</small>';
+
+  col.innerHTML = html;
+
+  col.querySelectorAll('.viz-op-thumb').forEach(canvas => {
+    const opIdx = parseInt(canvas.dataset.opIdx, 10);
+    const op = ops[opIdx];
+    if (!op || op.kind !== 'stitch') return;
+    const segStitches = stitches.slice(op.stitchStartIdx, op.stitchEndIdx);
+    const ctx = canvas.getContext('2d');
+    try {
+      drawStitchPath(ctx, canvas.width, canvas.height, segStitches, { minx: op.minx, maxx: op.maxx, miny: op.miny, maxy: op.maxy }, segColors[op.colorIdx] || '#8a1f2d');
+    } catch (e) { /* ignore */ }
+  });
+}
+
+function vizBuildOperations(stitches) {
+  const ops = [];
+  let colorIdx = 0;
+  let visualIdx = 0;
+  let i = 0;
+  const n = stitches.length;
+  while (i < n) {
+    const s = stitches[i];
+    if (s.type === END) break;
+    if (s.type === COLOR) {
+      colorIdx++;
+      visualIdx++;
+      ops.push({ kind: 'color', x: s.x, y: s.y, colorIdx, visualIdx });
+      i++;
+      continue;
+    }
+    if (s.type === JUMP) {
+      let j = i;
+      while (j < n && stitches[j].type === JUMP) j++;
+      if ((j - i) >= 3) visualIdx++;
+      ops.push({ kind: (j - i) >= 3 ? 'trim' : 'jump', count: j - i });
+      i = j;
+      continue;
+    }
+    let j = i, minx = s.x, maxx = s.x, miny = s.y, maxy = s.y;
+    while (j < n && stitches[j].type === STITCH) {
+      minx = Math.min(minx, stitches[j].x); maxx = Math.max(maxx, stitches[j].x);
+      miny = Math.min(miny, stitches[j].y); maxy = Math.max(maxy, stitches[j].y);
+      j++;
+    }
+    const stitchCount = j - i;
+    const stitchEndIdx = j;
+
+    let trimAfter = 'aucun';
+    if (j < n && stitches[j].type === JUMP) {
+      let jj = j;
+      while (jj < n && stitches[jj].type === JUMP) jj++;
+      trimAfter = (jj - j) >= 3 ? 'trim' : 'jump';
+      j = jj;
+    }
+
+    ops.push({
+      kind: 'stitch', count: stitchCount, colorIdx, visualIdx, trimAfter,
+      stitchStartIdx: i, stitchEndIdx,
+      bboxW: Math.round((maxx - minx) / 10 * 10) / 10, bboxH: Math.round((maxy - miny) / 10 * 10) / 10,
+      minx, maxx, miny, maxy,
+    });
+    if (trimAfter === 'trim') visualIdx++;
+    i = j;
+  }
+  return ops;
+}
+
+function vizOpRowHtml(op, i, segColors) {
+  if (op.kind === 'color') {
+    const hex = segColors[op.visualIdx] || '#8a1f2d';
+    return '<tr class="viz-op-row-color"><td>' + (i + 1) + '</td><td colspan="2">' +
+      '<span class="color-swatch-dot" style="background:' + hex + '"></span>🎨 Changement de couleur — teinte suivante</td></tr>';
+  }
+  if (op.kind === 'trim' || op.kind === 'jump') {
+    const label = op.kind === 'trim' ? '✂️ Coupe-fil' : '↷ Saut machine';
+    return '<tr><td>' + (i + 1) + '</td><td>' + label + '</td><td>' + op.count + ' saut(s)</td></tr>';
+  }
+  const hex = segColors[op.visualIdx] || '#8a1f2d';
+  const selectedClass = (i === vizSelectedOpIdx) ? ' viz-op-selected' : '';
+  const row1 = '<tr class="viz-op-row-clickable' + selectedClass + '" data-row-idx="' + i + '">' +
+    '<td>' + (i + 1) + '</td>' +
+    '<td><div class="viz-op-el"><canvas class="viz-op-thumb" width="42" height="32" data-op-idx="' + i + '"></canvas>🧵 Piqûres</div></td>' +
+    '<td>' + op.count + ' points · ' + op.bboxW + ' × ' + op.bboxH + ' mm</td>' +
+    '</tr>';
+  const trimHtml = op.trimAfter === 'trim'
+    ? '<span style="color:var(--accent);">✂️ Coupe-fil</span> <button type="button" class="ghost icon viz-btn-set-trim" data-op-idx="' + i + '" data-new-state="jump" title="Reconvertir en simple saut (sans couper le fil)">↷ En saut simple</button>'
+    : op.trimAfter === 'jump'
+      ? '<span class="muted">↷ Saut (pas un coupe-fil)</span> <button type="button" class="ghost icon viz-btn-set-trim" data-op-idx="' + i + '" data-new-state="trim" title="Convertir ce saut en coupe-fil">✂ En coupe-fil</button>'
+      : '<span class="muted">Pas de coupe-fil</span> <button type="button" class="ghost icon viz-btn-set-trim" data-op-idx="' + i + '" data-new-state="trim" title="Insérer un coupe-fil après ce bloc">✂ Ajouter</button>';
+  const row2 = '<tr class="viz-op-row-trim viz-op-row-clickable' + selectedClass + '" data-row-idx="' + i + '"><td></td><td class="muted">Coupe-fil ?</td><td>' + trimHtml + '</td></tr>';
+  return row1 + row2;
+}
+
+initVisualiseur();
+initTree();
+</script>
+</body>
+</html>

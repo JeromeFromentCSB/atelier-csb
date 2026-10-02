@@ -1955,6 +1955,7 @@ async function openColissimoModal(r, targetShipment){
   colModalRecord = r;
   colModalTargetShipment = targetShipment || null;
   const cfg = await getColConfig();
+  await refreshSignatureCache(); // reprend la signature la plus récente (ex. modifiée depuis Gestion Casaque)
   const isoGuess = countryToISO(r.pays);
   if(r.pays && !isoGuess){
     alert(`Code pays introuvable pour « ${r.pays} ».\n\nSaisis manuellement le code ISO à 2 lettres dans le champ « Pays » ci-dessous.`);
@@ -2646,8 +2647,9 @@ async function generateBonDeFabrication(q, clientAddress){
     const textX = left + 8 + THUMB_SIZE + 10;
     const maxTextWidth = (right - 100) - textX;
     const titleLines = wrapPdfText(l.title || l.product_name || '', fontBold, 9.5, maxTextWidth);
+    const refLines = l.product_code ? wrapPdfText('Réf : ' + l.product_code, font, 8.5, maxTextWidth) : [];
     const detailLines = details.flatMap(d => wrapPdfText(d, font, 8.5, maxTextWidth));
-    const textHeight = 6 + titleLines.length * 13 + detailLines.length * 11;
+    const textHeight = 6 + titleLines.length * 13 + refLines.length * 11 + detailLines.length * 11;
     const blockHeight = Math.max(textHeight, THUMB_SIZE + 10);
     if(y - blockHeight < bottom) y = newPage();
     if(i % 2 === 1) page.drawRectangle({ x: left, y: y - blockHeight + 4, width: right - left, height: blockHeight, color: lightGrey });
@@ -2666,6 +2668,10 @@ async function generateBonDeFabrication(q, clientAddress){
     titleLines.forEach(tl => {
       page.drawText(tl, { x: textX, y: ly - 10, size: 9.5, font: fontBold });
       ly -= 13;
+    });
+    refLines.forEach(rl => {
+      page.drawText(rl, { x: textX, y: ly - 10, size: 8.5, font, color: PDFLib.rgb(0.3,0.3,0.3) });
+      ly -= 11;
     });
     detailLines.forEach(dl => {
       page.drawText(dl, { x: textX, y: ly - 10, size: 8.5, font, color: PDFLib.rgb(0.3,0.3,0.3) });
@@ -2833,8 +2839,31 @@ async function saveShipment(r, patch, targetShipment){
 }
 
 // ---------- Signature ----------
-const SIGNATURE_KEY = 'csb_envoi_axonaut_signature_img';
-function getSignatureImg(){ try{ return localStorage.getItem(SIGNATURE_KEY) || ''; }catch(e){ return ''; } }
+// PARTAGÉE (PocketBase, même clé "signature" que Gestion Casaque) — avant chaque module avait
+// sa propre copie localStorage, à ressaisir séparément dans l'autre, et le localStorage d'une
+// iframe module s'est déjà révélé peu fiable dans cette app (cf. le bug du Worker Axonaut qui
+// ne restait pas enregistré). Mise en cache en mémoire pour que les appels existants (getSignatureImg,
+// synchrone) continuent de fonctionner sans y toucher ; refreshSignatureCache() la recharge
+// depuis PocketBase (avec reprise automatique d'une éventuelle ancienne valeur locale).
+const SIGNATURE_LEGACY_KEY = 'csb_envoi_axonaut_signature_img';
+let signatureCache = '';
+function getSignatureImg(){ return signatureCache; }
+function setSignatureImg(dataUrl){
+  signatureCache = dataUrl || '';
+  saveSharedSetting('signature', signatureCache).catch(()=>{});
+}
+async function refreshSignatureCache(){
+  try{
+    const shared = await fetchSharedSetting('signature');
+    if(shared){
+      signatureCache = shared;
+    } else {
+      let legacy = '';
+      try{ legacy = localStorage.getItem(SIGNATURE_LEGACY_KEY) || ''; }catch(e){}
+      if(legacy){ signatureCache = legacy; saveSharedSetting('signature', legacy).catch(()=>{}); }
+    }
+  }catch(e){ /* échec réseau : cache déjà en mémoire conservé tel quel */ }
+}
 function renderSignaturePreview(){
   const sig = getSignatureImg();
   const img = document.getElementById('signaturePreview');
@@ -2847,15 +2876,14 @@ document.getElementById('signatureFileInput').addEventListener('change', (e) => 
   if(!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    try{ localStorage.setItem(SIGNATURE_KEY, reader.result); }
-    catch(err){ alert("Échec de l'enregistrement de la signature (image trop grande ?)."); return; }
+    setSignatureImg(reader.result);
     renderSignaturePreview();
     e.target.value = '';
   };
   reader.readAsDataURL(file);
 });
 document.getElementById('signatureRemoveBtn').addEventListener('click', () => {
-  try{ localStorage.removeItem(SIGNATURE_KEY); }catch(e){}
+  setSignatureImg('');
   renderSignaturePreview();
 });
 
@@ -2937,6 +2965,7 @@ async function loadSettingsForm(){
   document.getElementById('colCustomsCategory').value = colCfg.customsCategory;
   document.getElementById('colCustomsOrigin').value = colCfg.customsOrigin;
   document.getElementById('colCustomsHsCode').value = colCfg.customsHsCode;
+  await refreshSignatureCache();
   renderSignaturePreview();
   renderLogoPreview();
   const feCfg = await getFeConfig();

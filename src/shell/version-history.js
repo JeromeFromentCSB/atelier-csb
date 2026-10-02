@@ -2,6 +2,16 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.35', items: [
+    "Nouveau module « Recherche / Éditeur » : explorateur des programmes de broderie (.DST, .PES, .PXF), qui remplace l'ancien onglet Visualiseur de Gestion Casaque",
+    "Recherche / Éditeur : arborescence façon Explorateur Windows (Dropbox détecté automatiquement, « Ce PC » avec les vrais noms de lecteurs, « Réseau » avec détection automatique des ordinateurs + ajout manuel d'un chemin réseau mémorisé)",
+    "Recherche / Éditeur : recherche par nom de fichier dans le dossier sélectionné et tous ses sous-dossiers, résultats affichés au fur et à mesure qu'ils sont trouvés",
+    "Recherche / Éditeur : trois modes d'affichage (vignettes, liste détaillée avec colonnes Nom/Modifié le/Type/Taille, liste simple)",
+    "Recherche / Éditeur : clic droit sur un fichier → Aperçu, Ouvrir avec l'application associée, ou Supprimer (déplacé vers la corbeille, avec confirmation)",
+    "Gestion Casaque / Gestion Commande : réglages Colissimo (adresse expéditeur, code SH, Worker) et signature désormais partagés entre les deux modules au lieu d'être ressaisis séparément dans chacun",
+    "Gestion Commande : référence produit affichée sur le Bon de fabrication",
+    "Stock de Fil : dans le Nuancier, une couleur recherchée trouvée telle quelle affiche aussi les 2 teintes les plus proches au-dessus et en dessous",
+  ]},
   { v: '0.2.34', items: [
     "Appli mobile Photos commandes : filtre « Non facturées » actif par défaut à l'ouverture",
     "Appli mobile Photos commandes : icône 👁 sur chaque commande pour voir le détail des lignes (titre, référence, quantité)",

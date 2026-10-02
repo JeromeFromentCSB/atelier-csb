@@ -1,6 +1,8 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, safeStorage, dialog } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
+const { exec } = require('node:child_process');
 const { autoUpdater } = require('electron-updater');
 const vtracer = require('@visioncortex/vtracer');
 
@@ -195,6 +197,11 @@ app.on('window-all-closed', () => {
 ipcMain.handle('csb:get-config', () => readConfig());
 ipcMain.handle('csb:set-config', (_event, partial) => writeConfig(partial));
 ipcMain.handle('csb:open-external', (_event, url) => shell.openExternal(url));
+// shell.openPath ne lève jamais d'exception : il résout une chaîne vide en cas de succès,
+// ou un message d'erreur sinon (ex. aucune appli associée à l'extension).
+ipcMain.handle('csb:open-path', (_event, filePath) => shell.openPath(filePath));
+// Déplace vers la corbeille (récupérable), plutôt qu'une suppression définitive.
+ipcMain.handle('csb:trash-file', (_event, filePath) => shell.trashItem(filePath));
 
 // Identifiants des sites fournisseurs (onglet Fournisseurs) : chiffrés avec le trousseau du
 // système (Windows DPAPI / Keychain Mac) via safeStorage, propres à ce poste — jamais envoyés
@@ -226,6 +233,229 @@ ipcMain.handle('csb:cred-delete', (_event, origin) => {
 });
 ipcMain.handle('csb:install-update', () => autoUpdater.quitAndInstall());
 ipcMain.handle('csb:app-version', () => app.getVersion());
+
+// ---------- Explorateur de fichiers local (module Recherche / Éditeur) ----------
+// Remonte la chaîne de dossiers parents jusqu'à la racine (ex. "C:\"), pour
+// construire un fil d'Ariane cliquable côté renderer sans lui donner accès
+// au module Node "path".
+function buildAncestors(dirPath) {
+  const list = [];
+  let cur = dirPath;
+  while (true) {
+    list.unshift({ name: path.basename(cur) || cur, path: cur });
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return list;
+}
+// Récupère nom de volume / type / cible réseau de chaque lecteur via
+// PowerShell (CIM), pour afficher des libellés "à la Explorateur Windows"
+// (ex. "Broderie Générale (\\SB-CONFECTION) (B:)"). Best-effort : si
+// PowerShell échoue pour une raison quelconque, on retombe sur la simple
+// lettre de lecteur plus bas.
+function getWindowsDriveDetails() {
+  return new Promise((resolve) => {
+    // PowerShell écrit sa sortie redirigée dans l'encodage console (page de
+    // code OEM/ANSI du poste), que Node décode ensuite en UTF-8 : les
+    // lettres accentuées (ex. "Générale") ressortaient donc en "?". On
+    // contourne le problème en faisant encoder le JSON en Base64 par
+    // PowerShell lui-même (texte pur ASCII, insensible à la page de code),
+    // puis en le décodant en UTF-8 côté Node.
+    const psCmd = '$json = Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,VolumeName,ProviderName,DriveType | ConvertTo-Json -Compress; ' +
+      '[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$json))';
+    exec('powershell -NoProfile -NonInteractive -Command "' + psCmd.replace(/"/g, '\\"') + '"', { timeout: 6000, windowsHide: true }, (err, stdout) => {
+      if (err || !stdout) return resolve({});
+      try {
+        const jsonStr = Buffer.from(stdout.trim(), 'base64').toString('utf8');
+        let data = JSON.parse(jsonStr);
+        if (!Array.isArray(data)) data = [data];
+        const map = {};
+        data.forEach((d) => { if (d && d.DeviceID) map[String(d.DeviceID).toUpperCase()] = d; });
+        resolve(map);
+      } catch (e) { resolve({}); }
+    });
+  });
+}
+ipcMain.handle('csb:list-drives', async () => {
+  if (process.platform !== 'win32') return [{ name: '/', path: '/', isNetwork: false }];
+  const details = await getWindowsDriveDetails();
+  const drives = [];
+  for (let i = 65; i <= 90; i++) {
+    const letter = String.fromCharCode(i) + ':';
+    const root = letter + '\\';
+    try {
+      if (!fs.existsSync(root)) continue;
+      const info = details[letter];
+      const isNetwork = !!info && info.DriveType === 4;
+      const label = info && info.VolumeName ? info.VolumeName : null;
+      const provider = info && info.ProviderName ? info.ProviderName : null;
+      let name = label ? label + ' (' + letter + ')' : letter;
+      if (isNetwork) name = (label || (provider ? path.basename(provider) : letter)) + (provider ? ' (' + provider + ')' : '') + ' (' + letter + ')';
+      drives.push({ name, path: root, isNetwork });
+    } catch (e) { /* lecteur inaccessible (lecteur optique vide...) */ }
+  }
+  return drives;
+});
+
+// ---------- Dropbox (dossiers personnel/équipe détectés automatiquement) ----------
+ipcMain.handle('csb:detect-dropbox', () => {
+  const candidates = [
+    path.join(app.getPath('appData'), 'Dropbox', 'info.json'),
+    path.join(os.homedir(), 'AppData', 'Local', 'Dropbox', 'info.json'),
+  ];
+  for (const infoPath of candidates) {
+    try {
+      if (!fs.existsSync(infoPath)) continue;
+      const info = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+      const results = [];
+      for (const key of ['business', 'personal']) {
+        const entry = info[key];
+        if (entry && entry.path && fs.existsSync(entry.path)) {
+          const label = entry.team ? entry.team + ' Dropbox' : 'Dropbox';
+          results.push({ name: label, path: entry.path });
+        }
+      }
+      if (results.length) return results;
+    } catch (e) { /* ignore, on essaie le chemin candidat suivant */ }
+  }
+  return [];
+});
+
+// ---------- Réseau : ordinateurs/partages visibles (best-effort, via "net view") ----------
+// La découverte réseau Windows classique (navigateur NetBIOS/SMB) est
+// best-effort : certains réseaux la désactivent, auquel cas ces commandes
+// renvoient simplement une liste vide et l'ajout manuel d'un chemin réseau
+// (\\serveur\partage, déjà disponible dans l'appli) reste le moyen fiable.
+function execNetView(target) {
+  return new Promise((resolve) => {
+    const cmd = target ? 'net view ' + target : 'net view';
+    exec(cmd, { timeout: 8000, windowsHide: true }, (err, stdout) => resolve(stdout || ''));
+  });
+}
+ipcMain.handle('csb:list-network-computers', async () => {
+  if (process.platform !== 'win32') return [];
+  const stdout = await execNetView(null);
+  const names = [];
+  stdout.split(/\r?\n/).forEach((line) => {
+    const m = line.match(/^\\\\(\S+)/);
+    if (m) names.push(m[1]);
+  });
+  return names;
+});
+ipcMain.handle('csb:list-network-shares', async (_event, computerName) => {
+  if (process.platform !== 'win32') return [];
+  const stdout = await execNetView('\\\\' + computerName);
+  const shares = [];
+  let inTable = false;
+  stdout.split(/\r?\n/).forEach((line) => {
+    if (/^-{3,}/.test(line.trim())) { inTable = !inTable; return; }
+    if (!inTable) return;
+    const m = line.match(/^(\S+)\s+(\S+)/);
+    if (m && /isk/i.test(m[2])) shares.push(m[1]);
+  });
+  return shares.map((s) => ({ name: s, path: '\\\\' + computerName + '\\' + s }));
+});
+ipcMain.handle('csb:pick-folder', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const res = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
+  if (res.canceled || !res.filePaths.length) return null;
+  return res.filePaths[0];
+});
+ipcMain.handle('csb:list-dir', (_event, dirPath) => {
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const items = entries.map((e) => {
+      const full = path.join(dirPath, e.name);
+      let size = 0, mtimeMs = 0;
+      try { const st = fs.statSync(full); size = st.size; mtimeMs = st.mtimeMs; } catch (e2) { /* lien mort, permission... */ }
+      return {
+        name: e.name, path: full, isDir: e.isDirectory(),
+        ext: e.isDirectory() ? '' : path.extname(e.name).toLowerCase().replace(/^\./, ''),
+        size, mtimeMs,
+      };
+    });
+    return { path: dirPath, ancestors: buildAncestors(dirPath), entries: items };
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+});
+ipcMain.handle('csb:read-file-bytes', (_event, filePath) => new Uint8Array(fs.readFileSync(filePath)));
+
+// Recherche récursive (dossier courant + tous ses sous-dossiers), filtrée par
+// extension et par un mot dans le nom de fichier — en flux : les résultats
+// sont envoyés au renderer par lots au fur et à mesure qu'on les trouve
+// (plutôt qu'en un seul bloc à la fin), pour un affichage progressif. Le
+// parcours avance un dossier à la fois via setImmediate, afin de ne jamais
+// bloquer le process principal (important sur une arborescence réseau
+// lente) et de laisser les lots déjà envoyés arriver côté renderer.
+// Plafonnée pour rester réactive même sur une arborescence volumineuse.
+// Une recherche en remplace une autre : seule la plus récente (activeSearchId)
+// va à son terme, les précédentes s'arrêtent dès leur prochain tick.
+const SEARCH_FILES_LIMIT = 2000;
+const SEARCH_BATCH_SIZE = 60;
+const SEARCH_BATCH_DELAY_MS = 120;
+let searchRequestCounter = 0;
+let activeSearchId = 0;
+ipcMain.handle('csb:search-files-start', (event, { rootPath, query, exts }) => {
+  const requestId = ++searchRequestCounter;
+  activeSearchId = requestId;
+  // Chaque module tourne dans sa propre <iframe> (nodeIntegrationInSubFrames),
+  // avec son propre ipcRenderer isolé : event.sender.send() livre au cadre
+  // PRINCIPAL de la fenêtre (le shell), jamais à cette iframe, et les
+  // écouteurs onSearchFilesProgress/onSearchFilesDone ne recevaient donc
+  // jamais rien. event.senderFrame cible le cadre exact d'où vient l'appel.
+  const targetFrame = event.senderFrame;
+  function sendToFrame(channel, payload) {
+    try { if (targetFrame) targetFrame.send(channel, payload); } catch (e) { /* cadre fermé entre-temps */ }
+  }
+  const queryLower = (query || '').toLowerCase();
+  const extList = exts || [];
+
+  let batch = [];
+  let total = 0;
+  let truncated = false;
+  let lastFlush = Date.now();
+  const dirQueue = [rootPath];
+
+  function flush(force) {
+    const now = Date.now();
+    if (batch.length && (force || now - lastFlush >= SEARCH_BATCH_DELAY_MS || batch.length >= SEARCH_BATCH_SIZE)) {
+      sendToFrame('csb:search-files-progress', { requestId, results: batch });
+      batch = [];
+      lastFlush = now;
+    }
+  }
+
+  function step() {
+    if (requestId !== activeSearchId) return; // remplacée par une recherche plus récente
+    if (truncated || !dirQueue.length) {
+      flush(true);
+      sendToFrame('csb:search-files-done', { requestId, total, truncated });
+      return;
+    }
+    const dir = dirQueue.shift();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { entries = []; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { dirQueue.push(full); continue; }
+      const ext = path.extname(e.name).toLowerCase().replace(/^\./, '');
+      if (extList.length && !extList.includes(ext)) continue;
+      if (queryLower && !e.name.toLowerCase().includes(queryLower)) continue;
+      let size = 0, mtimeMs = 0;
+      try { const st = fs.statSync(full); size = st.size; mtimeMs = st.mtimeMs; } catch (e2) { /* lien mort, permission... */ }
+      batch.push({ name: e.name, path: full, dir, ext, size, mtimeMs });
+      total++;
+      if (total >= SEARCH_FILES_LIMIT) { truncated = true; break; }
+    }
+    flush(false);
+    setImmediate(step);
+  }
+  setImmediate(step);
+
+  return requestId;
+});
 
 // ---------- Image produit → dossier partagé Axonaut (Synology) ----------
 // Axonaut n'a pas de champ "image" dans son API produit (confirmé via leur doc v2) : pas moyen

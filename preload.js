@@ -29,6 +29,26 @@ contextBridge.exposeInMainWorld('csbHost', {
   credDelete: (origin) => ipcRenderer.invoke('csb:cred-delete', origin),
   saveAxonautImage: (filename, dataBase64) => ipcRenderer.invoke('csb:save-axonaut-image', { filename, dataBase64 }),
   getAxonautImage: (reference) => ipcRenderer.invoke('csb:get-axonaut-image', reference),
+  listDrives: () => ipcRenderer.invoke('csb:list-drives'),
+  detectDropbox: () => ipcRenderer.invoke('csb:detect-dropbox'),
+  listNetworkComputers: () => ipcRenderer.invoke('csb:list-network-computers'),
+  listNetworkShares: (computerName) => ipcRenderer.invoke('csb:list-network-shares', computerName),
+  pickFolder: () => ipcRenderer.invoke('csb:pick-folder'),
+  listDir: (dirPath) => ipcRenderer.invoke('csb:list-dir', dirPath),
+  readFileBytes: (filePath) => ipcRenderer.invoke('csb:read-file-bytes', filePath),
+  startSearchFiles: (rootPath, query, exts) => ipcRenderer.invoke('csb:search-files-start', { rootPath, query, exts }),
+  onSearchFilesProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('csb:search-files-progress', listener);
+    return () => ipcRenderer.removeListener('csb:search-files-progress', listener);
+  },
+  onSearchFilesDone: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('csb:search-files-done', listener);
+    return () => ipcRenderer.removeListener('csb:search-files-done', listener);
+  },
+  openPath: (filePath) => ipcRenderer.invoke('csb:open-path', filePath),
+  trashFile: (filePath) => ipcRenderer.invoke('csb:trash-file', filePath),
   onWebviewOpenTab: (callback) => {
     const listener = (_event, url) => callback(url);
     ipcRenderer.on('csb:webview-open-tab', listener);

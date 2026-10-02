@@ -34,6 +34,7 @@
       { key: 'export', label: 'Exporter une sauvegarde' },
       { key: 'import', label: 'Importer une sauvegarde' }
     ] },
+    { id: 'recherche_editeur', label: 'Recherche / Éditeur', icon: '🔎', path: '../../modules/recherche_editeur/index.html', perms: [] },
     { id: 'simulateur', label: 'Simulateur', icon: '👕', path: '../../modules/simulateur/index.html', perms: [] },
     { id: 'prospection', label: 'Prospection', icon: '📍', path: '../../modules/prospection/index.html', perms: [] },
     { id: 'pointage', label: 'Pointage', icon: '🕒', path: '../../modules/pointage/index.html', perms: [] },

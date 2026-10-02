@@ -686,37 +686,34 @@
   .top-pane.active{ display:block; }
 
   /* ====== Styles scopés de l'app Fabrication (Gestion_Prog_Broderie_CSB) ====== */
-  /* Le nouvel onglet Visualiseur partage ces mêmes jetons de design et
-     composants de base (carte, boutons, champs, texte atténué), d'où les
-     sélecteurs doublés ci-dessous plutôt qu'un jeu de styles dupliqué. */
-  #fabricationPane, #visualiseurPane{
+  #fabricationPane{
     --fab-bg:#F5F2EC; --fab-panel:#ffffff; --fab-ink:#211C16; --fab-muted:#8A8074;
     --fab-line:#E7E0D3; --fab-accent:#B5452F; --fab-accent-ink:#ffffff;
     --fab-accent-soft:#F7E3DC; --fab-ok:#3E7A52; --fab-warn:#9a6a12; --fab-shadow:0 1px 3px rgba(33,28,22,.08);
   }
-  #fabricationPane *, #visualiseurPane *{box-sizing:border-box;}
-  #fabricationPane, #visualiseurPane{margin:0;background:var(--fab-bg);color:var(--fab-ink);font:14px/1.45 'Public Sans',"Segoe UI",system-ui,Arial,sans-serif;}
-  #fabricationPane main, #visualiseurPane main{max-width:none;margin:0;padding:20px 28px 60px;}
+  #fabricationPane *{box-sizing:border-box;}
+  #fabricationPane{margin:0;background:var(--fab-bg);color:var(--fab-ink);font:14px/1.45 'Public Sans',"Segoe UI",system-ui,Arial,sans-serif;}
+  #fabricationPane main{max-width:none;margin:0;padding:20px 28px 60px;}
   #fabricationPane section.card[data-tab]{display:none;}
   #fabricationPane section.card[data-tab].active{display:block;}
-  #fabricationPane section.card, #visualiseurPane section.card{background:var(--fab-panel);border:1px solid var(--fab-line);border-radius:10px;padding:18px 20px;margin-bottom:20px;box-shadow:var(--fab-shadow);}
-  #fabricationPane section.card h2, #visualiseurPane section.card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  #fabricationPane section.card{background:var(--fab-panel);border:1px solid var(--fab-line);border-radius:10px;padding:18px 20px;margin-bottom:20px;box-shadow:var(--fab-shadow);}
+  #fabricationPane section.card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
   #fabricationPane section.card h2 .n{width:22px;height:22px;border-radius:50%;background:var(--fab-accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;}
-  #fabricationPane .row, #visualiseurPane .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-  #fabricationPane .muted, #visualiseurPane .muted{color:var(--fab-muted);}
-  #fabricationPane small.hint, #visualiseurPane small.hint{color:var(--fab-muted);font-size:12px;display:block;margin-top:8px;}
+  #fabricationPane .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  #fabricationPane .muted{color:var(--fab-muted);}
+  #fabricationPane small.hint{color:var(--fab-muted);font-size:12px;display:block;margin-top:8px;}
   #fabricationPane input[type=text], #fabricationPane input[type=number], #fabricationPane input[type=url]{
     border:1px solid var(--fab-line);border-radius:6px;padding:6px 9px;font-size:13px;background:#fff;color:var(--fab-ink);
   }
   #fabricationPane input[type=number]{width:78px;}
-  #fabricationPane button, #visualiseurPane button{border:1px solid var(--fab-line);background:#fff;border-radius:6px;padding:7px 13px;font-size:13px;cursor:pointer;color:var(--fab-ink);}
-  #fabricationPane button:hover, #visualiseurPane button:hover{border-color:#c9c1af;}
-  #fabricationPane button.primary, #visualiseurPane button.primary{background:linear-gradient(135deg, var(--fab-ink), var(--fab-accent));color:#fff;border-color:transparent;}
-  #fabricationPane button.primary:hover, #visualiseurPane button.primary:hover{background:#711824;}
-  #fabricationPane button.ghost, #visualiseurPane button.ghost{background:transparent;border-color:transparent;color:var(--fab-muted);padding:5px 8px;}
-  #fabricationPane button.ghost:hover, #visualiseurPane button.ghost:hover{color:var(--fab-ink);}
-  #fabricationPane button.icon, #visualiseurPane button.icon{padding:4px 7px;font-size:13px;}
-  #fabricationPane button:disabled, #visualiseurPane button:disabled{opacity:.4;cursor:not-allowed;}
+  #fabricationPane button{border:1px solid var(--fab-line);background:#fff;border-radius:6px;padding:7px 13px;font-size:13px;cursor:pointer;color:var(--fab-ink);}
+  #fabricationPane button:hover{border-color:#c9c1af;}
+  #fabricationPane button.primary{background:linear-gradient(135deg, var(--fab-ink), var(--fab-accent));color:#fff;border-color:transparent;}
+  #fabricationPane button.primary:hover{background:#711824;}
+  #fabricationPane button.ghost{background:transparent;border-color:transparent;color:var(--fab-muted);padding:5px 8px;}
+  #fabricationPane button.ghost:hover{color:var(--fab-ink);}
+  #fabricationPane button.icon{padding:4px 7px;font-size:13px;}
+  #fabricationPane button:disabled{opacity:.4;cursor:not-allowed;}
   #fabricationPane .thumb{background:#fbfaf7;border:1px solid var(--fab-line);border-radius:5px;display:block;flex:none;}
   #fabricationPane .thumb-v{border-color:#c99a00;box-shadow:0 0 0 1px #c99a0033;}
   #fabricationPane .name-input{border:1px solid transparent;background:transparent;border-radius:4px;padding:3px 5px;width:100%;font-size:13px;}
@@ -739,38 +736,7 @@
   #fabricationPane #dropzone{border:2px dashed var(--fab-line);border-radius:8px;padding:12px;text-align:center;color:var(--fab-muted);font-size:12.5px;margin-bottom:12px;transition:.15s;}
   #fabricationPane #dropzone.over{border-color:var(--fab-accent);background:var(--fab-accent-soft);color:var(--fab-accent);}
 
-  /* -------- Visualiseur (onglet indépendant, hors bibliothèque/assemblage) -------- */
-  #visualiseurPane #vizDropzone{border:2px dashed var(--fab-line);border-radius:8px;padding:22px 12px;text-align:center;color:var(--fab-muted);font-size:12.5px;margin-bottom:12px;transition:.15s;}
-  #visualiseurPane #vizDropzone.over{border-color:var(--fab-accent);background:var(--fab-accent-soft);color:var(--fab-accent);}
-  #visualiseurPane .viz-layout{display:flex;gap:20px;align-items:flex-start;}
-  #visualiseurPane .viz-preview-col{flex:1.3 1 0;min-width:0;text-align:center;}
-  #visualiseurPane .viz-info-col{flex:1 1 0;min-width:0;background:#fbfaf7;border:1px solid var(--fab-line);border-radius:8px;padding:14px 16px;font-size:13px;}
-  #visualiseurPane .viz-info-col table{width:100%;border-collapse:collapse;table-layout:auto;font-size:inherit;min-width:0;}
-  #visualiseurPane .viz-info-col td{padding:4px 8px 4px 0;border-bottom:1px solid var(--fab-line);vertical-align:top;overflow:visible;text-overflow:clip;white-space:normal;}
-  #visualiseurPane .viz-info-col td:first-child{color:var(--fab-muted);white-space:nowrap;padding-right:12px;width:1%;}
-  #visualiseurPane .viz-info-col h3{font-size:13px;margin:14px 0 6px;}
-  #visualiseurPane .viz-info-col h3:first-child{margin-top:0;}
-  #visualiseurPane .viz-ops-scroll{max-height:340px;overflow-y:auto;border:1px solid var(--fab-line);border-radius:6px;padding:0 8px;}
-  #visualiseurPane .viz-ops-scroll table{margin:0;}
-  #visualiseurPane .viz-op-thumb{width:34px;height:26px;background:#fbfaf7;border:1px solid var(--fab-line);border-radius:4px;display:block;flex:none;vertical-align:middle;margin-right:6px;}
-  #visualiseurPane tr.viz-op-row-color td{background:#fdf6e3;font-weight:600;border-top:2px solid #c9a227;border-bottom:2px solid #c9a227;padding-top:6px;padding-bottom:6px;}
-  #visualiseurPane tr.viz-op-row-clickable{cursor:pointer;}
-  #visualiseurPane tr.viz-op-row-clickable:hover td{background:#f4f1ec;}
-  #visualiseurPane tr.viz-op-selected td{background:#f4e2e4 !important;}
-  #visualiseurPane .viz-op-el{display:flex;align-items:center;}
-  #visualiseurPane .viz-btn-set-trim{font-size:11px;padding:2px 7px;margin-top:2px;}
-  #visualiseurPane tr.viz-op-row-trim td{padding-top:0;font-size:12px;}
-  #visualiseurPane .viz-edit-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
-  #visualiseurPane #vizCanvas{background:#fdfcf9;border:1px solid var(--fab-line);border-radius:8px;display:block;max-width:100%;max-height:440px;width:auto;height:auto;cursor:grab;touch-action:none;}
-  #visualiseurPane #vizIconImg{display:block;margin:0 auto;max-width:100%;max-height:300px;border:1px solid var(--fab-line);border-radius:8px;background:#fdfcf9;}
-  #visualiseurPane .preview-zoom-controls{display:flex;gap:4px;align-items:center;margin-top:8px;justify-content:center;}
-  #visualiseurPane .preview-zoom-controls button{padding:4px 9px;font-size:12px;}
-  #visualiseurPane .color-swatch-dot{display:inline-block;width:13px;height:13px;border-radius:4px;border:1px solid rgba(0,0,0,.2);vertical-align:-2px;margin-right:5px;}
-  @media (max-width: 800px){
-    #visualiseurPane .viz-layout{flex-direction:column;}
-  }
   #fabricationPane #importInput{display:none;}
-  #visualiseurPane #vizFileInput{display:none;}
   #fabricationPane .lib-row{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid #f0ece2;}
   #fabricationPane .lib-row.dim{opacity:.55;}
   #fabricationPane .lib-row.indented{padding-left:20px;}
@@ -823,9 +789,9 @@
   #fabricationPane .group-children{display:none;padding:8px 8px 8px 30px;background:#fbfaf7;}
   #fabricationPane .group-children.open{display:block;}
   #fabricationPane #combinedPreviewWrap{display:flex;flex-direction:column;gap:8px;}
-  #fabricationPane .preview-frame, #visualiseurPane .preview-frame{position:relative;display:inline-block;max-width:100%;text-align:center;}
+  #fabricationPane .preview-frame{position:relative;display:inline-block;max-width:100%;text-align:center;}
   #fabricationPane .assembly-previews-row > div{text-align:center;}
-  #fabricationPane .preview-frame-label, #visualiseurPane .preview-frame-label{position:absolute;top:6px;left:6px;font-size:11px;font-weight:600;color:var(--fab-ink);background:rgba(255,255,255,.85);padding:2px 7px;border-radius:4px;pointer-events:none;z-index:2;max-width:calc(100% - 16px);text-align:left;}
+  #fabricationPane .preview-frame-label{position:absolute;top:6px;left:6px;font-size:11px;font-weight:600;color:var(--fab-ink);background:rgba(255,255,255,.85);padding:2px 7px;border-radius:4px;pointer-events:none;z-index:2;max-width:calc(100% - 16px);text-align:left;}
   #fabricationPane #combinedCanvas{background:#fdfcf9;border:1px solid var(--fab-line);border-radius:8px;display:block;max-width:100%;max-height:220px;width:auto;height:auto;cursor:grab;touch-action:none;}
   #fabricationPane #trousseCombinedCanvas{background:#fdfcf9;border:1px solid #c99a00;border-radius:8px;display:block;max-width:100%;max-height:220px;width:auto;height:auto;box-shadow:0 0 0 1px #c99a0033;}
   #fabricationPane #dimsSummary{display:none;}
@@ -913,7 +879,6 @@
 <nav id="topAppTabs">
   <button class="top-tab-btn active" data-toppane="envoiPane">📋 Liste Casaque</button>
   <button class="top-tab-btn" data-toppane="fabricationPane">🧵 Fabrication</button>
-  <button class="top-tab-btn" data-toppane="visualiseurPane">🔍 Visualiseur</button>
   <button class="top-tab-btn" data-toppane="paramsPane">⚙ Paramètres</button>
   <span class="top-tabs-sep" id="fabTopSep"></span>
   <div class="tabs" id="tabBar">
@@ -1441,49 +1406,6 @@
 
 </div><!-- /#fabricationPane -->
 
-<div id="visualiseurPane" class="top-pane">
-<main>
-  <section class="card">
-    <h2>🔍 Visualiseur de programme</h2>
-    <div class="viz-layout">
-      <div class="viz-preview-col">
-        <div id="vizDropzone">
-          <span id="vizDropzoneText">Glisse un .DST, .PES, .PXF ou .VP3 ici, ou<br>
-          <button id="vizBtnImport" type="button">choisir un fichier…</button></span>
-          <span id="vizDropzoneStatus" class="muted" style="display:none;"></span>
-          <input type="file" id="vizFileInput" accept=".dst,.pxf,.pes,.vp3">
-        </div>
-        <div class="preview-frame" id="vizPreviewFrame" style="display:none;">
-          <span class="preview-frame-label" id="vizPreviewLabel"></span>
-          <canvas id="vizCanvas" width="700" height="560"></canvas>
-        </div>
-        <img id="vizIconImg" style="display:none;">
-        <div class="preview-zoom-controls" id="vizZoomControls" style="display:none;">
-          <button id="vizBtnZoomOut" class="ghost icon" title="Zoom arrière">−</button>
-          <button id="vizBtnZoomReset" class="ghost" title="Réinitialiser vue">100%</button>
-          <button id="vizBtnZoomIn" class="ghost icon" title="Zoom avant">+</button>
-          <span class="muted" style="font-size:10.5px;">molette = zoom, glisser = déplacer</span>
-        </div>
-        <div class="muted" id="vizMarkerLegend" style="font-size:10.5px;text-align:center;margin-top:4px;display:none;">
-          <span style="color:#d2232a;">●✕</span> coupe-fil &nbsp; <span style="color:#5b6b8c;">○</span> saut simple
-          &nbsp; <label style="cursor:pointer;"><input type="checkbox" id="vizShowMarkersCb" checked style="vertical-align:middle;"> afficher les repères</label>
-        </div>
-        <div class="preview-zoom-controls" id="vizTransformControls" style="display:none;margin-top:6px;">
-          <button id="vizBtnFlipH" class="ghost icon" title="Symétrie horizontale (miroir gauche-droite)">⇋</button>
-          <button id="vizBtnFlipV" class="ghost icon" title="Symétrie verticale (miroir haut-bas)">⇵</button>
-          <button id="vizBtnRot90Ccw" class="ghost icon" title="Rotation 90° antihoraire">↺</button>
-          <button id="vizBtnRot90Cw" class="ghost icon" title="Rotation 90° horaire">↻</button>
-          <button id="vizBtnRot180" class="ghost icon" title="Rotation 180°">180°</button>
-        </div>
-      </div>
-      <div class="viz-info-col" id="vizInfoCol">
-        <span class="muted">Ouvre un fichier (glisser-déposer ou « choisir un fichier… ») pour voir ses informations ici.</span>
-      </div>
-    </div>
-  </section>
-</main>
-</div><!-- /#visualiseurPane -->
-
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
 <script src="../../src/shared/csb-prompt.js"></script>
@@ -1698,25 +1620,100 @@ function setConfig(cfg){
   try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
 }
 
-// ---------- Réglages Colissimo (Worker, expéditeur, codes produit, douane) ----------
-const COL_CFG_KEY = 'csb_envoi_colissimo_config';
-function getColConfig(){
-  const defaults = {
-    workerUrl:'', senderCompany:'', senderLine2:'', senderZip:'', senderCity:'', senderPhone:'', senderEori:'',
-    productDom:'DOM', productOm:'COM', productIntl:'', defaultWeight:'0.5', labelTopMargin:'15',
-    customsDesc:'Casaque de courses (textile)', customsValue:'50', customsCategory:'3', customsOrigin:'FR',
-    customsHsCode:''
-  };
-  try{
-    const raw = JSON.parse(localStorage.getItem(COL_CFG_KEY));
-    if(raw) return Object.assign(defaults, raw);
-  }catch(e){}
-  return defaults;
+// ---------- Réglages Colissimo + signature, PARTAGÉS (PocketBase) avec Gestion Commande ----------
+// Avant : localStorage propre à ce module (clé "csb_envoi_colissimo_config" / signature à
+// part), donc à ressaisir séparément dans Gestion Commande, et perdu à chaque réinstallation
+// ou changement de poste. Désormais stockés dans PocketBase (collection "axonaut_settings",
+// mêmes clés "colissimo"/"signature" que Gestion Commande) : on ne les saisit plus qu'une
+// fois, synchronisé entre les deux modules.
+// Mis en cache en mémoire pour que le reste du code (très nombreux appels synchrones
+// existants) continue de fonctionner sans y toucher : refreshColSettingsCache() (re)charge
+// depuis PocketBase au démarrage et avant d'ouvrir les réglages/la fenêtre Colissimo ;
+// setColConfig()/setSignatureImg() mettent le cache à jour tout de suite (retour instantané
+// dans l'UI) puis sauvegardent en tâche de fond.
+function appSettingsBase(){
+  return getConfig().url.replace(/\/+$/,'') + '/api/collections/axonaut_settings/records';
 }
+async function fetchSharedSetting(key){
+  const filter = encodeURIComponent(`settings_key='${key}'`);
+  const res = await CSBAuth.authedFetch(appSettingsBase() + `?filter=(${filter})`);
+  if(!res.ok) throw new Error('fetchSharedSetting HTTP ' + res.status);
+  const json = await res.json();
+  const rec = (json.items && json.items[0]) || null;
+  return rec ? JSON.parse(rec.settings_value) : null;
+}
+async function saveSharedSetting(key, value){
+  try{
+    const filter = encodeURIComponent(`settings_key='${key}'`);
+    const res = await CSBAuth.authedFetch(appSettingsBase() + `?filter=(${filter})`);
+    const json = res.ok ? await res.json() : { items: [] };
+    const rec = (json.items && json.items[0]) || null;
+    const body = { settings_key: key, settings_value: JSON.stringify(value) };
+    if(rec){
+      await CSBAuth.authedFetch(appSettingsBase() + '/' + rec.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    } else {
+      await CSBAuth.authedFetch(appSettingsBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    }
+  }catch(e){ console.warn('Impossible de sauvegarder le réglage partagé', key, e); }
+}
+
+const COL_CFG_DEFAULTS = {
+  workerUrl:'', senderCompany:'', senderLine2:'', senderZip:'', senderCity:'', senderPhone:'', senderEori:'',
+  productDom:'DOM', productOm:'COM', productIntl:'', defaultWeight:'0.5', labelTopMargin:'15',
+  customsDesc:'Casaque de courses (textile)', customsValue:'50', customsCategory:'3', customsOrigin:'FR',
+  customsHsCode:''
+};
+const COL_CFG_LEGACY_KEY = 'csb_envoi_colissimo_config';
+const SIGNATURE_LEGACY_KEY = 'csb_envoi_signature_img';
+let colConfigCache = Object.assign({}, COL_CFG_DEFAULTS);
+let signatureCache = '';
+
+// Recharge les réglages partagés depuis PocketBase — avec reprise automatique, une seule
+// fois, d'une éventuelle ancienne valeur localStorage si rien n'existe encore côté serveur
+// (ne jamais écraser une vraie valeur serveur avec un échec réseau : en cas d'erreur on garde
+// simplement le cache déjà en mémoire).
+async function refreshColSettingsCache(){
+  try{
+    const shared = await fetchSharedSetting('colissimo');
+    if(shared){
+      colConfigCache = Object.assign({}, COL_CFG_DEFAULTS, shared);
+    } else {
+      let legacy = null;
+      try{ legacy = JSON.parse(localStorage.getItem(COL_CFG_LEGACY_KEY)); }catch(e){}
+      if(legacy){
+        colConfigCache = Object.assign({}, COL_CFG_DEFAULTS, legacy);
+        saveSharedSetting('colissimo', colConfigCache).catch(()=>{});
+      }
+    }
+  }catch(e){ /* échec réseau : cache déjà en mémoire (ou défauts) conservé tel quel */ }
+
+  try{
+    const sharedSig = await fetchSharedSetting('signature');
+    if(sharedSig){
+      signatureCache = sharedSig;
+    } else {
+      let legacySig = '';
+      try{ legacySig = localStorage.getItem(SIGNATURE_LEGACY_KEY) || ''; }catch(e){}
+      if(legacySig){
+        signatureCache = legacySig;
+        saveSharedSetting('signature', legacySig).catch(()=>{});
+      }
+    }
+  }catch(e){ /* échec réseau : cache déjà en mémoire conservé tel quel */ }
+
+  if(typeof loadSettingsForm === 'function') loadSettingsForm();
+}
+
+function getColConfig(){ return colConfigCache; }
 function setColConfig(patch){
-  const cfg = Object.assign(getColConfig(), patch);
-  try{ localStorage.setItem(COL_CFG_KEY, JSON.stringify(cfg)); }catch(e){}
-  return cfg;
+  colConfigCache = Object.assign({}, colConfigCache, patch);
+  saveSharedSetting('colissimo', colConfigCache).catch(()=>{});
+  return colConfigCache;
+}
+function getSignatureImg(){ return signatureCache; }
+function setSignatureImg(dataUrl){
+  signatureCache = dataUrl || '';
+  saveSharedSetting('signature', signatureCache).catch(()=>{});
 }
 
 // ---------- Correspondance nom de pays (tel qu'exporté par Excel) -> code ISO 2 lettres ----------
@@ -1809,7 +1806,8 @@ function todayISO(){
 // ---------- Fenêtre de préparation d'étiquette Colissimo ----------
 let colModalRecord = null;
 
-function openColissimoModal(r){
+async function openColissimoModal(r){
+  await refreshColSettingsCache(); // reprend les réglages les plus récents (ex. modifiés depuis Gestion Commande)
   colModalRecord = r;
   const cfg = getColConfig();
   const isoGuess = countryToISO(r.pays);
@@ -3748,10 +3746,6 @@ function loadSettingsForm(){
   document.getElementById('colCustomsHsCode').value = colCfg.customsHsCode;
   renderSignaturePreview();
 }
-const SIGNATURE_KEY = 'csb_envoi_signature_img';
-function getSignatureImg(){
-  try{ return localStorage.getItem(SIGNATURE_KEY) || ''; }catch(e){ return ''; }
-}
 function renderSignaturePreview(){
   const sig = getSignatureImg();
   const img = document.getElementById('signaturePreview');
@@ -3769,15 +3763,14 @@ document.getElementById('signatureFileInput').addEventListener('change', (e) => 
   if(!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    try{ localStorage.setItem(SIGNATURE_KEY, reader.result); }
-    catch(err){ alert('Échec de l\'enregistrement de la signature (image trop grande ?).'); return; }
+    setSignatureImg(reader.result);
     renderSignaturePreview();
     e.target.value = '';
   };
   reader.readAsDataURL(file);
 });
 document.getElementById('signatureRemoveBtn').addEventListener('click', () => {
-  try{ localStorage.removeItem(SIGNATURE_KEY); }catch(e){}
+  setSignatureImg('');
   renderSignaturePreview();
 });
 function resyncAllLots(){
@@ -4526,6 +4519,7 @@ function escapeHtml(str){
 // ---------- Démarrage (appelé uniquement après connexion réussie) ----------
 function initApp(){
 loadSettingsForm();
+refreshColSettingsCache(); // charge les réglages Colissimo/signature partagés (PocketBase) en tâche de fond
 loadColumnOrder();
 renderHeader();
 updateHeaderHeight();
@@ -4636,188 +4630,9 @@ CSBAuth.onChange(() => {
 </script>
 
 <!-- ====== Script de l'app Fabrication (Gestion_Prog_Broderie_CSB) ====== -->
+<script src="../../src/shared/embroidery-codec.js"></script>
 <script>
 'use strict';
-
-/* ============================================================================
-   1) CODEC DST — décodage/encodage bit-à-bit (Tajima).
-   Validé : round-trip octet-pour-octet identique sur fichier réel,
-   décomposition ternaire équilibrée testée exhaustivement (-121..121),
-   décomposition en programmes/segments validée sur fichier composite réel.
-   Unité DST = 0.1 mm.
-============================================================================ */
-const STITCH = 0, JUMP = 1, COLOR = 2, END = 3;
-
-function parseDstHeader(bytes) {
-  const text = new TextDecoder('ascii').decode(bytes.slice(0, 512));
-  const grab = (label) => {
-    const m = text.match(new RegExp(label + ':\\s*([+\\-]?\\d+)'));
-    return m ? parseInt(m[1], 10) : 0;
-  };
-  const nameMatch = text.match(/LA:(.{0,16})/);
-  return {
-    name: nameMatch ? nameMatch[1].trim() : '',
-    stitchCount: grab('ST'), colorCount: grab('CO'),
-    plusX: grab('\\+X'), minusX: grab('-X'), plusY: grab('\\+Y'), minusY: grab('-Y'),
-  };
-}
-
-function decodeDstBody(bytes, headerLen = 512) {
-  const body = bytes.slice(headerLen);
-  const n = Math.floor(body.length / 3);
-  const stitches = [];
-  let x = 0, y = 0;
-  for (let i = 0; i < n; i++) {
-    const b1 = body[i * 3], b2 = body[i * 3 + 1], b3 = body[i * 3 + 2];
-    let dx = 0, dy = 0;
-    if (b1 & 0x01) dx += 1;   if (b1 & 0x02) dx -= 1;
-    if (b1 & 0x04) dx += 9;   if (b1 & 0x08) dx -= 9;
-    if (b1 & 0x80) dy += 1;   if (b1 & 0x40) dy -= 1;
-    if (b1 & 0x20) dy += 9;   if (b1 & 0x10) dy -= 9;
-    if (b2 & 0x01) dx += 3;   if (b2 & 0x02) dx -= 3;
-    if (b2 & 0x04) dx += 27;  if (b2 & 0x08) dx -= 27;
-    if (b2 & 0x80) dy += 3;   if (b2 & 0x40) dy -= 3;
-    if (b2 & 0x20) dy += 27;  if (b2 & 0x10) dy -= 27;
-    if (b3 & 0x04) dx += 81;  if (b3 & 0x08) dx -= 81;
-    if (b3 & 0x20) dy += 81;  if (b3 & 0x10) dy -= 81;
-
-    const isEnd = (b3 & 0xF3) === 0xF3;
-    if (isEnd) { stitches.push({ x, y, type: END }); break; }
-    const isColor = (b3 & 0xC3) === 0xC3;
-    const isJump = !!(b3 & 0x80);
-    x += dx; y += dy;
-    stitches.push({ x, y, type: isColor ? COLOR : (isJump ? JUMP : STITCH) });
-  }
-  return stitches;
-}
-
-function decodeDst(bytes) {
-  const header = parseDstHeader(bytes);
-  const stitches = decodeDstBody(bytes);
-  let minx = 0, maxx = 0, miny = 0, maxy = 0;
-  for (const s of stitches) {
-    if (s.type === END) continue;
-    minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x);
-    miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
-  }
-  return { header, stitches, bbox: { minx, maxx, miny, maxy } };
-}
-
-function mod3(n) { return ((n % 3) + 3) % 3; }
-
-function decomposeDelta(d) {
-  if (d < -121 || d > 121) throw new Error('delta hors plage (-121..121): ' + d);
-  const weights = [1, 3, 9, 27, 81];
-  const signs = {};
-  let r = d;
-  for (const w of weights) {
-    const m = mod3(r);
-    if (m === 0) { signs[w] = 0; r = r / 3; }
-    else if (m === 1) { signs[w] = 1; r = (r - 1) / 3; }
-    else { signs[w] = -1; r = (r + 1) / 3; }
-  }
-  if (r !== 0) throw new Error('décomposition impossible pour delta=' + d);
-  return signs;
-}
-
-function encodeMove(dx, dy, type) {
-  const sx = decomposeDelta(dx), sy = decomposeDelta(dy);
-  let b1 = 0, b2 = 0, b3 = 0x03;
-  if (sx[1] === 1) b1 |= 0x01; if (sx[1] === -1) b1 |= 0x02;
-  if (sx[9] === 1) b1 |= 0x04; if (sx[9] === -1) b1 |= 0x08;
-  if (sy[1] === 1) b1 |= 0x80; if (sy[1] === -1) b1 |= 0x40;
-  if (sy[9] === 1) b1 |= 0x20; if (sy[9] === -1) b1 |= 0x10;
-  if (sx[3] === 1) b2 |= 0x01; if (sx[3] === -1) b2 |= 0x02;
-  if (sx[27] === 1) b2 |= 0x04; if (sx[27] === -1) b2 |= 0x08;
-  if (sy[3] === 1) b2 |= 0x80; if (sy[3] === -1) b2 |= 0x40;
-  if (sy[27] === 1) b2 |= 0x20; if (sy[27] === -1) b2 |= 0x10;
-  if (sx[81] === 1) b3 |= 0x04; if (sx[81] === -1) b3 |= 0x08;
-  if (sy[81] === 1) b3 |= 0x20; if (sy[81] === -1) b3 |= 0x10;
-  if (type === JUMP) b3 |= 0x80;
-  if (type === COLOR) b3 |= 0xC0;
-  return [b1, b2, b3];
-}
-
-function padNum(n, width) { return String(Math.round(Math.abs(n))).padStart(width, ' ').slice(-width); }
-function padSigned(n, width) {
-  const sign = n < 0 ? '-' : '+';
-  return sign + String(Math.round(Math.abs(n))).padStart(width, ' ').slice(-width);
-}
-
-function buildDstHeader({ name, stitchCount, colorCount, plusX, minusX, plusY, minusY, ax = 0, ay = 0, mx = 0, my = 0 }) {
-  const enc = new TextEncoder();
-  let s = '';
-  s += 'LA:' + (name || '').substring(0, 16).padEnd(16, ' ') + '\r';
-  s += 'ST:' + padNum(stitchCount, 7) + '\r';
-  s += 'CO:' + padNum(colorCount, 3) + '\r';
-  s += '+X:' + padNum(plusX, 5) + '\r';
-  s += '-X:' + padNum(minusX, 5) + '\r';
-  s += '+Y:' + padNum(plusY, 5) + '\r';
-  s += '-Y:' + padNum(minusY, 5) + '\r';
-  s += 'AX:' + padSigned(ax, 5) + '\r';
-  s += 'AY:' + padSigned(ay, 5) + '\r';
-  s += 'MX:' + padSigned(mx, 5) + '\r';
-  s += 'MY:' + padSigned(my, 5) + '\r';
-  s += 'PD:******\r';
-  const bytes = new Uint8Array(512);
-  const head = enc.encode(s);
-  bytes.set(head, 0);
-  bytes[head.length] = 0x1a;
-  for (let i = head.length + 1; i < 512; i++) bytes[i] = 0x20;
-  return bytes;
-}
-
-function splitLongJump(dx, dy) {
-  const steps = [];
-  let rx = dx, ry = dy;
-  while (rx !== 0 || ry !== 0) {
-    const stepx = Math.max(-121, Math.min(121, rx));
-    const stepy = Math.max(-121, Math.min(121, ry));
-    steps.push([stepx, stepy]);
-    rx -= stepx; ry -= stepy;
-  }
-  return steps;
-}
-
-function encodeDst(records, meta) {
-  const bytesOut = [];
-  let x = 0, y = 0, colorCount = 0, stitchCount = 0;
-  for (const r of records) {
-    const dx = r.x - x, dy = r.y - y;
-    if (r.type === COLOR) colorCount++;
-    if (Math.abs(dx) > 121 || Math.abs(dy) > 121) {
-      const steps = splitLongJump(dx, dy);
-      for (let i = 0; i < steps.length; i++) {
-        const [sx, sy] = steps[i];
-        const t = (i === steps.length - 1) ? r.type : JUMP;
-        bytesOut.push(...encodeMove(sx, sy, t));
-        stitchCount++;
-      }
-    } else {
-      bytesOut.push(...encodeMove(dx, dy, r.type));
-      stitchCount++;
-    }
-    x = r.x; y = r.y;
-  }
-  bytesOut.push(0x00, 0x00, 0xF3);
-
-  let minx = 0, maxx = 0, miny = 0, maxy = 0;
-  for (const r of records) {
-    minx = Math.min(minx, r.x); maxx = Math.max(maxx, r.x);
-    miny = Math.min(miny, r.y); maxy = Math.max(maxy, r.y);
-  }
-  const last = records.length ? records[records.length - 1] : { x: 0, y: 0 };
-  const header = buildDstHeader({
-    name: meta.name || 'MONTAGE', stitchCount, colorCount,
-    plusX: maxx, minusX: -minx, plusY: maxy, minusY: -miny,
-    ax: last.x, ay: last.y, mx: last.x, my: last.y,
-  });
-  const out = new Uint8Array(header.length + bytesOut.length + 1);
-  out.set(header, 0);
-  out.set(bytesOut, header.length);
-  out[out.length - 1] = 0x1a;
-  return out;
-}
 
 // Fusionne plusieurs items ({stitches (coords locales, sans END), offsetXunits,
 // offsetYunits}) en une séquence absolue unique, avec sauts de transition
@@ -4908,95 +4723,15 @@ function splitIntoSegments(stitches) {
 }
 
 /* ============================================================================
-   2) LECTEUR PXF — métadonnées + aperçu uniquement (Tajima Pulse/DG16).
-   La géométrie des points réside dans un bloc chiffré/propriétaire non
-   exploitable (entropie ~8 bits/octet mesurée) : lecture seule, jamais de
-   points de piqûre utilisables.
-============================================================================ */
-function readPxfDirectory(bytes) {
-  const knownNames = ['COPYRIGHT.1', 'HISTORY.1', 'ICON.1', 'DESIGNINFO.ZIP.1', 'MACHINE.ZIP.1', 'ENC.INDEX.1'];
-  const text = new TextDecoder('latin1').decode(bytes);
-  let tableStart = -1;
-  for (const nm of knownNames) {
-    const idx = text.indexOf(nm);
-    if (idx >= 0) { tableStart = idx - 2; break; }
-  }
-  if (tableStart < 0) throw new Error('Table de répertoire PXF introuvable (fichier non reconnu)');
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const entries = {};
-  let pos = tableStart;
-  while (pos < bytes.length - 4) {
-    const nameLen = view.getUint16(pos, true);
-    if (nameLen === 0 || nameLen > 200) break;
-    const nameBytes = bytes.slice(pos + 2, pos + 2 + nameLen - 1);
-    const name = new TextDecoder('ascii').decode(nameBytes);
-    const p2 = pos + 2 + nameLen;
-    if (p2 + 8 > bytes.length) break;
-    entries[name] = { offset: view.getUint32(p2, true), size: view.getUint32(p2 + 4, true) };
-    pos = p2 + 8;
-  }
-  return entries;
-}
-
-async function parsePxf(bytes) {
-  const entries = readPxfDirectory(bytes);
-  const result = { entries, width_mm: null, height_mm: null, stitchCount: null, colorChanges: null, iconBytes: null };
-  if (entries['DESIGNINFO.ZIP.1']) {
-    const { offset, size } = entries['DESIGNINFO.ZIP.1'];
-    const zip = await JSZip.loadAsync(bytes.slice(offset, offset + size));
-    const infoFile = zip.file('info.xml');
-    if (infoFile) {
-      const xml = await infoFile.async('string');
-      const dims = xml.match(/<dimensions left="(-?\d+)" top="(-?\d+)" right="(-?\d+)" bottom="(-?\d+)"/);
-      const stitches = xml.match(/<stitches count="(\d+)" colourchanges="(\d+)"/);
-      if (dims) {
-        const w = parseInt(dims[3], 10) - parseInt(dims[1], 10);
-        const h = parseInt(dims[4], 10) - parseInt(dims[2], 10);
-        result.width_mm = Math.round(w * 0.05 * 10) / 10;
-        result.height_mm = Math.round(h * 0.05 * 10) / 10;
-      }
-      if (stitches) { result.stitchCount = parseInt(stitches[1], 10); result.colorChanges = parseInt(stitches[2], 10); }
-    }
-  }
-  if (entries['ICON.1']) {
-    const { offset, size } = entries['ICON.1'];
-    result.iconBytes = bytes.slice(offset, offset + size);
-  }
-  return result;
-}
-
-/* ============================================================================
-   3) ÉTAT DE L'APPLICATION
+   2) ÉTAT DE L'APPLICATION
    - library : programmes disponibles (PocketBase), chacun mono-couleur.
    - assembly : sous-ensemble ordonné de library, avec position/couleur et,
      le cas échéant, une liste de segments (calculée à la demande).
+   (Le codec DST/PES/VP3/PXF et FRANCE_GALOP_COLORS vivent maintenant dans
+   src/shared/embroidery-codec.js, chargé juste avant ce script — partagés
+   avec le module Recherche / Éditeur.)
 ============================================================================ */
 const COLLECTION = 'prog_broderie_elements';
-// Table couleurs France Galop -> numéro de bobine (fournie par l'utilisateur).
-// Les codes hex sont une approximation visuelle de chaque couleur nommée
-// (le tableau source ne donne que nom + n° de bobine, pas de RVB) — à
-// ajuster ici si les teintes réelles diffèrent.
-const FRANCE_GALOP_COLORS = [
-  { nom: 'Blanc', bobine: '1801', hex: '#FFFFFF' },
-  { nom: 'Gris', bobine: '1918', hex: '#9E9E9E' },
-  { nom: 'Rose', bobine: '1921', hex: '#F4A6C6' },
-  { nom: 'Rouge', bobine: '1839', hex: '#D2232A' },
-  { nom: 'Grenat', bobine: '1635', hex: '#6D1B2A' },
-  { nom: 'Orange', bobine: '1778', hex: '#F58220' },
-  { nom: 'Jaune', bobine: '1924', hex: '#FFD500' },
-  { nom: 'Vert', bobine: '1651', hex: '#3C8C3C' },
-  { nom: 'Vert Clair', bobine: '1748', hex: '#8DC63F' },
-  { nom: 'Gros Vert', bobine: '1970', hex: '#00693E' },
-  { nom: 'Bleu (Roi)', bobine: '1842', hex: '#1E4FA3' },
-  { nom: 'Bleu Clair', bobine: '1874', hex: '#5DADE2' },
-  { nom: 'Gros Bleu', bobine: '1967', hex: '#0B2D5C' },
-  { nom: 'Mauve', bobine: '1711', hex: '#B57EDC' },
-  { nom: 'Violet', bobine: '1922', hex: '#6A1B9A' },
-  { nom: 'Beige', bobine: '1855', hex: '#D8C39A' },
-  { nom: 'Marron', bobine: '1758', hex: '#6B4226' },
-  { nom: 'Noir', bobine: '1800', hex: '#1A1A1A' },
-  { nom: 'Or', bobine: '1670', hex: '#C9A227' },
-];
 const CUSTOM_COLOR_ID = 'custom';
 
 // Sections physiques fixes d'une casaque, pour organiser la bibliothèque.
@@ -5061,12 +4796,6 @@ let paletteDragActive = false;        // vrai pendant un glisser de sélection (
 let paletteDragSelect = true;         // true = le glisser sélectionne, false = il désélectionne (fixé par la 1ère ligne touchée)
 let previewZoom = 1;
 let previewPanX = 0, previewPanY = 0;
-let vizDecoded = null;                // fichier actuellement ouvert dans l'onglet Visualiseur (indépendant)
-let vizZoom = 1;
-let vizPanX = 0, vizPanY = 0;
-let vizSelectedOpIdx = -1;          // élément sélectionné (clic prévisu ou tableau), -1 = aucun
-let vizLastBaseOx = 0, vizLastBaseOy = 0, vizLastScale = 1, vizLastCanvasH = 0; // transform du dernier dessin, pour convertir un clic canvas -> coordonnées fichier
-let vizShowMarkers = true;          // afficher les repères coupe-fil/saut + numéros sur la prévisu
 let activeLibSection = 'tous';        // filtre section actif dans la bibliothèque ('tous' + valeurs de SECTIONS)
 let bulkSelectMode = false;           // mode sélection multiple (création d'ensemble / suppression groupée)
 let bulkSelection = new Set();        // ids de programmes sélectionnés en mode multiple (persiste entre filtres)
@@ -5141,256 +4870,8 @@ async function pbUpdateFields(id, fields) {
    couleur). Un DST mono-couleur donne un seul Programme, sans différence
    visible pour l'utilisateur.
 ============================================================================ */
-/* ============================================================================
-   4b) LECTEUR PES/PEC — décodage complet des piqûres.
-   Validé sur 2 fichiers réels : le bounding box recalculé point par point
-   correspond (à 1 unité de 0.1mm près, arrondi normal) à la fois à celui
-   déclaré dans le sous-en-tête PEC ET, pour Base1_PES.PES, à celui du
-   fichier Base1.DST du même dessin — donc décodage croisé-vérifié, comme
-   pour le DST. Cible les PES modernes (#PES0100, bloc PEC "LA:" classique
-   avec en-tête 512 octets) ; les très anciennes variantes de PES peuvent
-   différer et ne sont pas garanties.
-============================================================================ */
-function decodePes(bytes) {
-  const text = new TextDecoder('latin1').decode(bytes);
-  const laIdx = text.indexOf('LA:');
-  if (laIdx < 0) throw new Error('Bloc PEC introuvable dans ce fichier PES');
-  const nameMatch = text.slice(laIdx, laIdx + 20).match(/LA:(.{0,16})/);
-  const name = nameMatch ? nameMatch[1].trim() : '';
-
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const subStart = laIdx + 512;
-  const thumbOffsetRel = view.getUint16(subStart + 2, true);
-  const stitchStart = subStart + 20;
-  const stitchEnd = subStart + thumbOffsetRel;
-  if (thumbOffsetRel <= 20 || stitchEnd > bytes.length) throw new Error('Structure PEC inattendue (offset vignette incohérent)');
-
-  const stitches = [];
-  let x = 0, y = 0, minx = 0, maxx = 0, miny = 0, maxy = 0;
-  let i = stitchStart;
-  while (i < stitchEnd) {
-    const v1 = bytes[i]; i++;
-    if (v1 === 0xff) { stitches.push({ x, y, type: END }); break; }
-    if (v1 === 0xfe) {
-      const v2 = bytes[i]; i++;
-      if (v2 === 0xb0) { i += 1; stitches.push({ x, y, type: COLOR }); continue; }
-      break; // commande spéciale non gérée : on arrête proprement le décodage ici
-    }
-    let val1, ctrl1 = 0;
-    if (v1 & 0x80) {
-      const v1b = bytes[i]; i++;
-      ctrl1 = (v1 >> 4) & 0x7;
-      val1 = ((v1 & 0x0f) << 8) | v1b;
-      if (val1 & 0x800) val1 -= 0x1000;
-    } else {
-      val1 = (v1 & 0x40) ? v1 - 0x80 : v1;
-    }
-    const v2 = bytes[i]; i++;
-    let val2, ctrl2 = 0;
-    if (v2 & 0x80) {
-      const v2b = bytes[i]; i++;
-      ctrl2 = (v2 >> 4) & 0x7;
-      val2 = ((v2 & 0x0f) << 8) | v2b;
-      if (val2 & 0x800) val2 -= 0x1000;
-    } else {
-      val2 = (v2 & 0x40) ? v2 - 0x80 : v2;
-    }
-    // NOTE ORIENTATION : le sens des axes X/Y encodé en PEC est l'exact
-    // inverse (rotation 180°) de la convention Tajima DST utilisée partout
-    // ailleurs dans l'outil. Vérifié par comparaison visuelle directe avec
-    // Base1.DST (même dessin) : sans cette correction, casaque et toque
-    // apparaissent tête-bêche. On compense en soustrayant au lieu d'ajouter.
-    x -= val1; y -= val2;
-    minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y);
-    const isJump = ctrl1 === 1 || ctrl1 === 2 || ctrl2 === 1 || ctrl2 === 2; // jump ou trim -> pas de piqûre réelle
-    stitches.push({ x, y, type: isJump ? JUMP : STITCH });
-  }
-  if (!stitches.length || stitches[stitches.length - 1].type !== END) stitches.push({ x, y, type: END });
-  if (maxx - minx > 50000 || maxy - miny > 50000) throw new Error('Dimensions décodées invraisemblables — structure PES non reconnue');
-
-  return { header: { name, stitchCount: stitches.length - 1, colorCount: stitches.filter(s => s.type === COLOR).length }, stitches, bbox: { minx, maxx, miny, maxy } };
-}
-
-// Décodeur VP3 (Husqvarna Viking / Pfaff), pour le Visualiseur uniquement.
-// Format non documenté officiellement — ce lecteur est un portage fidèle de
-// l'implémentation de référence Vp3Reader.py du projet open-source
-// pyembroidery (EmbroidePy/pyembroidery), vérifié point par point (0 écart
-// sur 37 246 piqûres réelles) contre cette référence avant intégration.
-// Unité de coordonnées : 0.1 mm, identique à DST/PES dans le reste de
-// l'outil, donc aucune conversion supplémentaire nécessaire en aval.
-// Un "coupe-fil" VP3 (commande dédiée dans ce format, sans déplacement) est
-// reconstruit ici comme 3 sauts consécutifs sur place, pour rester
-// compatible avec la convention Tajima déjà utilisée partout ailleurs dans
-// le Visualiseur (détection, bascule saut/coupe-fil, marqueurs...).
-function decodeVp3(bytes) {
-  let pos = 0;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  function u8() { const v = view.getUint8(pos); pos += 1; return v; }
-  function i8() { const v = view.getInt8(pos); pos += 1; return v; }
-  function u16be() { const v = view.getUint16(pos, false); pos += 2; return v; }
-  function i32be() { const v = view.getInt32(pos, false); pos += 4; return v; }
-  function u32be() { const v = view.getUint32(pos, false); pos += 4; return v; }
-  function skip(n) { pos += n; }
-  function skipVp3String() { const len = u16be(); skip(len); }
-  function readVp3String8() {
-    const len = u16be();
-    const strBytes = bytes.subarray(pos, pos + len);
-    pos += len;
-    try { return new TextDecoder('utf-8').decode(strBytes); } catch (e) { return ''; }
-  }
-  function readSignedBytes(n) {
-    const arr = new Int8Array(n);
-    for (let k = 0; k < n; k++) arr[k] = i8();
-    return arr;
-  }
-  function signed16From2(b0, b1) {
-    const v = ((b0 & 0xFF) << 8) | (b1 & 0xFF);
-    return v > 0x7FFF ? v - 0x10000 : v;
-  }
-
-  skip(6); // magic "%vsm%\0"
-  skipVp3String();
-  skip(7);
-  skipVp3String();
-  skip(32);
-  const centerX = i32be() / 100;
-  const centerY = -(i32be() / 100);
-  skip(27);
-  skipVp3String();
-  skip(24);
-  skipVp3String();
-  const countColors = u16be();
-  if (!(countColors >= 0 && countColors < 5000)) throw new Error('Structure VP3 non reconnue');
-
-  const stitches = [];
-  const threads = [];
-  let curX = 0, curY = 0;
-
-  function pushAbs(x, y, type) { stitches.push({ x, y, type }); curX = x; curY = y; }
-  function pushRel(dx, dy, type) { curX += dx; curY += dy; stitches.push({ x: curX, y: curY, type }); }
-  function pushZero(type) { stitches.push({ x: curX, y: curY, type }); }
-  function pushTrimAsJumps() { for (let k = 0; k < 3; k++) stitches.push({ x: curX, y: curY, type: JUMP }); }
-
-  function readThread() {
-    const colors = u8();
-    const transition = u8();
-    let color = 0;
-    for (let m = 0; m < colors; m++) {
-      color = (u8() << 16) | (u8() << 8) | u8();
-      u8(); // parts
-      u16be(); // colorLength
-    }
-    u8(); // threadType
-    u8(); // weight
-    const catalogNumber = readVp3String8();
-    const description = readVp3String8();
-    const brand = readVp3String8();
-    return { color, catalogNumber, description, brand };
-  }
-
-  for (let ci = 0; ci < countColors; ci++) {
-    skip(3); // bytescheck1
-    const distanceToNextBlock = u32be();
-    const blockEndPosition = pos + distanceToNextBlock;
-
-    const startX = i32be() / 100;
-    const startY = -(i32be() / 100);
-    const absX = startX + centerX;
-    const absY = startY + centerY;
-    if (absX !== 0 && absY !== 0) pushAbs(Math.round(absX), Math.round(absY), JUMP);
-
-    threads.push(readThread());
-    skip(15);
-    skip(3); // bytescheck2
-    const stitchByteLength = blockEndPosition - pos;
-    const stitchBytes = readSignedBytes(stitchByteLength);
-
-    let i = 0;
-    while (i < stitchBytes.length - 1) {
-      let x = stitchBytes[i], y = stitchBytes[i + 1];
-      i += 2;
-      if ((x & 0xFF) !== 0x80) { pushRel(x, y, STITCH); continue; }
-      if (y === 0x01) {
-        const nx = signed16From2(stitchBytes[i], stitchBytes[i + 1]); i += 2;
-        const ny = signed16From2(stitchBytes[i], stitchBytes[i + 1]); i += 2;
-        pushRel(nx, ny, STITCH);
-        i += 2; // ignore le marqueur de fin 0x80 0x02
-      } else if (y === 0x03) {
-        pushTrimAsJumps();
-      }
-      // y === 0x02 : marqueur sans effet, déjà consommé par le cas 0x01.
-    }
-    if (ci + 1 < countColors) pushZero(COLOR);
-  }
-  stitches.push({ x: curX, y: curY, type: END });
-
-  let minx = 0, maxx = 0, miny = 0, maxy = 0;
-  for (const s of stitches) {
-    if (s.type === END) continue;
-    minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x);
-    miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
-  }
-  return {
-    header: { name: '', stitchCount: stitches.filter(s => s.type === STITCH).length, colorCount: threads.length },
-    stitches, bbox: { minx, maxx, miny, maxy }, threads,
-  };
-}
-
-// Extrait la table de couleurs déclarée dans l'en-tête PES (hors bloc PEC),
-// dans l'ordre d'apparition = ordre d'utilisation des fils. Deux formats
-// rencontrés en pratique : soit des chaînes lisibles "Rxx Gxx Bxx", soit un
-// triplet RVB brut juste avant un marqueur fixe 00 0A 00 00 00 suivi du nom
-// du fil. On tente les deux, dans cet ordre.
-function extractPesColorTable(bytes, headerEnd) {
-  const text = new TextDecoder('latin1').decode(bytes.slice(0, headerEnd));
-  const colors = [];
-  const reA = /R(\d{1,3}) G(\d{1,3}) B(\d{1,3})/g;
-  let m;
-  while ((m = reA.exec(text))) colors.push({ r: +m[1], g: +m[2], b: +m[3] });
-  if (colors.length) return colors;
-
-  const marker = [0x00, 0x0a, 0x00, 0x00, 0x00];
-  for (let i = 3; i < headerEnd - 8; i++) {
-    let ok = true;
-    for (let k = 0; k < 5; k++) if (bytes[i + k] !== marker[k]) { ok = false; break; }
-    if (!ok) continue;
-    // Rejette les faux positifs : le marqueur doit être immédiatement suivi
-    // d'un octet de longueur plausible (1-40) puis d'autant de caractères
-    // ASCII imprimables (le nom du fil).
-    const nameLen = bytes[i + 5];
-    if (nameLen < 1 || nameLen > 40 || i + 6 + nameLen > headerEnd) continue;
-    const nameBytes = bytes.slice(i + 6, i + 6 + nameLen);
-    let printable = true;
-    for (const b of nameBytes) if (b < 32 || b > 126) { printable = false; break; }
-    if (!printable) continue;
-    colors.push({ r: bytes[i - 3], g: bytes[i - 2], b: bytes[i - 1] });
-  }
-  return colors;
-}
-
-// Associe une couleur RVB à la référence France Galop la plus proche (limite
-// de tolérance raisonnable) ; sinon conserve la teinte exacte en "libre"
-// pour ne pas fausser la couleur d'origine avec un mauvais rapprochement.
-function closestFranceGalopColorId(r, g, b) {
-  let best = null, bestDist = Infinity;
-  for (const c of FRANCE_GALOP_COLORS) {
-    const hex = c.hex.replace('#', '');
-    const cr = parseInt(hex.slice(0, 2), 16), cg = parseInt(hex.slice(2, 4), 16), cb = parseInt(hex.slice(4, 6), 16);
-    const dist = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
-    if (dist < bestDist) { bestDist = dist; best = c; }
-  }
-  const hexOriginal = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
-  if (best && Math.sqrt(bestDist) < 35) return { colorId: best.bobine, note: hexOriginal + ' → rapproché de ' + best.nom + ' (bobine ' + best.bobine + ')' };
-  return { colorId: CUSTOM_COLOR_ID + ':' + hexOriginal, note: hexOriginal + ' (aucune correspondance proche dans la palette France Galop)' };
-}
-
-function sniffType(bytes) {
-  const head = new TextDecoder('ascii').decode(bytes.slice(0, 8));
-  if (head.startsWith('LA:')) return 'dst';
-  if (head.startsWith('PMLPXF01')) return 'pxf';
-  if (head.startsWith('#PES')) return 'pes';
-  return null;
-}
+/* (decodePes / decodeVp3 / extractPesColorTable / closestFranceGalopColorId /
+   sniffType vivent maintenant dans src/shared/embroidery-codec.js) */
 
 function makeGroupId() { return 'g_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
 
@@ -6027,39 +5508,8 @@ async function renderLibraryThumb(item, canvas) {
   } catch (e) { /* aperçu indisponible */ }
 }
 
-// Détermine si une couleur hex est blanche ou quasi-blanche (tolérance pour
-// les couleurs libres proches du blanc), afin d'inverser le fond de la
-// vignette et garder le tracé du fil visible.
-function isNearWhiteColor(hex) {
-  if (!hex) return false;
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return false;
-  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-  if ([r, g, b].some(Number.isNaN)) return false;
-  return r >= 245 && g >= 245 && b >= 245;
-}
-
-function drawStitchPath(ctx, w, h, stitches, bbox, strokeColor) {
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = isNearWhiteColor(strokeColor) ? '#000000' : '#ffffff';
-  ctx.fillRect(0, 0, w, h);
-  const bw = bbox.maxx - bbox.minx || 1, bh = bbox.maxy - bbox.miny || 1;
-  const pad = 3;
-  const scale = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
-  const ox = pad + (w - pad * 2 - bw * scale) / 2 - bbox.minx * scale;
-  const oy = pad + (h - pad * 2 - bh * scale) / 2 - bbox.miny * scale;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  let started = false;
-  for (const s of stitches) {
-    if (s.type === END) break;
-    const px = ox + s.x * scale, py = h - (oy + s.y * scale);
-    if (s.type === JUMP) { ctx.moveTo(px, py); started = true; continue; }
-    if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
-  }
-  ctx.strokeStyle = strokeColor;
-  ctx.stroke();
-}
+// (isNearWhiteColor / drawStitchPath vivent maintenant dans
+// src/shared/embroidery-codec.js)
 
 // Aperçu miniature d'un GROUPE entier (bibliothèque : items = [{record,decoded}]
 // avec leur origine_x/y_mm propre ; assemblage : items = [{libItem,offsetXmm,
@@ -7359,633 +6809,9 @@ function initDropzone() {
   dz.addEventListener('drop', (e) => handleImportFiles(e.dataTransfer.files));
 }
 
-// ============================================================================
-// Onglet Visualiseur : ouverture indépendante (sans import PocketBase) d'un
-// fichier DST/PES/PXF/VP3, avec aperçu zoomable et fiche d'informations. N'écrit
-// rien en base — purement une inspection à la volée.
-// ============================================================================
-function initVisualiseur() {
-  const dz = document.getElementById('vizDropzone');
-  const input = document.getElementById('vizFileInput');
-  document.getElementById('vizBtnImport').addEventListener('click', () => input.click());
-  input.addEventListener('change', () => { if (input.files[0]) loadVisualiseurFile(input.files[0]); });
-  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('over'); }));
-  dz.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) loadVisualiseurFile(e.dataTransfer.files[0]); });
-
-  document.getElementById('vizBtnZoomIn').addEventListener('click', () => setVizZoom(vizZoom * 1.3));
-  document.getElementById('vizBtnZoomOut').addEventListener('click', () => setVizZoom(vizZoom / 1.3));
-  document.getElementById('vizBtnZoomReset').addEventListener('click', resetVizView);
-
-  document.getElementById('vizBtnFlipH').addEventListener('click', () => vizTransform('flipH'));
-  document.getElementById('vizBtnFlipV').addEventListener('click', () => vizTransform('flipV'));
-  document.getElementById('vizBtnRot90Cw').addEventListener('click', () => vizTransform('rot90cw'));
-  document.getElementById('vizBtnRot90Ccw').addEventListener('click', () => vizTransform('rot90ccw'));
-  document.getElementById('vizBtnRot180').addEventListener('click', () => vizTransform('rot180'));
-
-  const canvas = document.getElementById('vizCanvas');
-  canvas.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    setVizZoom(vizZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
-  }, { passive: false });
-  let dragging = false, lastX = 0, lastY = 0, dragMoved = 0;
-  canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; dragMoved = 0; canvas.style.cursor = 'grabbing'; });
-  window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    const ratio = canvas.width / canvas.clientWidth;
-    vizPanX += (e.clientX - lastX) * ratio;
-    vizPanY += (e.clientY - lastY) * ratio;
-    dragMoved += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
-    lastX = e.clientX; lastY = e.clientY;
-    drawVizPreview();
-  });
-  window.addEventListener('mouseup', (e) => {
-    if (dragging && dragMoved < 4 && e.target === canvas) vizHandleCanvasClick(e);
-    dragging = false; canvas.style.cursor = 'grab';
-  });
-
-  document.getElementById('vizInfoCol').addEventListener('click', (e) => {
-    const trimBtn = e.target.closest('.viz-btn-set-trim');
-    if (trimBtn) { vizSetTrimAfter(parseInt(trimBtn.dataset.opIdx, 10), trimBtn.dataset.newState); return; }
-    if (e.target.closest('#vizBtnAllTrims')) { vizConvertAllJumpsToTrims(); return; }
-    if (e.target.closest('#vizBtnSaveModified')) { vizSaveModifiedProgram(); return; }
-    if (e.target.closest('#vizBtnResetModified')) { vizResetModifications(); return; }
-    const clickableRow = e.target.closest('.viz-op-row-clickable');
-    if (clickableRow) { vizSelectOp(parseInt(clickableRow.dataset.rowIdx, 10)); return; }
-  });
-
-  const showMarkersCb = document.getElementById('vizShowMarkersCb');
-  if (showMarkersCb) showMarkersCb.addEventListener('change', () => { vizShowMarkers = showMarkersCb.checked; drawVizPreview(); });
-}
-
-async function loadVisualiseurFile(file) {
-  const statusEl = document.getElementById('vizDropzoneStatus');
-  statusEl.style.display = 'block';
-  statusEl.textContent = 'Lecture de ' + file.name + '…';
-  document.getElementById('vizPreviewFrame').style.display = 'none';
-  document.getElementById('vizZoomControls').style.display = 'none';
-  document.getElementById('vizMarkerLegend').style.display = 'none';
-  document.getElementById('vizTransformControls').style.display = 'none';
-  document.getElementById('vizIconImg').style.display = 'none';
-  vizDecoded = null;
-  vizSelectedOpIdx = -1;
-  resetVizView();
-
-  try {
-    const buf = new Uint8Array(await file.arrayBuffer());
-    let type = sniffType(buf);
-    if (!type) {
-      // Détection VP3 spécifique au Visualiseur (non ajoutée à sniffType()
-      // partagé, pour ne pas affecter l'import de la bibliothèque Fabrication
-      // qui ne gère pas ce format) : signature "%vsm%" en tout début de fichier.
-      const head6 = new TextDecoder('ascii').decode(buf.slice(0, 6));
-      if (head6 === '%vsm%\0') type = 'vp3';
-    }
-    if (!type) throw new Error('Format non reconnu (DST, PES, PXF ou VP3 attendu).');
-
-    if (type === 'pxf') {
-      const info = await parsePxf(buf);
-      vizDecoded = { type, name: file.name, pxfInfo: info };
-      if (info.iconBytes) {
-        const img = document.getElementById('vizIconImg');
-        img.src = URL.createObjectURL(new Blob([info.iconBytes], { type: 'image/png' }));
-        img.style.display = 'block';
-      }
-    } else {
-      const decoded = type === 'pes' ? decodePes(buf) : type === 'vp3' ? decodeVp3(buf) : decodeDst(buf);
-      let pesColors = [];
-      if (type === 'pes') {
-        const text = new TextDecoder('latin1').decode(buf.slice(0, Math.min(buf.length, 300000)));
-        const laIdx = text.indexOf('LA:');
-        if (laIdx > 0) pesColors = extractPesColorTable(buf, laIdx);
-      } else if (type === 'vp3' && decoded.threads) {
-        pesColors = decoded.threads.map(t => ({ r: (t.color >> 16) & 0xFF, g: (t.color >> 8) & 0xFF, b: t.color & 0xFF }));
-      }
-      vizDecoded = Object.assign({ type, name: file.name, pesColors, modified: false }, decoded);
-      vizDecoded.originalStitches = decoded.stitches.map(s => ({ x: s.x, y: s.y, type: s.type }));
-      document.getElementById('vizPreviewFrame').style.display = 'inline-block';
-      document.getElementById('vizPreviewLabel').textContent = file.name;
-      document.getElementById('vizZoomControls').style.display = 'flex';
-      document.getElementById('vizMarkerLegend').style.display = 'block';
-      document.getElementById('vizTransformControls').style.display = 'flex';
-      drawVizPreview();
-    }
-    statusEl.style.display = 'none';
-  } catch (e) {
-    statusEl.textContent = 'Erreur : ' + e.message;
-  }
-  renderVizInfo();
-}
-
-function setVizZoom(z) { vizZoom = Math.max(0.2, Math.min(10, z)); drawVizPreview(); }
-function resetVizView() { vizZoom = 1; vizPanX = 0; vizPanY = 0; drawVizPreview(); }
-
-// Sélectionne l'élément n° idx : surligné sur la prévisu (drawVizPreview) et
-// sa ligne mise en évidence + amenée à l'écran dans le tableau "Éléments du
-// programme". idx = -1 pour désélectionner.
-function vizSelectOp(idx) {
-  vizSelectedOpIdx = idx;
-  drawVizPreview();
-  renderVizInfo();
-  if (idx >= 0) {
-    const row = document.querySelector('#vizInfoCol tr[data-row-idx="' + idx + '"]');
-    if (row) row.scrollIntoView({ block: 'nearest' });
-  }
-}
-
-// Convertit un clic sur le canvas en coordonnées fichier (inverse de la
-// transformation utilisée par drawVizPreview) et sélectionne le bloc de
-// piqûres le plus proche, s'il est à portée de clic.
-function vizHandleCanvasClick(e) {
-  if (!vizDecoded || !vizDecoded.stitches) return;
-  const canvas = document.getElementById('vizCanvas');
-  const rect = canvas.getBoundingClientRect();
-  const ratio = canvas.width / rect.width;
-  const px = (e.clientX - rect.left) * ratio;
-  const py = (e.clientY - rect.top) * ratio;
-  const fx = (px - vizLastBaseOx) / vizLastScale;
-  const fy = (vizLastCanvasH - py - vizLastBaseOy) / vizLastScale;
-
-  const ops = vizBuildOperations(vizDecoded.stitches);
-  let bestIdx = -1, bestDist = Infinity;
-  const threshold = 16 / vizLastScale; // ~16px de tolérance de clic, converti en unités fichier
-  ops.forEach((op, idx) => {
-    if (op.kind !== 'stitch') return;
-    for (let i = op.stitchStartIdx; i < op.stitchEndIdx; i++) {
-      const s = vizDecoded.stitches[i];
-      const d = Math.hypot(s.x - fx, s.y - fy);
-      if (d < bestDist) { bestDist = d; bestIdx = idx; }
-    }
-  });
-  if (bestIdx >= 0 && bestDist <= threshold) vizSelectOp(bestIdx);
-}
-
-// Applique une symétrie ou une rotation à l'ensemble du programme ouvert
-// (miroir horizontal/vertical, rotation 90°/180°) : transforme chaque point
-// en mémoire, recalcule la boîte englobante depuis zéro, puis redessine.
-// Comme pour l'ajout de coupe-fil, il faut ensuite "Enregistrer le
-// programme" pour produire un fichier avec ce changement.
-function vizTransform(kind) {
-  if (!vizDecoded || !vizDecoded.stitches) return;
-  const stitches = vizDecoded.stitches;
-  for (const s of stitches) {
-    if (s.type === END) continue;
-    const x = s.x, y = s.y;
-    if (kind === 'flipH') { s.x = -x; }
-    else if (kind === 'flipV') { s.y = -y; }
-    else if (kind === 'rot90cw') { s.x = y; s.y = -x; }
-    else if (kind === 'rot90ccw') { s.x = -y; s.y = x; }
-    else if (kind === 'rot180') { s.x = -x; s.y = -y; }
-  }
-  let minx = 0, maxx = 0, miny = 0, maxy = 0;
-  for (const s of stitches) {
-    if (s.type === END) continue;
-    minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x);
-    miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
-  }
-  vizDecoded.bbox = { minx, maxx, miny, maxy };
-  vizDecoded.modified = true;
-  resetVizView();
-  renderVizInfo();
-}
-
-// Change l'état saut/coupe-fil juste après le bloc de piqûres n° opIdx (tel
-// que listé dans vizDecoded.lastOps), dans les deux sens : un saut simple
-// peut devenir un coupe-fil, et un coupe-fil peut redevenir un saut simple —
-// y compris un coupe-fil ajouté ici même, pas seulement ceux d'origine.
-// Reproduit toujours le même déplacement net (avant → destination du run
-// actuel) pour ne pas déplacer le dessin, seulement changer si la machine
-// s'arrête pour couper le fil à cet endroit. Modifie vizDecoded.stitches en
-// mémoire ; il faut ensuite "Enregistrer le programme" pour produire un
-// fichier avec ce changement.
-function vizSetTrimAfter(opIdx, newState) {
-  if (!vizDecoded || !vizDecoded.lastOps) return;
-  const op = vizDecoded.lastOps[opIdx];
-  if (!op || op.kind !== 'stitch') return;
-  const stitches = vizDecoded.stitches;
-  const runStart = op.stitchEndIdx;
-  const before = stitches[runStart - 1];
-  if (!before) return;
-
-  let runEnd = runStart;
-  while (runEnd < stitches.length && stitches[runEnd].type === JUMP) runEnd++;
-  const currentRun = stitches.slice(runStart, runEnd);
-  const dest = currentRun.length ? currentRun[currentRun.length - 1] : before;
-
-  let newRun = [];
-  if (newState !== 'aucun') {
-    const steps = splitLongJump(dest.x - before.x, dest.y - before.y);
-    let cx = before.x, cy = before.y;
-    newRun = steps.map(([sx, sy]) => { cx += sx; cy += sy; return { x: cx, y: cy, type: JUMP }; });
-    if (newState === 'trim') { while (newRun.length < 3) newRun.push({ x: dest.x, y: dest.y, type: JUMP }); }
-  }
-
-  stitches.splice(runStart, runEnd - runStart, ...newRun);
-  vizDecoded.modified = true;
-  drawVizPreview();
-  renderVizInfo();
-}
-
-// Convertit d'un coup tous les sauts simples (1 ou 2 sauts) du programme en
-// coupe-fils (3 sauts sur place), en une seule passe sur le flux de
-// piqûres — même principe que vizSetTrimAfter, mais pour tout le fichier
-// (recalculer chaque bloc individuellement aurait décalé les index des
-// blocs suivants à chaque conversion).
-function vizConvertAllJumpsToTrims() {
-  if (!vizDecoded || !vizDecoded.stitches) return;
-  const old = vizDecoded.stitches;
-  const n = old.length;
-  const result = [];
-  let changed = false;
-  let i = 0;
-  while (i < n) {
-    const s = old[i];
-    if (s.type !== JUMP) { result.push(s); i++; continue; }
-    let j = i;
-    while (j < n && old[j].type === JUMP) j++;
-    const runLen = j - i;
-    if (runLen > 0 && runLen < 3) {
-      const last = old[j - 1];
-      for (let k = i; k < j; k++) result.push(old[k]);
-      for (let k = runLen; k < 3; k++) result.push({ x: last.x, y: last.y, type: JUMP });
-      changed = true;
-    } else {
-      for (let k = i; k < j; k++) result.push(old[k]);
-    }
-    i = j;
-  }
-  if (!changed) { alert('Aucun saut simple à convertir : tous les sauts sont déjà des coupe-fils.'); return; }
-  if (!confirm('Convertir tous les sauts simples du programme en coupe-fils ?')) return;
-  vizDecoded.stitches = result;
-  let minx = 0, maxx = 0, miny = 0, maxy = 0;
-  for (const s of result) {
-    if (s.type === END) continue;
-    minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x);
-    miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
-  }
-  vizDecoded.bbox = { minx, maxx, miny, maxy };
-  vizDecoded.modified = true;
-  drawVizPreview();
-  renderVizInfo();
-}
-
-// Réencode les piqûres actuelles (éventuellement modifiées) en DST et
-// propose le téléchargement. DST est le seul format de sortie que cet
-// outil sait écrire : un fichier ouvert en PES est donc converti en DST à
-// l'enregistrement (ce qui correspond de toute façon au format utilisé
-// partout ailleurs dans l'atelier).
-function vizSaveModifiedProgram() {
-  if (!vizDecoded || !vizDecoded.stitches) return;
-  const records = vizDecoded.stitches.filter(s => s.type !== END);
-  if (!records.length) return;
-  const baseName = (vizDecoded.name || 'PROGRAMME').replace(/\.\w+$/, '');
-  const outName = (baseName.replace(/[^A-Za-z0-9_-]/g, '').toUpperCase().slice(0, 16)) || 'PROGRAMME';
-  let dstBytes;
-  try {
-    dstBytes = encodeDst(records, { name: outName });
-  } catch (e) {
-    alert('Erreur lors de l\'enregistrement : ' + e.message);
-    return;
-  }
-  const blob = new Blob([dstBytes], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const fname = outName + (vizDecoded.modified ? '_MODIFIE' : '') + '.DST';
-  const a = document.createElement('a');
-  a.href = url; a.download = fname;
-  document.body.appendChild(a); a.click(); a.remove();
-}
-
-// Revient aux piqûres telles que lues à l'ouverture du fichier, avant toute
-// modification faite dans le Visualiseur.
-function vizResetModifications() {
-  if (!vizDecoded || !vizDecoded.originalStitches) return;
-  vizDecoded.stitches = vizDecoded.originalStitches.map(s => ({ x: s.x, y: s.y, type: s.type }));
-  vizDecoded.modified = false;
-  drawVizPreview();
-  renderVizInfo();
-}
-
-// Compte les coupe-fils : par convention Tajima DST (utilisée aussi ailleurs
-// dans cet outil), un coupe-fil est représenté par 3 sauts machine (JUMP)
-// consécutifs ou plus — on compte chaque groupe comme 1 coupe-fil, pas
-// chaque saut individuel.
-function countVizTrims(stitches) {
-  let trims = 0, run = 0;
-  for (const s of stitches) {
-    if (s.type === END) break;
-    if (s.type === JUMP) { run++; }
-    else { if (run >= 3) trims++; run = 0; }
-  }
-  if (run >= 3) trims++;
-  return trims;
-}
-
-// Palette utilisée pour colorer automatiquement chaque segment détecté dans
-// le Visualiseur (Blanc exclu : invisible sur le fond quasi blanc du canvas).
-const VIZ_AUTO_PALETTE = FRANCE_GALOP_COLORS.filter(c => c.hex.toUpperCase() !== '#FFFFFF');
-
-// Découpe le flux en segments séparés à CHAQUE changement de couleur ET à
-// CHAQUE coupe-fil : un coupe-fil coupe visuellement le fil, donc les deux
-// morceaux qu'il sépare ne doivent jamais partager la même couleur dans
-// l'aperçu ni dans les vignettes, même s'ils utilisent la même bobine —
-// sinon ils apparaissent comme un seul bloc "regroupé" alors qu'ils sont
-// bien distincts. Sert à la fois pour l'aperçu principal et les vignettes
-// du tableau (voir vizBuildOperations / vizOpRowHtml), pour rester cohérent
-// entre les deux. Un simple saut (moins de 3 sauts consécutifs) NE sépare
-// PAS, car le fil n'est alors pas coupé.
-function vizVisualSegments(stitches) {
-  const segments = [];
-  let current = [];
-  let i = 0;
-  const n = stitches.length;
-  while (i < n) {
-    const s = stitches[i];
-    if (s.type === END) break;
-    if (s.type === COLOR) { segments.push(current); current = []; i++; continue; }
-    if (s.type === JUMP) {
-      let j = i;
-      while (j < n && stitches[j].type === JUMP) j++;
-      if ((j - i) >= 3) { segments.push(current); current = []; }
-      i = j;
-      continue;
-    }
-    current.push(s);
-    i++;
-  }
-  segments.push(current);
-  return segments.filter(seg => seg.length > 0);
-}
-
-// Teintes purement visuelles (pour distinguer les morceaux à l'écran), sans
-// prétendre représenter les vraies couleurs de fil — celles-ci restent
-// affichées telles quelles dans la "Table de couleurs déclarée" du panneau
-// d'infos, qui elle ne tient compte que des vrais changements de couleur.
-function vizSegmentColors(n) {
-  return Array.from({ length: n }, (_, i) => VIZ_AUTO_PALETTE[i % VIZ_AUTO_PALETTE.length].hex);
-}
-
-function drawVizPreview() {
-  const canvas = document.getElementById('vizCanvas');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (!vizDecoded || !vizDecoded.stitches) return;
-
-  const w = canvas.width, h = canvas.height, pad = 14;
-  const bbox = vizDecoded.bbox;
-  const bw = (bbox.maxx - bbox.minx) || 1, bh = (bbox.maxy - bbox.miny) || 1;
-  const fitScale = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
-  const scale = fitScale * vizZoom;
-  const baseOx = pad + (w - pad * 2 - bw * scale) / 2 - bbox.minx * scale + vizPanX;
-  const baseOy = pad + (h - pad * 2 - bh * scale) / 2 - bbox.miny * scale - vizPanY;
-  // Mémorisé pour la sélection au clic (conversion pixel canvas -> coordonnées fichier).
-  vizLastBaseOx = baseOx; vizLastBaseOy = baseOy; vizLastScale = scale; vizLastCanvasH = h;
-
-  const segments = vizVisualSegments(vizDecoded.stitches);
-  const colors = vizSegmentColors(segments.length);
-
-  segments.forEach((seg, i) => {
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = colors[i];
-    ctx.beginPath();
-    let started = false;
-    for (const s of seg) {
-      const px = baseOx + s.x * scale, py = h - (baseOy + s.y * scale);
-      if (s.type === JUMP) { ctx.moveTo(px, py); started = true; continue; }
-      if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
-    }
-    ctx.stroke();
-  });
-
-  const ops = vizBuildOperations(vizDecoded.stitches);
-
-  // Surligne l'élément sélectionné (clic sur la prévisu ou sur sa ligne dans
-  // le tableau), par-dessus le tracé normal.
-  if (vizSelectedOpIdx >= 0 && ops[vizSelectedOpIdx] && ops[vizSelectedOpIdx].kind === 'stitch') {
-    const op = ops[vizSelectedOpIdx];
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#1f2420';
-    ctx.beginPath();
-    let started = false;
-    for (let i = op.stitchStartIdx; i < op.stitchEndIdx; i++) {
-      const s = vizDecoded.stitches[i];
-      const px = baseOx + s.x * scale, py = h - (baseOy + s.y * scale);
-      if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
-    }
-    ctx.stroke();
-  }
-
-  // Marqueurs des coupe-fils / sauts détectés, superposés au tracé —
-  // masquables via la case "afficher les repères" (peuvent surcharger
-  // visuellement les programmes très découpés).
-  if (vizShowMarkers) {
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textBaseline = 'middle';
-    ops.forEach((op, idx) => {
-      if (op.kind !== 'stitch' || op.trimAfter === 'aucun') return;
-      const ref = vizDecoded.stitches[op.stitchEndIdx - 1];
-      if (!ref) return;
-      const px = baseOx + ref.x * scale, py = h - (baseOy + ref.y * scale);
-      if (op.trimAfter === 'trim') {
-        ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fillStyle = '#d2232a'; ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(px - 2.6, py - 2.6); ctx.lineTo(px + 2.6, py + 2.6);
-        ctx.moveTo(px + 2.6, py - 2.6); ctx.lineTo(px - 2.6, py + 2.6);
-        ctx.stroke();
-      } else {
-        ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff'; ctx.fill();
-        ctx.strokeStyle = '#5b6b8c'; ctx.lineWidth = 1.4; ctx.stroke();
-      }
-      // Numéro de ligne (identique au # du tableau "Éléments du programme"),
-      // avec un halo blanc pour rester lisible par-dessus le tracé coloré.
-      const label = String(idx + 1);
-      ctx.lineWidth = 3; ctx.strokeStyle = '#fff';
-      ctx.strokeText(label, px + 8, py);
-      ctx.fillStyle = '#1f2420';
-      ctx.fillText(label, px + 8, py);
-    });
-  }
-}
-
-function vizInfoRow(label, value) {
-  return '<tr><td>' + label + '</td><td>' + value + '</td></tr>';
-}
-
-function renderVizInfo() {
-  const col = document.getElementById('vizInfoCol');
-  if (!vizDecoded) {
-    col.innerHTML = '<span class="muted">Ouvre un fichier (glisser-déposer ou « choisir un fichier… ») pour voir ses informations ici.</span>';
-    return;
-  }
-
-  if (vizDecoded.type === 'pxf') {
-    const info = vizDecoded.pxfInfo;
-    col.innerHTML =
-      '<h3>Fichier</h3><table>' +
-        vizInfoRow('Nom', escapeHtml(vizDecoded.name)) +
-        vizInfoRow('Format', 'PXF (Tajima Pulse)') +
-        vizInfoRow('Points (estimation)', info.stitchCount != null ? info.stitchCount : '—') +
-        vizInfoRow('Changements de couleur (estimation)', info.colorChanges != null ? info.colorChanges : '—') +
-        vizInfoRow('Dimensions (estimation)', (info.width_mm != null && info.height_mm != null) ? (info.width_mm + ' × ' + info.height_mm + ' mm') : '—') +
-      '</table>' +
-      '<small class="hint">Géométrie des points chiffrée par Tajima Pulse : seules les métadonnées et la vignette intégrée au fichier sont accessibles, pas de tracé.</small>';
-    return;
-  }
-
-  const { header, stitches, bbox, name, pesColors } = vizDecoded;
-  const widthMm = Math.round((bbox.maxx - bbox.minx) / 10 * 10) / 10;
-  const heightMm = Math.round((bbox.maxy - bbox.miny) / 10 * 10) / 10;
-  const colorChangesActual = stitches.filter(s => s.type === COLOR).length;
-  const trimsCount = countVizTrims(stitches);
-
-  let html = '<h3>Fichier</h3><table>' +
-    vizInfoRow('Nom', escapeHtml(name)) +
-    vizInfoRow('Format', vizDecoded.type === 'pes' ? 'PES (Brother / Babylock)' : vizDecoded.type === 'vp3' ? 'VP3 (Husqvarna Viking / Pfaff)' : 'DST (Tajima)') +
-    (header.name ? vizInfoRow('Nom interne', escapeHtml(header.name)) : '') +
-    vizInfoRow('Points', stitches.length - 1) +
-    vizInfoRow('Changements de couleur', colorChangesActual) +
-    vizInfoRow('Coupe-fils détectés', trimsCount) +
-    vizInfoRow('Dimensions', widthMm + ' × ' + heightMm + ' mm') +
-    '</table>';
-
-  if ((vizDecoded.type === 'pes' || vizDecoded.type === 'vp3') && pesColors && pesColors.length) {
-    const threads = vizDecoded.threads;
-    html += '<h3>Table de couleurs déclarée (' + pesColors.length + ')</h3><table>' +
-      pesColors.map((c, i) => {
-        const hex = '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('');
-        const resolved = closestFranceGalopColorId(c.r, c.g, c.b);
-        const t = threads && threads[i];
-        const extra = t && (t.brand || t.description || t.catalogNumber)
-          ? ' — ' + [t.brand, t.description, t.catalogNumber].filter(Boolean).map(escapeHtml).join(' · ')
-          : '';
-        return vizInfoRow((i + 1) + '.', '<span class="color-swatch-dot" style="background:' + hex + '"></span>' + colorIdLabel(resolved.colorId) + extra);
-      }).join('') +
-      '</table>' +
-      '<small class="hint">Teintes déclarées dans le fichier, rapprochées automatiquement de la palette France Galop' + (vizDecoded.type === 'vp3' ? ' (marque/référence fil affichées quand le fichier les fournit)' : '') + '. L\'aperçu et les vignettes ci-contre utilisent des teintes distinctes arbitraires (pas ces couleurs réelles) pour bien séparer visuellement chaque morceau, y compris de part et d\'autre d\'un coupe-fil.</small>';
-  } else if (vizDecoded.type === 'dst') {
-    html += '<small class="hint">Format DST : pas de table de couleurs intégrée — les changements ci-dessus sont de simples arrêts machine, sans référence de teinte. L\'aperçu attribue automatiquement une couleur différente à chaque segment détecté (changement de couleur ou coupe-fil), pour bien les distinguer visuellement (teintes arbitraires, pas les couleurs réelles).</small>';
-  }
-
-  const ops = vizBuildOperations(stitches);
-  vizDecoded.lastOps = ops; // pour retrouver les index d'insertion depuis les boutons ✂ (délégation d'événements)
-  const segColors = vizSegmentColors(vizVisualSegments(stitches).length);
-  html += '<h3>Éléments du programme (' + ops.length + ')</h3>' +
-    '<div class="viz-edit-toolbar">' +
-      '<button type="button" class="ghost" id="vizBtnAllTrims">✂ Tous les sauts simples → coupe-fil</button>' +
-      '<button type="button" class="ghost" id="vizBtnSaveModified">💾 Enregistrer le programme (.DST)</button>' +
-      (vizDecoded.modified ? '<button type="button" class="ghost" id="vizBtnResetModified">↺ Annuler les modifications</button><span class="muted">modifié</span>' : '') +
-    '</div>' +
-    '<div class="viz-ops-scroll"><table>' +
-      '<thead><tr><th>#</th><th>Élément</th><th>Détails</th></tr></thead>' +
-      '<tbody>' + ops.map((op, i) => vizOpRowHtml(op, i, segColors)).join('') + '</tbody>' +
-    '</table></div>' +
-    '<small class="hint">Repérage séquentiel de tout ce qui est détectable dans le fichier : piqûres réelles, sauts machine, coupe-fils (3 sauts consécutifs ou plus) et changements de couleur, dans l\'ordre où la machine les exécute. Un saut peut être converti en coupe-fil et inversement, dans les deux sens, même après une première conversion.</small>';
-
-  col.innerHTML = html;
-
-  col.querySelectorAll('.viz-op-thumb').forEach(canvas => {
-    const opIdx = parseInt(canvas.dataset.opIdx, 10);
-    const op = ops[opIdx];
-    if (!op || op.kind !== 'stitch') return;
-    const segStitches = stitches.slice(op.stitchStartIdx, op.stitchEndIdx);
-    const ctx = canvas.getContext('2d');
-    try {
-      drawStitchPath(ctx, canvas.width, canvas.height, segStitches, { minx: op.minx, maxx: op.maxx, miny: op.miny, maxy: op.maxy }, segColors[op.colorIdx] || '#8a1f2d');
-    } catch (e) { /* ignore */ }
-  });
-}
-
-// Découpe le flux ABSOLU de piqûres en une liste séquentielle de blocs de
-// piqûres réelles + changements de couleur. Le saut (simple ou coupe-fil)
-// qui suit immédiatement un bloc de piqûres est résumé DANS la ligne de ce
-// bloc (nombre de points d'abord, puis présence ou non d'un coupe-fil),
-// plutôt que d'avoir sa propre ligne à part.
-function vizBuildOperations(stitches) {
-  const ops = [];
-  let colorIdx = 0;
-  let visualIdx = 0; // incrémenté aux changements de couleur ET aux coupe-fils (voir vizVisualSegments)
-  let i = 0;
-  const n = stitches.length;
-  while (i < n) {
-    const s = stitches[i];
-    if (s.type === END) break;
-    if (s.type === COLOR) {
-      colorIdx++;
-      visualIdx++;
-      ops.push({ kind: 'color', x: s.x, y: s.y, colorIdx, visualIdx });
-      i++;
-      continue;
-    }
-    if (s.type === JUMP) {
-      // Saut orphelin (rare : sauts en tout début de fichier, avant toute piqûre).
-      let j = i;
-      while (j < n && stitches[j].type === JUMP) j++;
-      if ((j - i) >= 3) visualIdx++;
-      ops.push({ kind: (j - i) >= 3 ? 'trim' : 'jump', count: j - i });
-      i = j;
-      continue;
-    }
-    // Run de piqûres réelles.
-    let j = i, minx = s.x, maxx = s.x, miny = s.y, maxy = s.y;
-    while (j < n && stitches[j].type === STITCH) {
-      minx = Math.min(minx, stitches[j].x); maxx = Math.max(maxx, stitches[j].x);
-      miny = Math.min(miny, stitches[j].y); maxy = Math.max(maxy, stitches[j].y);
-      j++;
-    }
-    const stitchCount = j - i;
-    const stitchEndIdx = j; // point d'insertion d'un coupe-fil pour ce bloc
-
-    let trimAfter = 'aucun';
-    if (j < n && stitches[j].type === JUMP) {
-      let jj = j;
-      while (jj < n && stitches[jj].type === JUMP) jj++;
-      trimAfter = (jj - j) >= 3 ? 'trim' : 'jump';
-      j = jj;
-    }
-
-    ops.push({
-      kind: 'stitch', count: stitchCount, colorIdx, visualIdx, trimAfter,
-      stitchStartIdx: i, stitchEndIdx,
-      bboxW: Math.round((maxx - minx) / 10 * 10) / 10, bboxH: Math.round((maxy - miny) / 10 * 10) / 10,
-      minx, maxx, miny, maxy,
-    });
-    if (trimAfter === 'trim') visualIdx++;
-    i = j;
-  }
-  return ops;
-}
-
-function vizOpRowHtml(op, i, segColors) {
-  if (op.kind === 'color') {
-    const hex = segColors[op.visualIdx] || '#8a1f2d';
-    return '<tr class="viz-op-row-color"><td>' + (i + 1) + '</td><td colspan="2">' +
-      '<span class="color-swatch-dot" style="background:' + hex + '"></span>🎨 Changement de couleur — teinte suivante</td></tr>';
-  }
-  if (op.kind === 'trim' || op.kind === 'jump') {
-    const label = op.kind === 'trim' ? '✂️ Coupe-fil' : '↷ Saut machine';
-    return '<tr><td>' + (i + 1) + '</td><td>' + label + '</td><td>' + op.count + ' saut(s)</td></tr>';
-  }
-  // Piqûres : ligne 1 = vignette + nombre de points, ligne 2 = coupe-fil ou non
-  // (ligne juste avant un éventuel changement de couleur, puisque celui-ci
-  // est l'opération suivante dans la liste).
-  const hex = segColors[op.visualIdx] || '#8a1f2d';
-  const selectedClass = (i === vizSelectedOpIdx) ? ' viz-op-selected' : '';
-  const row1 = '<tr class="viz-op-row-clickable' + selectedClass + '" data-row-idx="' + i + '">' +
-    '<td>' + (i + 1) + '</td>' +
-    '<td><div class="viz-op-el"><canvas class="viz-op-thumb" width="42" height="32" data-op-idx="' + i + '"></canvas>🧵 Piqûres</div></td>' +
-    '<td>' + op.count + ' points · ' + op.bboxW + ' × ' + op.bboxH + ' mm</td>' +
-    '</tr>';
-  const trimHtml = op.trimAfter === 'trim'
-    ? '<span style="color:var(--fab-accent);">✂️ Coupe-fil</span> <button type="button" class="ghost icon viz-btn-set-trim" data-op-idx="' + i + '" data-new-state="jump" title="Reconvertir en simple saut (sans couper le fil)">↷ En saut simple</button>'
-    : op.trimAfter === 'jump'
-      ? '<span class="muted">↷ Saut (pas un coupe-fil)</span> <button type="button" class="ghost icon viz-btn-set-trim" data-op-idx="' + i + '" data-new-state="trim" title="Convertir ce saut en coupe-fil">✂ En coupe-fil</button>'
-      : '<span class="muted">Pas de coupe-fil</span> <button type="button" class="ghost icon viz-btn-set-trim" data-op-idx="' + i + '" data-new-state="trim" title="Insérer un coupe-fil après ce bloc">✂ Ajouter</button>';
-  const row2 = '<tr class="viz-op-row-trim viz-op-row-clickable' + selectedClass + '" data-row-idx="' + i + '"><td></td><td class="muted">Coupe-fil ?</td><td>' + trimHtml + '</td></tr>';
-  return row1 + row2;
-}
-
+// (Le Visualiseur, qui vivait ici, est devenu le module autonome
+// "Recherche / Éditeur" — voir modules/recherche_editeur/index.html,
+// qui réutilise src/shared/embroidery-codec.js comme ce fichier.)
 function initSectionsUI() {
   const importSel = document.getElementById('importSection');
   const tabsWrap = document.getElementById('sectionTabs');
@@ -8038,7 +6864,6 @@ function init() {
   initDropzone();
   initSectionsUI();
   initPreviewInteraction();
-  initVisualiseur();
   initGenSaveDir('main');
   initGenSaveDir('trousse');
   document.getElementById('btnTestPb').addEventListener('click', pbTestConnection);

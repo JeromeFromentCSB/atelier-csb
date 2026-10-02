@@ -1132,8 +1132,41 @@ function renderNuancierPanel(){
     </div>
     <div id="nu-results"></div>
   `;
+  // Vignette d'une couleur du nuancier, avec une étiquette optionnelle au-dessus (utilisé pour
+  // situer les 2 couleurs les plus proches par rapport à celle recherchée).
+  function nuancierSwatch(num, hex, label, big){
+    const size = big ? 96 : 68;
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        ${label ? `<div style="font-size:11px; color:var(--muted,#888); font-weight:600;">${escapeHtml(label)}</div>` : ''}
+        <div style="width:${size}px; height:${size}px; border-radius:10px; border:${big ? '2px solid var(--ink,#222)' : '1px solid var(--line,#ddd)'}; background:${hex};"></div>
+        <div style="font-size:${big ? 13 : 11}px; font-weight:700;">${escapeHtml(num)}</div>
+      </div>
+    `;
+  }
   function refresh(){
     const q = nuancierQuery.trim();
+    const exact = MADEIRA_COLORS.find(c => c[0] === q);
+    if(exact){
+      const targetRgb = tcHexToRgb(exact[1]);
+      const nearest = MADEIRA_COLORS.filter(c => c[0] !== q)
+        .map(c => ({ num:c[0], hex:c[1], dist: Math.sqrt(tcRgbDist2(targetRgb, tcHexToRgb(c[1]))) }))
+        .sort((a,b) => a.dist - b.dist)
+        .slice(0, 4);
+      // Le plus proche de tous se place juste à côté de la couleur recherchée (au-dessus), le
+      // 2e plus proche juste en dessous, puis les suivants en s'éloignant de part et d'autre.
+      const above = [nearest[1], nearest[0]].filter(Boolean);
+      const below = [nearest[2], nearest[3]].filter(Boolean);
+      document.getElementById('nu-results').innerHTML = `
+        <div class="hint" style="margin-bottom:14px;">Couleur ${escapeHtml(q)} trouvée — les 4 teintes les plus proches sont affichées au-dessus et en dessous.</div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+          ${above.map(c => nuancierSwatch(c.num, c.hex, null)).join('')}
+          ${nuancierSwatch(exact[0], exact[1], null, true)}
+          ${below.map(c => nuancierSwatch(c.num, c.hex, null)).join('')}
+        </div>
+      `;
+      return;
+    }
     const list = q ? MADEIRA_COLORS.filter(c => c[0].includes(q)) : MADEIRA_COLORS;
     document.getElementById('nu-results').innerHTML = `
       <div class="hint" style="margin-bottom:12px;">${list.length} couleur(s)</div>
