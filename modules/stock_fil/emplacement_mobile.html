@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Où est ma bobine ?</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Où est ma bobine">
+<meta name="theme-color" content="#B5452F">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Crect%20width='100'%20height='100'%20rx='18'%20fill='%23B5452F'/%3E%3Ctext%20x='50'%20y='68'%20font-size='55'%20text-anchor='middle'%3E%F0%9F%A7%B5%3C/text%3E%3C/svg%3E">
+<!--
+  Page autonome (iPhone) du module Stock de Fil : tape une référence de bobine, elle affiche la photo de
+  l'armoire avec un cadre rouge sur l'étiquette. N'utilise ni connexion ni base de données : seulement
+  emplacements.js (liste des étiquettes) et le dossier emplacements/ (photos), à placer à côté de cette
+  page. Même source de données que le module Stock de Fil de l'appli Windows.
+-->
+<style>
+  :root{ --bg:#F5F2EC; --card:#fff; --ink:#211C16; --muted:#8A8074; --line:#E7E0D3; --accent:#B5452F; --accent-dark:#8F3423; --accent-soft:#F7E3DC; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;}
+  body{background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; min-height:100vh; padding-bottom:calc(30px + env(safe-area-inset-bottom));}
+  header{padding:calc(16px + env(safe-area-inset-top)) 16px 10px; text-align:center;}
+  header h1{margin:0; font-size:20px; font-weight:700;}
+  header .sub{font-size:12px; color:var(--muted); margin-top:2px;}
+  .wrap{max-width:560px; margin:0 auto; padding:0 14px;}
+  .search{position:sticky; top:0; z-index:5; background:var(--bg); padding:8px 0 10px;}
+  .search input{width:100%; font-size:28px; font-weight:700; letter-spacing:2px; text-align:center; padding:12px 14px; border:2px solid var(--line); border-radius:14px; background:var(--card); color:var(--accent); -webkit-appearance:none;}
+  .search input:focus{outline:none; border-color:var(--accent);}
+  .hint{font-size:13px; color:var(--muted); text-align:center; margin:6px 0 12px;}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:14px;}
+  .chip{border:1px solid var(--line); background:var(--card); border-radius:999px; padding:9px 16px; font-size:16px; font-weight:600; color:var(--ink); font-family:inherit;}
+  .chip:active{background:var(--accent-soft); border-color:var(--accent);}
+  .result-title{font-size:18px; font-weight:700; margin:6px 2px 10px; display:flex; align-items:center; gap:8px;}
+  .result-title small{font-weight:500; color:var(--muted); font-size:13px;}
+  .fig{margin:0 0 16px; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(33,28,22,.08);}
+  .fig figcaption{padding:9px 12px 11px; font-size:13px; color:var(--muted); display:flex; justify-content:space-between; gap:8px; align-items:center;}
+  .fig figcaption b{color:var(--accent); white-space:nowrap;}
+  .frame{position:relative; overflow:hidden; background:#222; line-height:0; width:100%;}
+  .frame img{display:block; width:100%; height:100%; object-fit:cover; -webkit-user-drag:none; user-select:none;}
+  .hl{position:absolute; border:3px solid #ff2d2d; border-radius:6px; pointer-events:none; box-shadow:0 0 0 9999px rgba(0,0,0,.38), 0 0 10px 3px rgba(255,45,45,.85); animation:pulse 1.3s ease-in-out infinite;}
+  .hl.multi{box-shadow:0 0 10px 3px rgba(255,45,45,.85);}
+  @keyframes pulse{0%,100%{border-color:#ff2d2d;} 50%{border-color:#ffd400;}}
+  .fig.ens{max-width:260px; margin-left:auto; margin-right:auto;}
+  .empty{text-align:center; color:var(--muted); padding:30px 10px; font-size:15px;}
+
+  /* Visionneuse plein écran */
+  .viewer{position:fixed; inset:0; z-index:50; background:#111; display:flex; flex-direction:column;}
+  .viewer-bar{display:flex; align-items:center; gap:8px; padding:calc(8px + env(safe-area-inset-top)) 10px 8px; background:#000; color:#fff;}
+  .viewer-bar .t{flex:1; font-size:13px; line-height:1.25; min-width:0;}
+  .viewer-bar button{border:none; background:#333; color:#fff; border-radius:10px; padding:9px 13px; font-size:15px; font-family:inherit;}
+  .viewer-bar button.primary{background:var(--accent);}
+  .viewer-scroll{flex:1; overflow:auto; -webkit-overflow-scrolling:touch; text-align:center; position:relative;}
+  .viewer-scroll .frame{display:inline-block; width:100%; vertical-align:top;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧵 Où est ma bobine ?</h1>
+  <div class="sub">Tape la référence, je te montre l'étiquette sur la photo</div>
+</header>
+
+<div class="wrap">
+  <div class="search">
+    <input id="q" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" placeholder="Référence" maxlength="6">
+  </div>
+  <div id="out"><div class="empty">Tape un numéro (ex. 1778).</div></div>
+</div>
+
+<div id="viewer" class="viewer" style="display:none;"></div>
+
+<script src="emplacements.js"></script>
+<script>
+const EMP = window.STOCK_FIL_EMPLACEMENTS || { photos: {}, etiquettes: [] };
+const out = document.getElementById('out');
+const q = document.getElementById('q');
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+
+const index = new Map(); // référence -> [{ photo, box }]
+EMP.etiquettes.forEach(([photo, refs, x, y, w, h])=>{
+  String(refs).split(/\s+/).filter(Boolean).forEach(ref=>{
+    if(!index.has(ref)) index.set(ref, []);
+    index.get(ref).push({ photo, box: [x, y, w, h] });
+  });
+});
+const allRefs = [...index.keys()].sort();
+
+function viewsFor(ref){
+  const byPhoto = new Map();
+  (index.get(ref) || []).forEach(e=>{ if(!byPhoto.has(e.photo)) byPhoto.set(e.photo, []); byPhoto.get(e.photo).push(e.box); });
+  const views = [...byPhoto.entries()].map(([photo, boxes])=>({ photo, boxes, meta: EMP.photos[photo] })).filter(v=>v.meta);
+  views.sort((a, b)=> (a.meta.ensemble ? 1 : 0) - (b.meta.ensemble ? 1 : 0));
+  return views;
+}
+function cropFor(view){
+  const m = view.meta;
+  const bx = Math.min(...view.boxes.map(b=>b[0])), by = Math.min(...view.boxes.map(b=>b[1]));
+  const bw = Math.max(...view.boxes.map(b=>b[0] + b[2])) - bx, bh = Math.max(...view.boxes.map(b=>b[1] + b[3])) - by;
+  let cw = Math.max(m.w * 0.42, bw * 1.6), ch = cw * 0.72;
+  if(ch < bh * 1.5){ ch = bh * 1.5; cw = ch / 0.72; }
+  cw = Math.min(cw, m.w); ch = Math.min(ch, m.h);
+  return { x: Math.max(0, Math.min(m.w - cw, bx + bw / 2 - cw / 2)), y: Math.max(0, Math.min(m.h - ch, by + bh / 2 - ch / 2)), w: cw, h: ch };
+}
+function frameHtml(view, crop){
+  const m = view.meta;
+  const c = crop || { x: 0, y: 0, w: m.w, h: m.h };
+  const pad = Math.round(m.w * 0.008);
+  const multi = view.boxes.length > 1;
+  const hls = view.boxes.map(([x, y, w, h])=>{
+    const l = Math.max(0, x - pad), t = Math.max(0, y - pad), r = Math.min(m.w, x + w + pad), b = Math.min(m.h, y + h + pad);
+    return `<div class="hl${multi ? ' multi' : ''}" style="left:${((l - c.x) / c.w * 100).toFixed(2)}%;top:${((t - c.y) / c.h * 100).toFixed(2)}%;width:${((r - l) / c.w * 100).toFixed(2)}%;height:${((b - t) / c.h * 100).toFixed(2)}%;"></div>`;
+  }).join('');
+  const imgStyle = crop ? `position:absolute;max-width:none;height:auto;object-fit:fill;width:${(m.w / c.w * 100).toFixed(2)}%;left:${(-c.x / c.w * 100).toFixed(2)}%;top:${(-c.y / c.h * 100).toFixed(2)}%;` : '';
+  return `<div class="frame" style="aspect-ratio:${c.w.toFixed(1)}/${c.h.toFixed(1)};"><img src="${esc(m.src)}" alt="" draggable="false" style="${imgStyle}">${hls}</div>`;
+}
+
+function showRef(ref){
+  const views = viewsFor(ref);
+  if(!views.length){ out.innerHTML = `<div class="empty">Aucun emplacement repéré sur les photos pour la référence ${esc(ref)}.</div>`; return; }
+  out.innerHTML = `<div class="result-title">Madeira ${esc(ref)} <small>${views.length > 1 ? views.length + ' endroits' : ''}</small></div>` +
+    views.map((v, i)=>`
+      <figure class="fig${v.meta.ensemble ? ' ens' : ''}" data-i="${i}">
+        ${frameHtml(v, v.meta.ensemble ? null : cropFor(v))}
+        <figcaption><span>${esc(v.meta.titre)}${v.boxes.length > 1 ? ' — ' + v.boxes.length + ' emplacements' : ''}</span><b>Agrandir ›</b></figcaption>
+      </figure>`).join('');
+  out.querySelectorAll('.fig').forEach(el=>el.addEventListener('click', ()=>openViewer(ref, parseInt(el.dataset.i, 10))));
+}
+
+function update(){
+  const v = q.value.replace(/\D/g, '');
+  if(q.value !== v) q.value = v;
+  if(!v){ out.innerHTML = '<div class="empty">Tape un numéro (ex. 1778).</div>'; return; }
+  if(index.has(v)){ showRef(v); return; }
+  const matches = allRefs.filter(r=>r.startsWith(v));
+  if(!matches.length){
+    out.innerHTML = `<div class="empty">${v.length >= 4 ? 'Aucun emplacement repéré sur les photos pour ' + esc(v) + '.' : 'Aucune référence ne commence par ' + esc(v) + '.'}</div>`;
+    return;
+  }
+  const shown = matches.slice(0, 48);
+  out.innerHTML = `<div class="hint">${matches.length} référence(s) — touche-en une :</div><div class="chips">${shown.map(r=>`<button class="chip" data-r="${esc(r)}">${esc(r)}</button>`).join('')}</div>` +
+    (matches.length > shown.length ? '<div class="hint">Continue à taper pour affiner…</div>' : '');
+  out.querySelectorAll('.chip').forEach(b=>b.addEventListener('click', ()=>{ q.value = b.dataset.r; update(); window.scrollTo(0, 0); }));
+}
+q.addEventListener('input', update);
+
+/* Visionneuse plein écran : photo entière + cadre ; pincer pour zoomer, ou boutons. */
+const viewer = document.getElementById('viewer');
+function openViewer(ref, startIdx){
+  const views = viewsFor(ref);
+  let cur = startIdx, zoom = 1;
+  viewer.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  function draw(){
+    const v = views[cur];
+    viewer.innerHTML = `
+      <div class="viewer-bar">
+        <div class="t"><b>${esc(ref)}</b> — ${esc(v.meta.titre)}${views.length > 1 ? ` (${cur + 1}/${views.length})` : ''}</div>
+        ${views.length > 1 ? '<button data-a="next">▶</button>' : ''}
+        <button data-a="zoom" class="primary">${zoom > 1 ? 'Réduire' : '🔍 Zoom'}</button>
+        <button data-a="close">✕</button>
+      </div>
+      <div class="viewer-scroll">${frameHtml(v, null)}</div>`;
+    const scroll = viewer.querySelector('.viewer-scroll');
+    const frame = scroll.querySelector('.frame');
+    frame.style.width = (zoom * 100) + '%';
+    viewer.querySelector('[data-a="close"]').addEventListener('click', close);
+    viewer.querySelector('[data-a="zoom"]').addEventListener('click', ()=>{ zoom = zoom > 1 ? 1 : 3.2; draw(); });
+    const nx = viewer.querySelector('[data-a="next"]');
+    if(nx) nx.addEventListener('click', ()=>{ cur = (cur + 1) % views.length; zoom = 1; draw(); });
+    if(zoom > 1){
+      const hl = scroll.querySelector('.hl');
+      if(hl){
+        scroll.scrollLeft = frame.offsetLeft + hl.offsetLeft + hl.offsetWidth / 2 - scroll.clientWidth / 2;
+        scroll.scrollTop = frame.offsetTop + hl.offsetTop + hl.offsetHeight / 2 - scroll.clientHeight / 2;
+      }
+    }
+  }
+  function close(){ viewer.style.display = 'none'; viewer.innerHTML = ''; document.body.style.overflow = ''; }
+  draw();
+}
+</script>
+</body>
+</html>

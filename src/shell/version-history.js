@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.36', items: [
+    "Stock de Fil : dans la Recherche, la photo de l'armoire s'affiche avec un cadre rouge sur l'étiquette de la bobine recherchée (gros plan + vue d'ensemble, zoom, et bouton 📍 sur chaque ligne du tableau)",
+    "Stock de Fil : nouvelle page iPhone « Où est ma bobine ? » (modules/stock_fil/emplacement_mobile.html) pour retrouver l'emplacement d'une référence depuis le téléphone",
+    "Gestion Commande : dans le détail d'une commande, nouvelle section « Programmes à utiliser » — un admin choisit des fichiers ou dossiers, et chaque utilisateur ouvre le dossier dans l'Explorateur ou le fichier dans son programme par défaut en cliquant dessus",
+    "Pense-bête : possibilité de modifier le texte d'une note (bouton ✎)",
+  ]},
   { v: '0.2.35', items: [
     "Nouveau module « Recherche / Éditeur » : explorateur des programmes de broderie (.DST, .PES, .PXF), qui remplace l'ancien onglet Visualiseur de Gestion Casaque",
     "Recherche / Éditeur : arborescence façon Explorateur Windows (Dropbox détecté automatiquement, « Ce PC » avec les vrais noms de lecteurs, « Réseau » avec détection automatique des ordinateurs + ajout manuel d'un chemin réseau mémorisé)",

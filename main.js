@@ -380,6 +380,14 @@ ipcMain.handle('csb:list-dir', (_event, dirPath) => {
     return { error: e.message || String(e) };
   }
 });
+// Sélection d'un ou plusieurs fichiers OU dossiers (kind = 'files' | 'folders'). Windows ne permet pas de
+// mélanger les deux dans une même fenêtre de sélection, d'où deux modes distincts.
+ipcMain.handle('csb:pick-paths', async (event, kind) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const properties = kind === 'folders' ? ['openDirectory', 'multiSelections'] : ['openFile', 'multiSelections'];
+  const res = await dialog.showOpenDialog(win, { properties });
+  return res.canceled ? [] : res.filePaths;
+});
 ipcMain.handle('csb:read-file-bytes', (_event, filePath) => new Uint8Array(fs.readFileSync(filePath)));
 
 // Recherche récursive (dossier courant + tous ses sous-dossiers), filtrée par

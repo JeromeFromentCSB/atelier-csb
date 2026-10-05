@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('csbHost', {
   listNetworkComputers: () => ipcRenderer.invoke('csb:list-network-computers'),
   listNetworkShares: (computerName) => ipcRenderer.invoke('csb:list-network-shares', computerName),
   pickFolder: () => ipcRenderer.invoke('csb:pick-folder'),
+  pickPaths: (kind) => ipcRenderer.invoke('csb:pick-paths', kind),
   listDir: (dirPath) => ipcRenderer.invoke('csb:list-dir', dirPath),
   readFileBytes: (filePath) => ipcRenderer.invoke('csb:read-file-bytes', filePath),
   startSearchFiles: (rootPath, query, exts) => ipcRenderer.invoke('csb:search-files-start', { rootPath, query, exts }),

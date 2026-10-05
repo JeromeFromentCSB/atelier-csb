@@ -257,7 +257,7 @@
     border-radius: 8px; padding: 1px 8px; cursor: pointer; white-space: nowrap;
   }
   .item-list-tag:hover { opacity: .8; }
-  .del-btn {
+  .del-btn, .edit-btn {
     border: none;
     background: none;
     color: var(--muted);
@@ -267,6 +267,30 @@
     flex-shrink: 0;
   }
   .del-btn:hover { color: var(--danger); }
+  .edit-btn:hover { color: var(--accent); }
+  .edit-form textarea {
+    width: 100%;
+    resize: none;
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 15px;
+    font-family: inherit;
+    background: var(--card);
+    min-height: 44px;
+  }
+  .edit-form textarea:focus { outline: 2px solid var(--accent-light); }
+  .edit-form-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .edit-form-actions button {
+    border: none;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .edit-save-btn { background: linear-gradient(135deg, var(--ink), var(--accent)); color: #fff; }
+  .edit-cancel-btn { background: var(--bg); color: var(--muted); border: 1px solid var(--border) !important; }
   .empty {
     text-align: center;
     color: var(--muted);
@@ -562,6 +586,40 @@ async function togglePriority(id, current) {
   }
 }
 
+let editingNoteId = null;
+function startEditNote(id) {
+  editingNoteId = id;
+  render();
+  const ta = document.getElementById('editTextarea');
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+function cancelEditNote() {
+  editingNoteId = null;
+  render();
+}
+async function saveEditNote(id) {
+  const ta = document.getElementById('editTextarea');
+  const newText = ta ? ta.value.trim() : '';
+  if (!newText) return;
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+  const prev = note.texte;
+  note.texte = newText;
+  editingNoteId = null;
+  render();
+  try {
+    await apiCall(`/api/collections/${COLLECTION}/records/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ texte: newText })
+    });
+  } catch (e) {
+    console.error(e);
+    note.texte = prev;
+    render();
+    setStatus('Erreur de mise à jour', true);
+  }
+}
+
 async function deleteNote(id) {
   const idx = notes.findIndex(n => n.id === id);
   const backup = notes[idx];
@@ -599,7 +657,22 @@ function render() {
     list.innerHTML = `<div class="empty">${currentTab === 'active' ? 'Rien pour le moment' : 'Aucune note terminée'}</div>`;
     return;
   }
-  list.innerHTML = filtered.map(n => `
+  list.innerHTML = filtered.map(n => {
+    if (n.id === editingNoteId) {
+      return `
+    <div class="item ${n.fait ? 'done' : ''} ${n.priorite ? 'priorite' : ''}">
+      <div class="checkbox ${n.fait ? 'checked' : ''}" onclick="toggleDone('${n.id}', ${n.fait})">${n.fait ? '✓' : ''}</div>
+      <div class="item-body edit-form">
+        <textarea id="editTextarea" rows="1">${escapeHtml(n.texte)}</textarea>
+        <div class="edit-form-actions">
+          <button class="edit-save-btn" onclick="saveEditNote('${n.id}')">Enregistrer</button>
+          <button class="edit-cancel-btn" onclick="cancelEditNote()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+    }
+    return `
     <div class="item ${n.fait ? 'done' : ''} ${n.priorite ? 'priorite' : ''}">
       <div class="checkbox ${n.fait ? 'checked' : ''}" onclick="toggleDone('${n.id}', ${n.fait})">${n.fait ? '✓' : ''}</div>
       <div class="item-body">
@@ -610,9 +683,22 @@ function render() {
         </div>
       </div>
       <button class="star-btn ${n.priorite ? 'active' : ''}" onclick="togglePriority('${n.id}', ${n.priorite ? 'true' : 'false'})" title="Marquer en priorité">${n.priorite ? '⭐' : '☆'}</button>
+      <button class="edit-btn" onclick="startEditNote('${n.id}')" title="Modifier le texte">✎</button>
       <button class="del-btn" onclick="deleteNote('${n.id}')">✕</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
+  if (editingNoteId) {
+    const ta = document.getElementById('editTextarea');
+    if (ta) {
+      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+      ta.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 200) + 'px'; });
+      ta.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditNote(editingNoteId); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelEditNote(); }
+      });
+    }
+  }
 }
 
 function escapeHtml(str) {

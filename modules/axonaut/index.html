@@ -758,6 +758,12 @@
         </div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">📷 Photos (prises depuis le mobile)</div>
         <div id="blPhotosGallery" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+        <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">🧵 Programmes à utiliser</div>
+        <div id="blProgramsAdminBar" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+          <button class="btn ghost" id="blProgramsAddFilesBtn">➕ Fichier(s)…</button>
+          <button class="btn ghost" id="blProgramsAddFoldersBtn">📁 Dossier(s)…</button>
+        </div>
+        <div id="blProgramsList"></div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents de fabrication</div>
         <div id="blFabricationDocs"></div>
         <div id="blDemandePrixWrap" style="display:none;">
@@ -3665,6 +3671,7 @@ async function openBlModal(r){
   document.getElementById('blPanelEmpty').style.display = 'none';
   document.getElementById('blPanelContent').style.display = 'block';
   loadBlPhotos(r.contractId);
+  loadBlPrograms(r.contractId);
   const canViewQuotePdf = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'devis_pdf');
   const viewQuoteBtn = document.getElementById('blViewQuoteBtn');
   viewQuoteBtn.style.display = (canViewQuotePdf && r.quotationId) ? 'inline-flex' : 'none';
@@ -3728,6 +3735,102 @@ async function openBlModal(r){
     document.getElementById('blLinesList').innerHTML = `<div class="hint" style="color:var(--silk-red);">Erreur de chargement du devis : ${escapeHtml(e.message)}</div>`;
   }
 }
+/* ---------- Programmes à utiliser pour une commande ----------
+   Liste de fichiers/dossiers (chemins locaux ou réseau) choisie par un admin ; tout le monde peut
+   ensuite cliquer un chemin pour ouvrir le dossier dans l'Explorateur ou le fichier dans son
+   programme par défaut. Stockée dans les réglages partagés PocketBase (axonaut_settings, une clé
+   par commande) : visible par tous les postes sans modifier le schéma des collections. */
+const progSettingsKey = (contractId) => 'programmes_commande_' + contractId;
+async function saveSharedSettingStrict(key, value){
+  const filter = encodeURIComponent(`settings_key='${key}'`);
+  const res = await CSBAuth.authedFetch(appSettingsBase() + `?filter=(${filter})`);
+  if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
+  const json = await res.json();
+  const rec = (json.items && json.items[0]) || null;
+  const body = { settings_key: key, settings_value: JSON.stringify(value) };
+  const r2 = rec
+    ? await CSBAuth.authedFetch(appSettingsBase() + '/' + rec.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+    : await CSBAuth.authedFetch(appSettingsBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if(!r2.ok) throw new Error('PocketBase HTTP ' + r2.status + ' — ' + (await r2.text()).slice(0, 200));
+}
+let blProgramsCurrent = []; // [{ path, type:'file'|'folder' }] de la commande affichée
+function progBaseName(p){ return String(p).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p; }
+async function openProgramPath(item){
+  if(!(window.csbHost && window.csbHost.openPath)){ alert("L'ouverture de fichiers n'est possible que dans l'application Atelier CSB."); return; }
+  let err = '';
+  try{ err = await window.csbHost.openPath(item.path); }catch(e){ err = e.message || String(e); }
+  if(err) alert(`Impossible d'ouvrir « ${item.path} » :\n${err}\n\n(Le fichier ou le dossier a peut-être été déplacé, ou le lecteur réseau n'est pas accessible.)`);
+}
+function renderBlPrograms(){
+  const box = document.getElementById('blProgramsList');
+  const admin = isAdminUser();
+  document.getElementById('blProgramsAdminBar').style.display = admin ? 'flex' : 'none';
+  if(!blProgramsCurrent.length){
+    box.innerHTML = `<div class="hint" style="font-size:.78rem;">Aucun programme indiqué pour cette commande.</div>`;
+    return;
+  }
+  box.innerHTML = blProgramsCurrent.map((it, i) => `
+    <div class="devis-doc-row" data-prog-idx="${i}" title="${it.type === 'folder' ? 'Ouvrir ce dossier dans l\'Explorateur' : 'Ouvrir ce fichier avec le programme par défaut'}">
+      <span style="min-width:0;">
+        ${it.type === 'folder' ? '📁' : '📄'} <strong>${escapeHtml(progBaseName(it.path))}</strong>
+        <span style="display:block; font-size:.7rem; color:var(--muted); overflow-wrap:anywhere;">${escapeHtml(it.path)}</span>
+      </span>
+      ${admin ? `<button class="iconbtn" data-prog-del="${i}" title="Retirer de la liste">🗑</button>` : ''}
+    </div>`).join('');
+  box.querySelectorAll('.devis-doc-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if(e.target.closest('[data-prog-del]')) return;
+      openProgramPath(blProgramsCurrent[parseInt(row.dataset.progIdx, 10)]);
+    });
+  });
+  box.querySelectorAll('[data-prog-del]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.progDel, 10);
+      const item = blProgramsCurrent[idx];
+      if(!confirm(`Retirer « ${progBaseName(item.path)} » de la liste des programmes de cette commande ?\n(Le fichier lui-même n'est pas supprimé.)`)) return;
+      await saveBlPrograms(blProgramsCurrent.filter((_, i) => i !== idx));
+    });
+  });
+}
+async function loadBlPrograms(contractId){
+  blProgramsCurrent = [];
+  document.getElementById('blProgramsList').innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement…</div>';
+  document.getElementById('blProgramsAdminBar').style.display = isAdminUser() ? 'flex' : 'none';
+  try{
+    const saved = await fetchSharedSetting(progSettingsKey(contractId));
+    if(!currentBlRecord || currentBlRecord.contractId !== contractId) return; // une autre commande a été ouverte entre-temps
+    blProgramsCurrent = Array.isArray(saved) ? saved : [];
+    renderBlPrograms();
+  }catch(e){
+    if(!currentBlRecord || currentBlRecord.contractId !== contractId) return;
+    document.getElementById('blProgramsList').innerHTML = `<div class="hint" style="color:var(--silk-red); font-size:.78rem;">Erreur de chargement : ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function saveBlPrograms(list){
+  if(!currentBlRecord) return;
+  const contractId = currentBlRecord.contractId;
+  try{
+    await saveSharedSettingStrict(progSettingsKey(contractId), list);
+    if(currentBlRecord && currentBlRecord.contractId === contractId){ blProgramsCurrent = list; renderBlPrograms(); }
+  }catch(e){
+    alert("Impossible d'enregistrer la liste des programmes : " + e.message);
+  }
+}
+async function addBlPrograms(kind){
+  if(!isAdminUser()) return;
+  if(!(window.csbHost && window.csbHost.pickPaths)){ alert("La sélection de fichiers n'est possible que dans l'application Atelier CSB."); return; }
+  let picked = [];
+  try{ picked = await window.csbHost.pickPaths(kind); }catch(e){ alert('Erreur : ' + e.message); return; }
+  if(!picked || !picked.length) return;
+  const known = new Set(blProgramsCurrent.map(it => it.path.toLowerCase()));
+  const added = picked.filter(p => !known.has(p.toLowerCase())).map(p => ({ path: p, type: kind === 'folders' ? 'folder' : 'file' }));
+  if(!added.length) return;
+  await saveBlPrograms([...blProgramsCurrent, ...added]);
+}
+document.getElementById('blProgramsAddFilesBtn').addEventListener('click', () => addBlPrograms('files'));
+document.getElementById('blProgramsAddFoldersBtn').addEventListener('click', () => addBlPrograms('folders'));
+
 async function loadBlFabricationDocuments(quotationId){
   const box = document.getElementById('blFabricationDocs');
   const dpWrap = document.getElementById('blDemandePrixWrap');

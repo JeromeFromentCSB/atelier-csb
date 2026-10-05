@@ -99,6 +99,33 @@
   .panel{display:none;}
   .panel.active{display:block;}
 
+  /* Emplacement des bobines sur les photos des armoires */
+  .emp-card{margin-bottom:16px;}
+  .emp-card h3{margin:0 0 4px;}
+  .emp-ref-title{font-size:13px; font-weight:700; margin:10px 0 8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .emp-figs{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;}
+  .emp-fig{margin:0; cursor:zoom-in; width:min(100%, 330px);}
+  .emp-fig figcaption{font-size:11.5px; color:var(--ink-soft); margin-top:5px; line-height:1.3;}
+  .emp-frame{position:relative; overflow:hidden; border-radius:8px; border:1px solid var(--line); background:#222; line-height:0;}
+  .emp-frame img{width:100%; height:100%; display:block; object-fit:cover;}
+  .emp-hl{
+    position:absolute; border:3px solid #ff2d2d; border-radius:6px; pointer-events:none;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.38), 0 0 10px 3px rgba(255,45,45,.85);
+    animation:emp-pulse 1.3s ease-in-out infinite;
+  }
+  @keyframes emp-pulse{0%,100%{border-color:#ff2d2d;} 50%{border-color:#ffd400;}}
+  .emp-fig-ens{width:min(100%, 190px);}
+  .emp-hl-multi{box-shadow:0 0 10px 3px rgba(255,45,45,.85);}
+  .emp-btn{padding:2px 8px; font-size:13px; line-height:1.3;}
+  .emp-modal{position:fixed; inset:0; background:rgba(15,12,9,.82); z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:18px;}
+  .emp-modal-box{background:#fff; border-radius:12px; max-width:min(96vw,1500px); width:100%; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.5);}
+  .emp-modal-head{display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .emp-modal-head .emp-modal-title{font-weight:700; font-size:14px; flex:1; min-width:180px;}
+  .emp-modal-head .emp-modal-sub{font-size:12px; color:var(--ink-soft); width:100%;}
+  .emp-modal-scroll{overflow:auto; padding:12px; background:#1c1814; text-align:center; position:relative;}
+  .emp-modal-scroll .emp-frame{display:inline-block; margin:0 auto; cursor:zoom-in; width:min(100%, calc((88vh - 150px) * var(--ar, 1.33)));}
+  .emp-modal-scroll .emp-frame.zoomed{cursor:zoom-out; width:230%;}
+
   /* Summary cards */
   .cards{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:22px;}
   .card{
@@ -214,6 +241,7 @@
 <script id="lurex-seed-data" type="application/json">[{"reference":4215,"teinte":"BORDEAUX","quantite":4},{"reference":2013,"teinte":"ROSE FUCHIA","quantite":4},{"reference":4246,"teinte":"CANARD","quantite":4},{"reference":4227,"teinte":"ROSE GOLD","quantite":13},{"reference":4237,"teinte":"BLEU ROI","quantite":9},{"reference":4261,"teinte":"BLEU","quantite":17},{"reference":4222,"teinte":"WHITE GOLD","quantite":25},{"reference":2037,"teinte":"BLEU ROI","quantite":4},{"reference":4267,"teinte":"BLEU ROI","quantite":4},{"reference":4219,"teinte":"ROSE","quantite":3},{"reference":4204,"teinte":"ANTIQUE GOLD","quantite":2},{"reference":4260,"teinte":"GRIS","quantite":4},{"reference":4211,"teinte":"GRIS CLAIR","quantite":7},{"reference":34,"teinte":"BLEU","quantite":1,"commentaire":"Réf. 34 en double sur le scan (voir aussi GOLD) — à vérifier"},{"reference":4232,"teinte":"BLEU","quantite":1},{"reference":4210,"teinte":"GRIS ARGENT","quantite":14},{"reference":2010,"teinte":"ARGENT","quantite":5},{"reference":4229,"teinte":"CHOCO","quantite":2},{"reference":4271,"teinte":"GRIS","quantite":2,"commentaire":"Réf. 4271 en double sur le scan (voir aussi MARINE FONCE) — à vérifier"},{"reference":4226,"teinte":"ORANGE","quantite":2},{"reference":34,"teinte":"GOLD","quantite":1,"commentaire":"Réf. 34 en double sur le scan (voir aussi BLEU) — à vérifier"},{"reference":4272,"teinte":"NOIR","quantite":9},{"reference":4271,"teinte":"MARINE FONCE","quantite":2,"commentaire":"Réf. 4271 en double sur le scan (voir aussi GRIS), écriture peu lisible — à vérifier"},{"reference":4201,"teinte":"OR","quantite":1},{"reference":31,"teinte":"SILVER","quantite":1},{"reference":2071,"teinte":"NOIR","quantite":1},{"reference":460,"teinte":"GRIS","quantite":3},{"reference":3030,"teinte":"SILVER","quantite":3},{"reference":2022,"teinte":"WHITE GOLD","quantite":1},{"reference":44,"teinte":"ARGENT","quantite":5},{"reference":619,"teinte":"SAUMON","quantite":3}]</script>
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
+<script src="emplacements.js"></script>
 <script>
 /* ===================== Stock de Fil — Atelier CSB ===================== */
 const DEFAULT_ZONES = ["Caisses", "Etagere"];
@@ -761,7 +789,158 @@ function doRender(){
   if(activeTab === 'parametres') renderParametresPanel();
 }
 
-function stockTableHTML(rows, idPrefix, selectable){
+/* ---------- Emplacement des bobines sur les photos des armoires (voir emplacements.js) ---------- */
+const EMP = window.STOCK_FIL_EMPLACEMENTS || { photos: {}, etiquettes: [] };
+let empIndexCache = null;
+function empIndex(){
+  if(empIndexCache) return empIndexCache;
+  const idx = new Map(); // référence -> [{ photo, box:[x,y,w,h] }]
+  EMP.etiquettes.forEach(([photo, refs, x, y, w, h])=>{
+    String(refs).split(/\s+/).filter(Boolean).forEach(ref=>{
+      if(!idx.has(ref)) idx.set(ref, []);
+      idx.get(ref).push({ photo, box: [x, y, w, h] });
+    });
+  });
+  empIndexCache = idx;
+  return idx;
+}
+function empHas(ref){ return empIndex().has(String(ref).trim()); }
+// Photos où se trouve la référence (une entrée par photo, avec tous ses cadres) : gros plans d'abord,
+// vues d'ensemble ensuite.
+function empViews(ref){
+  const list = empIndex().get(String(ref).trim()) || [];
+  const byPhoto = new Map();
+  list.forEach(e=>{ if(!byPhoto.has(e.photo)) byPhoto.set(e.photo, []); byPhoto.get(e.photo).push(e.box); });
+  const views = [...byPhoto.entries()].map(([photo, boxes])=>({ photo, boxes, meta: EMP.photos[photo] })).filter(v=>v.meta);
+  views.sort((a,b)=> (a.meta.ensemble ? 1 : 0) - (b.meta.ensemble ? 1 : 0));
+  return views;
+}
+// Zone de la photo à afficher en vignette : un recadrage centré sur l'étiquette, pour qu'elle reste
+// lisible sans agrandir (les vues d'ensemble, elles, s'affichent en entier pour situer l'armoire).
+function empCrop(view){
+  const m = view.meta;
+  const bx = Math.min(...view.boxes.map(b=>b[0])), by = Math.min(...view.boxes.map(b=>b[1]));
+  const bw = Math.max(...view.boxes.map(b=>b[0]+b[2])) - bx, bh = Math.max(...view.boxes.map(b=>b[1]+b[3])) - by;
+  let cw = Math.max(m.w * 0.42, bw * 1.6);
+  let ch = cw * 0.72;
+  if(ch < bh * 1.5){ ch = bh * 1.5; cw = ch / 0.72; }
+  cw = Math.min(cw, m.w); ch = Math.min(ch, m.h);
+  const cx = Math.max(0, Math.min(m.w - cw, bx + bw / 2 - cw / 2));
+  const cy = Math.max(0, Math.min(m.h - ch, by + bh / 2 - ch / 2));
+  return { x: cx, y: cy, w: cw, h: ch };
+}
+function empFrameHtml(view, crop, cls){
+  const m = view.meta;
+  const c = crop || { x: 0, y: 0, w: m.w, h: m.h };
+  const pad = Math.round(m.w * 0.008);
+  const multi = view.boxes.length > 1;
+  const hls = view.boxes.map(([x, y, w, h])=>{
+    const l = Math.max(0, x - pad), t = Math.max(0, y - pad);
+    const r = Math.min(m.w, x + w + pad), b = Math.min(m.h, y + h + pad);
+    return `<div class="emp-hl${multi ? ' emp-hl-multi' : ''}" style="left:${((l - c.x) / c.w * 100).toFixed(2)}%;top:${((t - c.y) / c.h * 100).toFixed(2)}%;width:${((r - l) / c.w * 100).toFixed(2)}%;height:${((b - t) / c.h * 100).toFixed(2)}%;"></div>`;
+  }).join('');
+  const imgStyle = crop
+    ? `position:absolute;max-width:none;height:auto;object-fit:fill;width:${(m.w / c.w * 100).toFixed(2)}%;left:${(-c.x / c.w * 100).toFixed(2)}%;top:${(-c.y / c.h * 100).toFixed(2)}%;`
+    : '';
+  return `<div class="emp-frame ${cls || ''}" style="aspect-ratio:${c.w.toFixed(1)}/${c.h.toFixed(1)};--ar:${(c.w / c.h).toFixed(4)};"><img src="${escapeHtml(m.src)}" alt="${escapeHtml(m.titre)}" draggable="false" style="${imgStyle}">${hls}</div>`;
+}
+function empRefPanelHtml(ref, teinte){
+  const views = empViews(ref);
+  if(!views.length) return '';
+  const figs = views.map((v, i)=>`
+    <figure class="emp-fig${v.meta.ensemble ? ' emp-fig-ens' : ''}" data-emp-ref="${escapeHtml(String(ref))}" data-emp-idx="${i}" title="Cliquer pour agrandir">
+      ${empFrameHtml(v, v.meta.ensemble ? null : empCrop(v))}
+      <figcaption>${escapeHtml(v.meta.titre)}${v.boxes.length > 1 ? ` — ${v.boxes.length} emplacements` : ''}</figcaption>
+    </figure>`).join('');
+  return `<div class="emp-ref-title">Madeira ${escapeHtml(String(ref))}${teinte ? ' — ' + escapeHtml(teinte) : ''}</div><div class="emp-figs">${figs}</div>`;
+}
+// Carte "Emplacement" de l'onglet Recherche : s'affiche d'elle-même quand la recherche se réduit à 1-3
+// références repérées sur les photos ; au-delà, le bouton 📍 de chaque ligne du tableau prend le relais.
+function empSearchPanelHtml(rows, refQuery){
+  const refs = [];
+  const seen = new Set();
+  rows.forEach(r=>{ const k = String(r.reference); if(!seen.has(k)){ seen.add(k); refs.push({ ref: k, teinte: r.teinte }); } });
+  const q = (refQuery || '').trim();
+  if(q && !seen.has(q) && empHas(q)){ refs.unshift({ ref: q, teinte: '' }); seen.add(q); }
+  const located = refs.filter(x=>empHas(x.ref));
+  if(!located.length){
+    return /^\d{4}$/.test(q) ? `<div class="hint" style="margin-bottom:10px;">📍 Aucun emplacement repéré sur les photos pour la référence ${escapeHtml(q)}.</div>` : '';
+  }
+  if(located.length > 3){
+    return `<div class="hint" style="margin-bottom:10px;">📍 ${located.length} références de cette liste sont repérées sur les photos des armoires — clique sur 📍 dans le tableau pour voir où.</div>`;
+  }
+  return `<div class="form-card emp-card"><h3>📍 Emplacement sur les photos</h3>${located.map(x=>empRefPanelHtml(x.ref, x.teinte)).join('')}</div>`;
+}
+function attachEmpHandlers(container){
+  container.querySelectorAll('[data-emp-ref]').forEach(el=>{
+    el.addEventListener('click', ()=> openEmpModal(el.dataset.empRef, parseInt(el.dataset.empIdx || '0', 10)));
+  });
+  container.querySelectorAll('.emp-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{ e.stopPropagation(); openEmpModal(btn.dataset.ref, 0); });
+  });
+}
+function closeEmpModal(){
+  const el = document.getElementById('emp-modal');
+  if(el) el.remove();
+  document.removeEventListener('keydown', empModalKey);
+}
+let empModalState = null;
+function empModalKey(e){
+  if(!empModalState) return;
+  if(e.key === 'Escape') closeEmpModal();
+  else if(e.key === 'ArrowRight') empModalState.go(1);
+  else if(e.key === 'ArrowLeft') empModalState.go(-1);
+}
+// Vue agrandie : photo entière avec le cadre sur l'étiquette, bouton pour zoomer, flèches pour passer
+// d'une photo à l'autre (gros plans puis vue d'ensemble).
+function openEmpModal(ref, startIdx){
+  const views = empViews(ref);
+  if(!views.length) return;
+  closeEmpModal();
+  let cur = Math.max(0, Math.min(views.length - 1, startIdx || 0));
+  let zoomed = false;
+  const wrap = document.createElement('div');
+  wrap.className = 'emp-modal';
+  wrap.id = 'emp-modal';
+  document.body.appendChild(wrap);
+  function centerOnHighlight(){
+    const scroll = wrap.querySelector('.emp-modal-scroll');
+    const frame = scroll.querySelector('.emp-frame');
+    const hl = scroll.querySelector('.emp-hl');
+    if(!hl) return;
+    scroll.scrollLeft = frame.offsetLeft + hl.offsetLeft + hl.offsetWidth / 2 - scroll.clientWidth / 2;
+    scroll.scrollTop = frame.offsetTop + hl.offsetTop + hl.offsetHeight / 2 - scroll.clientHeight / 2;
+  }
+  function draw(){
+    const v = views[cur];
+    wrap.innerHTML = `
+      <div class="emp-modal-box">
+        <div class="emp-modal-head">
+          <div class="emp-modal-title">📍 Référence ${escapeHtml(String(ref))} — ${escapeHtml(v.meta.titre)}</div>
+          ${views.length > 1 ? `<button class="small" data-emp="prev">◀</button><span>${cur + 1}/${views.length}</span><button class="small" data-emp="next">▶</button>` : ''}
+          <button class="small" data-emp="zoom">${zoomed ? '🔍 Dézoomer' : '🔍 Zoomer'}</button>
+          <button class="small primary" data-emp="close">Fermer</button>
+          <div class="emp-modal-sub">Le cadre rouge clignotant montre l'étiquette. Clique sur la photo pour zoomer / dézoomer.</div>
+        </div>
+        <div class="emp-modal-scroll">${empFrameHtml(v, null, zoomed ? 'zoomed' : '')}</div>
+      </div>`;
+    wrap.querySelector('[data-emp="close"]').addEventListener('click', closeEmpModal);
+    const prev = wrap.querySelector('[data-emp="prev"]'), next = wrap.querySelector('[data-emp="next"]');
+    if(prev) prev.addEventListener('click', ()=>go(-1));
+    if(next) next.addEventListener('click', ()=>go(1));
+    const toggleZoom = ()=>{ zoomed = !zoomed; draw(); };
+    wrap.querySelector('[data-emp="zoom"]').addEventListener('click', toggleZoom);
+    wrap.querySelector('.emp-frame').addEventListener('click', toggleZoom);
+    if(zoomed) centerOnHighlight();
+  }
+  function go(d){ cur = (cur + d + views.length) % views.length; draw(); }
+  wrap.addEventListener('click', e=>{ if(e.target === wrap) closeEmpModal(); });
+  empModalState = { go };
+  document.addEventListener('keydown', empModalKey);
+  draw();
+}
+
+function stockTableHTML(rows, idPrefix, selectable, locate){
   const zones = state.zones;
   const sorted = [...rows].sort((a,b)=>{
     let av, bv;
@@ -786,10 +965,12 @@ function stockTableHTML(rows, idPrefix, selectable){
     const zoneCells = zones.map(z=>`<td class="num">${fmtNum(r.zones[z]||0)}</td>`).join('');
     const refKey = stockKey(r.filType, r.reference);
     const checkCell = selectable ? `<td><input type="checkbox" class="row-select" data-ref="${escapeHtml(refKey)}" ${selectedRefs.has(refKey)?'checked':''}></td>` : '';
+    const locCell = locate ? `<td>${empHas(r.reference) ? `<button class="ghost emp-btn" data-ref="${escapeHtml(String(r.reference))}" title="Voir où se trouve cette bobine sur les photos">📍</button>` : ''}</td>` : '';
     return `<tr>
       ${checkCell}
       <td><span class="badge fil-${r.filType==='Lurex'?'lurex':'poly'}">${escapeHtml(r.filType)}</span></td>
       <td>${escapeHtml(r.reference)}</td>
+      ${locCell}
       <td><span class="teinte-cell"><span class="swatch" style="background:${colorFor(r.teinte)}"></span>${escapeHtml(r.teinte||'—')}</span></td>
       ${zoneCells}
       <td class="num">${fmtNum(r.nonDefinie)}</td>
@@ -804,6 +985,7 @@ function stockTableHTML(rows, idPrefix, selectable){
         ${selectable ? `<th style="width:28px;"><input type="checkbox" id="${idPrefix}-select-all" ${selectAllChecked?'checked':''}></th>` : ''}
         <th data-sort="filType">Type de fil</th>
         <th data-sort="reference">Référence</th>
+        ${locate ? '<th style="width:44px;" title="Emplacement sur les photos">📍</th>' : ''}
         <th data-sort="teinte">Teinte</th>
         ${zoneHeaders}
         <th class="num">Zone non définie</th>
@@ -1069,9 +1251,11 @@ function renderReberchePanel(stock){
     document.getElementById('rc-results').innerHTML = `
       <div class="hint" style="margin-bottom:12px;">${rows.length} référence(s) trouvée(s) — soit ${fmtNum(totalBobines)} bobine(s) au total</div>
       ${suggestions}
-      ${stockTableHTML(rows, 'rc')}
+      ${empSearchPanelHtml(rows, rcRefQuery)}
+      ${stockTableHTML(rows, 'rc', false, true)}
     `;
     attachSortHandlers(document.getElementById('rc-results'), refresh);
+    attachEmpHandlers(document.getElementById('rc-results'));
   }
   // Si la référence recherchée n'est pas en stock, propose les 1-2 couleurs les plus proches
   // parmi ce qui EST en stock (distance colorimétrique RGB par rapport au nuancier Madeira
