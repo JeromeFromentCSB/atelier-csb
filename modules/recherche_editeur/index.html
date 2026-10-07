@@ -89,7 +89,7 @@
   .current-dir-path-row{padding:0 14px 8px; border-bottom:1px solid var(--line);}
   .current-dir-path{font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;}
 
-  .explorer-body{flex:1; min-height:0; overflow-y:auto; padding:14px;}
+  .explorer-body{flex:1; min-height:0; overflow:auto; padding:14px;}
   .explorer-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:10px;}
   .explorer-tile{
     display:flex; flex-direction:column; align-items:center; gap:5px; padding:8px 6px;
@@ -115,15 +115,17 @@
   .explorer-simple-row .row-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 
   /* ---- Mode "Liste détaillée" (colonnes Nom/Modifié le/Type/Taille) ---- */
-  .explorer-details-table{width:100%; border-collapse:collapse; font-size:12.5px;}
-  .explorer-details-table thead th{text-align:left; font-size:11px; font-weight:700; color:var(--muted); padding:6px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--paper); z-index:1;}
+  .explorer-details-table{table-layout:fixed; border-collapse:collapse; font-size:12.5px;}
+  .explorer-details-table thead th{position:relative; overflow:hidden; white-space:nowrap; text-align:left; font-size:11px; font-weight:700; color:var(--muted); padding:6px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--paper); z-index:1;}
   .explorer-details-table tbody tr{cursor:pointer;}
   .explorer-details-table tbody tr:hover{background:var(--white);}
   .explorer-details-table tbody tr.selected{background:var(--accent-soft);}
   .explorer-details-table td{padding:5px 10px; border-bottom:1px solid var(--paper-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0;}
-  .explorer-details-table td.col-name{max-width:260px;}
+  .explorer-details-table td.col-name{max-width:none;}
+  .explorer-details-table th .col-resize-handle{position:absolute; top:0; right:0; width:6px; height:100%; cursor:col-resize; user-select:none;}
+  .explorer-details-table th .col-resize-handle:hover{background:var(--accent-soft);}
   .explorer-details-table td .row-icon{margin-right:6px;}
-  .explorer-details-table td.col-date, .explorer-details-table td.col-type, .explorer-details-table td.col-size{color:var(--muted); max-width:140px;}
+  .explorer-details-table td.col-date, .explorer-details-table td.col-type, .explorer-details-table td.col-size{color:var(--muted); max-width:none;}
   .explorer-empty{color:var(--muted); font-style:italic; padding:30px; text-align:center;}
   .search-result-notice{font-size:11.5px; color:var(--muted); margin-bottom:8px;}
 
@@ -191,6 +193,9 @@
       <button type="button" class="filter-tab" data-ext="dst">.DST</button>
       <button type="button" class="filter-tab" data-ext="pes">.PES</button>
       <button type="button" class="filter-tab" data-ext="pxf">.PXF</button>
+      <label style="display:flex; align-items:center; gap:4px; font-size:12px; margin-left:8px; cursor:pointer;" title="Fichiers supprimés conservés par le NAS Synology (dossiers #recycle et @eaDir)">
+        <input type="checkbox" id="chkRecycle"> Corbeille NAS
+      </label>
       <span class="view-mode-group" style="margin-left:auto; display:flex; gap:2px;">
         <button type="button" class="ghost icon view-mode-btn active" data-mode="thumbnails" title="Vignettes">▦</button>
         <button type="button" class="ghost icon view-mode-btn" data-mode="details" title="Liste détaillée">☰</button>
@@ -570,7 +575,7 @@ async function startSearch(term){
   try {
     // Toujours TOUTES les extensions ici : le filtre (chips) s'applique
     // ensuite côté renderer, sans avoir à relancer la recherche.
-    requestId = await window.csbHost.startSearchFiles(currentDirPath, term, PROGRAM_EXTS.slice());
+    requestId = await window.csbHost.startSearchFiles(currentDirPath, term, PROGRAM_EXTS.slice(), document.getElementById('chkRecycle').checked);
   } catch (e) {
     if (token !== searchToken) return; // une recherche plus récente gère déjà son propre curseur
     setSearchBusy(false);
@@ -677,13 +682,58 @@ function bindItem(el){
 // que soit le mode — une grille, un <tbody>, ou une simple liste), pour que
 // le mode d'affichage puisse changer sans toucher à la logique de
 // recherche/ajout progressif.
+const DETAIL_COLS = [
+  { id: 'name', label: 'Nom', width: 260 },
+  { id: 'date', label: 'Modifié le', width: 130 },
+  { id: 'type', label: 'Type', width: 130 },
+  { id: 'size', label: 'Taille', width: 80 },
+  { id: 'dir',  label: 'Dossier', width: 300 },
+];
+let detailColWidths = {};
+try { detailColWidths = JSON.parse(localStorage.getItem('rechercheEditeurColWidths') || '{}') || {}; } catch (e) { detailColWidths = {}; }
+function detailColWidth(c){ return Math.max(40, detailColWidths[c.id] || c.width); }
+
 function containerSkeletonHtml(opts){
   if (viewMode === 'details') {
-    const dirCol = opts.recursive ? '<th>Dossier</th>' : '';
-    return '<table class="explorer-details-table"><thead><tr><th>Nom</th><th>Modifié le</th><th>Type</th><th>Taille</th>' + dirCol + '</tr></thead><tbody id="explorerGrid"></tbody></table>';
+    const cols = DETAIL_COLS.filter(c => c.id !== 'dir' || opts.recursive);
+    const total = cols.reduce((s, c) => s + detailColWidth(c), 0);
+    const colgroup = '<colgroup>' + cols.map(c => '<col data-col="' + c.id + '" style="width:' + detailColWidth(c) + 'px">').join('') + '</colgroup>';
+    const head = cols.map(c => '<th data-col="' + c.id + '">' + c.label + '<span class="col-resize-handle" data-col="' + c.id + '"></span></th>').join('');
+    return '<table class="explorer-details-table" style="width:' + total + 'px;">' + colgroup + '<thead><tr>' + head + '</tr></thead><tbody id="explorerGrid"></tbody></table>';
   }
   if (viewMode === 'list') return '<div class="explorer-simple-list" id="explorerGrid"></div>';
   return '<div class="explorer-grid" id="explorerGrid"></div>';
+}
+
+// Redimensionnement des colonnes de la liste détaillée à la souris (largeurs mémorisées).
+function wireColumnResize(root){
+  const table = root.querySelector('.explorer-details-table');
+  if (!table) return;
+  table.querySelectorAll('.col-resize-handle').forEach(handle => {
+    handle.addEventListener('mousedown', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      const id = handle.dataset.col;
+      const colEl = table.querySelector('col[data-col="' + id + '"]');
+      const startX = ev.clientX;
+      const startW = colEl.getBoundingClientRect().width;
+      const startTotal = table.getBoundingClientRect().width;
+      document.body.style.cursor = 'col-resize';
+      function onMove(e){
+        const w = Math.max(40, Math.round(startW + e.clientX - startX));
+        colEl.style.width = w + 'px';
+        table.style.width = Math.round(startTotal - startW + w) + 'px';
+        detailColWidths[id] = w;
+      }
+      function onUp(){
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        try { localStorage.setItem('rechercheEditeurColWidths', JSON.stringify(detailColWidths)); } catch (e) { /* ignore */ }
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
 }
 
 function renderExplorerList(list, opts){
@@ -698,6 +748,7 @@ function renderExplorerList(list, opts){
     ? '<div class="search-result-notice" id="searchResultNotice">' + list.length + ' résultat(s) dans ce dossier et ses sous-dossiers' + (opts.truncated ? ' (liste limitée aux ' + list.length + ' premiers)' : '') + '</div>'
     : '';
   body.innerHTML = notice + containerSkeletonHtml(opts);
+  wireColumnResize(body);
   const container = document.getElementById('explorerGrid');
   const frag = document.createDocumentFragment();
   list.forEach(e => {
@@ -851,6 +902,8 @@ document.getElementById('searchInput').addEventListener('input', () => {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(refreshView, 250);
 });
+// La corbeille du NAS (#recycle, @eaDir) est ignorée par défaut ; cocher la case relance la recherche pour l'inclure.
+document.getElementById('chkRecycle').addEventListener('change', () => { if (searchActive) refreshView(); });
 document.querySelectorAll('.filter-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     extFilter = btn.dataset.ext;

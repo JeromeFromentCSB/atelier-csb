@@ -405,7 +405,7 @@ const SEARCH_BATCH_SIZE = 60;
 const SEARCH_BATCH_DELAY_MS = 120;
 let searchRequestCounter = 0;
 let activeSearchId = 0;
-ipcMain.handle('csb:search-files-start', (event, { rootPath, query, exts }) => {
+ipcMain.handle('csb:search-files-start', (event, { rootPath, query, exts, includeRecycle }) => {
   const requestId = ++searchRequestCounter;
   activeSearchId = requestId;
   // Chaque module tourne dans sa propre <iframe> (nodeIntegrationInSubFrames),
@@ -447,7 +447,12 @@ ipcMain.handle('csb:search-files-start', (event, { rootPath, query, exts }) => {
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { entries = []; }
     for (const e of entries) {
       const full = path.join(dir, e.name);
-      if (e.isDirectory()) { dirQueue.push(full); continue; }
+      if (e.isDirectory()) {
+        // Corbeille / miniatures du NAS Synology : ignorées sauf si demandé.
+        if (!includeRecycle && (e.name === '#recycle' || e.name === '@eaDir')) continue;
+        dirQueue.push(full);
+        continue;
+      }
       const ext = path.extname(e.name).toLowerCase().replace(/^\./, '');
       if (extList.length && !extList.includes(ext)) continue;
       if (queryLower && !e.name.toLowerCase().includes(queryLower)) continue;

@@ -275,11 +275,27 @@
     align-items:center; justify-content:center; padding:20px;
   }
   #usersModalOverlay.show{ display:flex; }
-  .dropzone{
+  .dropzone, .bl-dropzone{
     flex:1; border:2px dashed var(--line); border-radius:10px; padding:18px; text-align:center;
     font-family:sans-serif; font-size:.8rem; color:var(--muted); cursor:pointer; transition:.15s;
   }
-  .dropzone.dragover{ border-color:var(--poste-yellow-dark); background:var(--paper-2); color:var(--ink); }
+  .bl-dropzone{ padding:10px; }
+  .dropzone.dragover, .bl-dropzone.dragover{ border-color:var(--poste-yellow-dark); background:var(--paper-2); color:var(--ink); }
+  .doc-thumbs{ display:flex; flex-wrap:wrap; gap:10px; }
+  .doc-thumb{ position:relative; width:130px; cursor:pointer; font-family:sans-serif; }
+  .doc-thumb-box{
+    width:130px; height:130px; border:1px solid var(--line); border-radius:8px; background:var(--paper-2);
+    overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:34px; color:var(--muted);
+  }
+  .doc-thumb:hover .doc-thumb-box{ border-color:var(--poste-yellow-dark); }
+  .doc-thumb-box img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .doc-thumb-box iframe{ width:260px; height:260px; border:none; transform:scale(.5); transform-origin:0 0; pointer-events:none; background:#fff; }
+  .doc-thumb-name{ font-size:.68rem; margin-top:3px; overflow-wrap:anywhere; max-height:2.6em; overflow:hidden; }
+  .doc-thumb-del{
+    position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--silk-red,#c0392b);
+    color:#fff; border:2px solid #fff; font-size:12px; line-height:1; cursor:pointer; padding:0;
+    display:flex; align-items:center; justify-content:center;
+  }
   .devis-doc-row{
     display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px;
     border:1px solid var(--line); border-radius:6px; margin-bottom:6px; font-size:.8rem; cursor:pointer;
@@ -765,6 +781,15 @@
         </div>
         <div id="blProgramsList"></div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents de fabrication</div>
+        <div style="display:flex; gap:10px; margin-bottom:8px;">
+          <div class="bl-dropzone" data-category="fabrication">📥 Déposer ici (fichier ou e-mail) — <strong>Fabrication</strong>
+            <button type="button" class="btn ghost bl-paste-btn" data-category="fabrication" style="margin-left:6px; font-size:.68rem; padding:4px 10px;">📋 Coller</button>
+          </div>
+          <div class="bl-dropzone" id="blDropzoneDemandePrix" data-category="demande_prix" style="display:none;">📥 Déposer ici — <strong>Demande de prix</strong> (admins)
+            <button type="button" class="btn ghost bl-paste-btn" data-category="demande_prix" style="margin-left:6px; font-size:.68rem; padding:4px 10px;">📋 Coller</button>
+          </div>
+        </div>
+        <div id="blDocsUploadMsg" style="font-size:.75rem; color:var(--muted); margin-bottom:8px;"></div>
         <div id="blFabricationDocs"></div>
         <div id="blDemandePrixWrap" style="display:none;">
           <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents demande de prix</div>
@@ -1565,12 +1590,16 @@ async function fetchAllContracts(){
   let all = [];
   let page = 1;
   const perPage = 200;
+  const seen = new Set();
   while(true){
     const res = await callAxonaut(`/contracts?page=${page}&per_page=${perPage}`);
     if(!res.ok) throw new Error('Axonaut HTTP ' + res.status + (res.text ? ' — ' + res.text.slice(0,300) : ''));
     const arr = Array.isArray(res.parsed) ? res.parsed : (res.parsed && Array.isArray(res.parsed.data) ? res.parsed.data : []);
     if(!arr.length) break;
-    all = all.concat(arr);
+    const fresh = arr.filter(c => c && !seen.has(c.id));
+    fresh.forEach(c => seen.add(c.id));
+    if(!fresh.length) break; // l'API renvoie la même page : on arrête
+    all = all.concat(fresh);
     if(arr.length < perPage) break;
     page++;
     if(page > 30) break; // garde-fou
@@ -3837,31 +3866,165 @@ async function loadBlFabricationDocuments(quotationId){
   const dpBox = document.getElementById('blDemandePrixDocs');
   const canDemandePrix = isAdminUser();
   dpWrap.style.display = canDemandePrix ? 'block' : 'none';
+  document.getElementById('blDropzoneDemandePrix').style.display = canDemandePrix ? 'block' : 'none';
+  docThumbUrls.forEach(u => URL.revokeObjectURL(u)); docThumbUrls = [];
   box.innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement des documents…</div>';
   if(canDemandePrix) dpBox.innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement des documents…</div>';
   try{
     const allDocs = await docFetchByQuotation(quotationId);
-    const fabDocs = allDocs.filter(d => d.category === 'fabrication');
-    const renderRow = (d, category) => `
-      <div class="devis-doc-row" data-filename="${escapeHtml(d.filename)}">
-        <span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>
-      </div>
-    `;
-    box.innerHTML = fabDocs.length ? fabDocs.map(d => renderRow(d)).join('') : '<div class="hint" style="font-size:.78rem;">Aucun document de fabrication.</div>';
-    box.querySelectorAll('.devis-doc-row').forEach(row => {
-      row.addEventListener('click', () => openDevisDocument(row.dataset.filename, 'fabrication'));
-    });
+    if(!currentBlQuotation || currentBlQuotation.id !== quotationId) return; // une autre commande a été ouverte entre-temps
+    const reload = () => loadBlFabricationDocuments(quotationId);
+    renderDocThumbs(box, allDocs.filter(d => d.category === 'fabrication'), 'fabrication', reload, 'Aucun document de fabrication.');
     if(canDemandePrix){
-      const dpDocs = allDocs.filter(d => d.category === 'demande_prix');
-      dpBox.innerHTML = dpDocs.length ? dpDocs.map(d => renderRow(d)).join('') : '<div class="hint" style="font-size:.78rem;">Aucun document.</div>';
-      dpBox.querySelectorAll('.devis-doc-row').forEach(row => {
-        row.addEventListener('click', () => openDevisDocument(row.dataset.filename, 'demande_prix'));
-      });
+      renderDocList(dpBox, allDocs.filter(d => d.category === 'demande_prix'), 'demande_prix', reload, 'Aucun document.');
     }
   }catch(e){
     box.innerHTML = `<div class="hint" style="color:var(--silk-red); font-size:.78rem;">Erreur : ${escapeHtml(e.message)}</div>`;
   }
 }
+// Affiche des documents (dossier réseau « Fabrication » / « Demande de prix ») en vignettes :
+// aperçu réel pour les images et les PDF, icône pour le reste. Clic = ouvrir dans la visionneuse.
+let docThumbUrls = [];
+// Liste simple (sans aperçu) : utilisée pour les documents de demande de prix.
+function renderDocList(box, docs, category, reload, emptyText){
+  if(!docs.length){ box.innerHTML = `<div class="hint" style="font-size:.78rem;">${emptyText}</div>`; return; }
+  box.innerHTML = docs.map(d => `
+    <div class="devis-doc-row" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}">
+      <span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>
+      <button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button>
+    </div>`).join('');
+  box.querySelectorAll('.devis-doc-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if(e.target.closest('[data-del-doc]')) return;
+      openDevisDocument(row.dataset.filename, category);
+    });
+    row.querySelector('[data-del-doc]').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if(!confirm('Supprimer définitivement ce document (fichier + référence) ?')) return;
+      try{
+        const ok = await ensureDocsFolderAccess(category, true);
+        if(ok){
+          try{ await docsHandles[category].removeEntry(row.dataset.filename); }
+          catch(fileErr){ console.warn('Fichier déjà absent ou suppression impossible', fileErr); }
+        }else{
+          alert(`Dossier « ${CATEGORY_FOLDER_LABELS[category]} » non autorisé — le fichier ne sera pas supprimé du disque, seule la référence le sera.`);
+        }
+        await docDelete(row.dataset.docId);
+        reload();
+      }catch(err){ alert('Erreur : ' + err.message); }
+    });
+  });
+}
+async function renderDocThumbs(box, docs, category, reload, emptyText){
+  if(!docs.length){ box.innerHTML = `<div class="hint" style="font-size:.78rem;">${emptyText}</div>`; return; }
+  box.innerHTML = '<div class="doc-thumbs">' + docs.map(d => `
+    <div class="doc-thumb" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}" title="${escapeHtml(d.original_filename || d.filename)}">
+      <div class="doc-thumb-box">📄</div>
+      <div class="doc-thumb-name">${escapeHtml(d.original_filename || d.filename)}</div>
+      <button type="button" class="doc-thumb-del" title="Supprimer">✕</button>
+    </div>`).join('') + '</div>';
+  box.querySelectorAll('.doc-thumb').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if(e.target.closest('.doc-thumb-del')) return;
+      openDevisDocument(card.dataset.filename, category);
+    });
+    card.querySelector('.doc-thumb-del').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if(!confirm('Supprimer définitivement ce document (fichier + référence) ?')) return;
+      try{
+        const ok = await ensureDocsFolderAccess(category, true);
+        if(ok){
+          try{ await docsHandles[category].removeEntry(card.dataset.filename); }
+          catch(fileErr){ console.warn('Fichier déjà absent ou suppression impossible', fileErr); }
+        }else{
+          alert(`Dossier « ${CATEGORY_FOLDER_LABELS[category]} » non autorisé — le fichier ne sera pas supprimé du disque, seule la référence le sera.`);
+        }
+        await docDelete(card.dataset.docId || card.getAttribute('data-doc-id'));
+        reload();
+      }catch(err){ alert('Erreur : ' + err.message); }
+    });
+  });
+  // Les aperçus se chargent ensuite, sans bloquer l'affichage de la liste.
+  let access = false;
+  try{ access = await ensureDocsFolderAccess(category, false); }catch(e){}
+  if(!access){
+    // Le navigateur redemande l'autorisation du dossier à chaque session, et seulement sur un clic.
+    const bar = document.createElement('div');
+    bar.style.cssText = 'margin-bottom:8px;';
+    bar.innerHTML = `<button type="button" class="btn ghost" style="font-size:.75rem; padding:5px 12px;">🔓 Autoriser le dossier « ${CATEGORY_FOLDER_LABELS[category]} » pour voir les aperçus</button>`;
+    bar.firstChild.addEventListener('click', async () => {
+      if(await ensureDocsFolderAccess(category, true)) reload();
+    });
+    box.insertBefore(bar, box.firstChild);
+    return;
+  }
+  for(const card of box.querySelectorAll('.doc-thumb')){
+    try{
+      const file = await (await docsHandles[category].getFileHandle(card.dataset.filename)).getFile();
+      const slot = card.querySelector('.doc-thumb-box');
+      const name = card.dataset.filename.toLowerCase();
+      if(file.type.startsWith('image/')){
+        const url = URL.createObjectURL(file); docThumbUrls.push(url);
+        slot.innerHTML = `<img src="${url}" alt="">`;
+      }else if(file.type === 'application/pdf'){
+        const url = URL.createObjectURL(file); docThumbUrls.push(url);
+        slot.innerHTML = `<iframe src="${url}#toolbar=0&navpanes=0&view=Fit" tabindex="-1"></iframe>`;
+      }else if(/\.html?$/.test(name)){
+        slot.textContent = '✉️';
+      }else{
+        const ext = (name.split('.').pop() || '').toUpperCase().slice(0, 5);
+        slot.innerHTML = `<span style="font-size:.9rem; font-weight:700;">${escapeHtml(ext)}</span>`;
+      }
+    }catch(e){ /* fichier introuvable : on laisse l'icône par défaut */ }
+  }
+}
+function setupBlDocDropzones(){
+  const canDP = isAdminUser();
+  document.getElementById('blDropzoneDemandePrix').style.display = canDP ? 'block' : 'none';
+  const opts = () => ({ msgId: 'blDocsUploadMsg', reload: () => currentBlQuotation && loadBlFabricationDocuments(currentBlQuotation.id) });
+  const needQuote = () => {
+    if(currentBlQuotation) return true;
+    const msg = document.getElementById('blDocsUploadMsg');
+    msg.style.color = 'var(--silk-red)';
+    msg.textContent = 'Devis introuvable pour cette commande : impossible de rattacher un document.';
+    return false;
+  };
+  document.querySelectorAll('.bl-dropzone').forEach(zone => {
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      if(!needQuote()) return;
+      const files = [...(e.dataTransfer.files || [])];
+      if(files.length){ await uploadDevisDocuments(files, zone.dataset.category, currentBlQuotation, opts()); return; }
+      const html = e.dataTransfer.getData('text/html');
+      const text = e.dataTransfer.getData('text/plain');
+      if(html || text){ await saveClipboardHtmlAsDoc(html, text, zone.dataset.category, currentBlQuotation, opts()); }
+      else{
+        const msg = document.getElementById('blDocsUploadMsg');
+        msg.style.color = 'var(--silk-red)';
+        msg.textContent = "Cet élément ne peut pas être déposé directement — copie l'e-mail puis utilise le bouton « 📋 Coller ».";
+      }
+    });
+    zone.addEventListener('click', (e) => {
+      if(e.target.closest('.bl-paste-btn')) return;
+      if(!needQuote()) return;
+      const input = document.createElement('input');
+      input.type = 'file'; input.multiple = true;
+      input.onchange = async () => { if(input.files.length) await uploadDevisDocuments([...input.files], zone.dataset.category, currentBlQuotation, opts()); };
+      input.click();
+    });
+  });
+  document.querySelectorAll('.bl-paste-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if(!needQuote()) return;
+      await pasteFromClipboardToDoc(btn.dataset.category, currentBlQuotation, opts());
+    });
+  });
+}
+setupBlDocDropzones();
 
 function renderBlNotes(contractComment, chapterText, quotationComment){
   const commentTxt = stripHtmlToText(contractComment);
@@ -5088,12 +5251,17 @@ document.querySelectorAll('#devisFilterRadios input[type="radio"]').forEach(radi
 async function fetchAllQuotations(){
   let all = [], page = 1;
   const perPage = 200;
+  const seen = new Set();
   while(true){
     const res = await callAxonaut(`/quotations?page=${page}&per_page=${perPage}`);
     if(!res.ok) throw new Error('Axonaut HTTP ' + res.status + (res.text ? ' — ' + res.text.slice(0,300) : ''));
     const arr = Array.isArray(res.parsed) ? res.parsed : (res.parsed && Array.isArray(res.parsed.data) ? res.parsed.data : []);
     if(!arr.length) break;
-    all = all.concat(arr);
+    // Dédoublonnage par id : si l'API ignore la pagination et renvoie la même page, on s'arrête.
+    const fresh = arr.filter(q => q && !seen.has(q.id));
+    fresh.forEach(q => seen.add(q.id));
+    if(!fresh.length) break;
+    all = all.concat(fresh);
     if(arr.length < perPage) break;
     page++;
     if(page > 30) break;
@@ -5621,15 +5789,15 @@ function simpleMarkdownToHtml(md){
 function looksLikeMarkdown(text){
   return /^#{1,3}\s|\*\*[^*]+\*\*|^-\s|^---\s*$/m.test(text);
 }
-async function saveClipboardHtmlAsDoc(html, text, category, q){
+async function saveClipboardHtmlAsDoc(html, text, category, q, opts){
   const finalHtml = html || (text && looksLikeMarkdown(text) ? simpleMarkdownToHtml(text) : null)
     || `<pre>${(text||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>`;
   const blob = new Blob([finalHtml], { type:'text/html' });
   const file = new File([blob], 'email_' + Date.now() + '.html', { type:'text/html' });
-  await uploadDevisDocuments([file], category, q);
+  await uploadDevisDocuments([file], category, q, opts);
 }
-async function pasteFromClipboardToDoc(category, q){
-  const msg = document.getElementById('docsUploadMsg');
+async function pasteFromClipboardToDoc(category, q, opts){
+  const msg = document.getElementById((opts && opts.msgId) || 'docsUploadMsg');
   msg.style.color = 'var(--muted)';
   msg.textContent = 'Lecture du presse-papier…';
   try{
@@ -5637,12 +5805,12 @@ async function pasteFromClipboardToDoc(category, q){
     for(const item of items){
       if(item.types.includes('text/html')){
         const blob = await item.getType('text/html');
-        await saveClipboardHtmlAsDoc(await blob.text(), null, category, q);
+        await saveClipboardHtmlAsDoc(await blob.text(), null, category, q, opts);
         return;
       }
     }
     const text = await navigator.clipboard.readText();
-    if(text){ await saveClipboardHtmlAsDoc(null, text, category, q); }
+    if(text){ await saveClipboardHtmlAsDoc(null, text, category, q, opts); }
     else{ msg.style.color = 'var(--silk-red)'; msg.textContent = 'Le presse-papier semble vide.'; }
   }catch(e){
     msg.style.color = 'var(--silk-red)';
@@ -5688,8 +5856,9 @@ function setupDocDropzones(q){
     });
   });
 }
-async function uploadDevisDocuments(files, category, q){
-  const msg = document.getElementById('docsUploadMsg');
+async function uploadDevisDocuments(files, category, q, opts){
+  opts = opts || {};
+  const msg = document.getElementById(opts.msgId || 'docsUploadMsg');
   if(category === 'demande_prix' && !isAdminUser()){
     msg.style.color = 'var(--silk-red)';
     msg.textContent = "Accès non autorisé pour cet utilisateur (réservé aux administrateurs).";
@@ -5721,7 +5890,7 @@ async function uploadDevisDocuments(files, category, q){
   }
   msg.style.color = 'var(--silk-green)';
   msg.textContent = `✔ ${done} fichier(s) envoyé(s).`;
-  loadDevisDocuments(q);
+  if(opts.reload) opts.reload(); else loadDevisDocuments(q);
 }
 async function loadDevisDocuments(q){
   const fabList = document.getElementById('devisDocsFabricationList');

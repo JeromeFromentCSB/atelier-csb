@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.37', items: [
+    "Gestion Commande : possibilité de déposer des documents de fabrication et de demande de prix directement dans le détail d'une commande (glisser, choisir un fichier ou coller un e-mail) ; les documents de fabrication s'affichent en vignettes avec aperçu des images et PDF",
+    "Gestion Commande / Devis : correction des devis et commandes affichés en double dans les listes",
+    "Recherche / Éditeur : nouvelle case « Corbeille NAS » — les dossiers #recycle et @eaDir du NAS sont ignorés par la recherche sauf si on la coche",
+    "Recherche / Éditeur : largeur des colonnes de la liste détaillée réglable à la souris (mémorisée)",
+  ]},
   { v: '0.2.36', items: [
     "Stock de Fil : dans la Recherche, la photo de l'armoire s'affiche avec un cadre rouge sur l'étiquette de la bobine recherchée (gros plan + vue d'ensemble, zoom, et bouton 📍 sur chaque ligne du tableau)",
     "Stock de Fil : nouvelle page iPhone « Où est ma bobine ? » (modules/stock_fil/emplacement_mobile.html) pour retrouver l'emplacement d'une référence depuis le téléphone",
