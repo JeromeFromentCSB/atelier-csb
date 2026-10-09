@@ -176,6 +176,9 @@
   }
   #columnPickerOverlay.show{ display:flex; }
   #tableHeadRow th, #devisTableHeadRow th{ position:relative; user-select:none; }
+  .invoice-status-icon{ float:right; margin-left:8px; font-family:sans-serif; font-weight:700; font-size:.85rem; line-height:1; }
+  .invoice-status-icon.facturee{ color:#2e7d32; }
+  .invoice-status-icon.non-facturee{ color:#b23b3b; text-decoration:line-through; text-decoration-thickness:2px; }
   #tableHeadRow th.drag-over, #devisTableHeadRow th.drag-over{ background:#e8dfc8; }
   .col-resize-handle{
     position:absolute; top:0; right:0; width:6px; height:100%; cursor:col-resize; z-index:2;
@@ -759,10 +762,11 @@
     </div>
     <div class="pane-resizer" id="commandeResizer" title="Glisser pour redimensionner"></div>
     <div id="commandeRightPane" style="width:44%; flex-shrink:0; overflow-y:auto; background:var(--paper); padding:22px 26px;">
-      <div id="blPanelEmpty" class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur une commande à gauche pour voir son bon de livraison ici.</div>
+      <div id="blPanelEmpty" class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur une commande à gauche pour voir ses détails ici.</div>
       <div id="blPanelContent" style="display:none;">
-        <h2 style="font-family:var(--font-display); font-size:1.2rem; margin:0 0 4px;">Bon de livraison</h2>
-        <div class="sub" id="blModalSub" style="font-family:sans-serif; font-size:.8rem; color:var(--muted); margin-bottom:10px;"></div>
+        <h2 style="font-family:var(--font-display); font-size:1.2rem; margin:0 0 4px;">Détails Commande</h2>
+        <div class="sub" id="blModalSub" style="font-family:sans-serif; font-size:.8rem; color:var(--muted); margin-bottom:2px;"></div>
+        <div id="blInvoiceLine" style="font-family:sans-serif; font-size:.8rem; color:var(--ink); margin-bottom:10px;"></div>
         <div id="blAddressBlock" style="font-family:sans-serif; font-size:.85rem; color:var(--ink); margin-bottom:14px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;"></div>
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn ghost" id="blViewQuoteBtn" style="display:none;">📄 Voir le devis</button>
@@ -796,6 +800,8 @@
           <div id="blDemandePrixDocs"></div>
         </div>
         <div class="col-result" id="blResult" style="margin-top:16px;"></div>
+        <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">💬 Commentaire de la commande <span id="blCommentStatus" style="font-weight:400; text-transform:none; color:var(--muted); margin-left:6px;"></span></div>
+        <textarea id="blCommentInput" rows="3" placeholder="Ajouter un commentaire (affiché aussi sur le bon de fabrication)…" style="width:100%; box-sizing:border-box; font-family:sans-serif; font-size:.85rem; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--paper-2); color:var(--ink); resize:vertical;"></textarea>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">📋 Lignes de la commande</div>
         <div id="blLinesList"></div>
       </div>
@@ -2594,6 +2600,14 @@ async function generateBonDeFabrication(q, clientAddress){
   ].filter(Boolean) : [];
   const chapterTxt = stripHtmlToText((q.quotation_lines && q.quotation_lines[0] && q.quotation_lines[0].chapter) || q.title || '');
 
+  // Commentaire de la commande (facultatif) : découpé en lignes qui tiennent dans l'encadré ; on
+  // remplace ce que l'encodage standard du PDF ne sait pas écrire (emoji, etc.).
+  const firstPage = page;
+  const commentRaw = String((clientAddress && clientAddress.commentaire) || '').replace(/[^\u0009\u000A -ÿ€’‘“”–—…œŒ]/g, '?').trim();
+  const commentLines = commentRaw
+    ? commentRaw.split('\n').flatMap(par => par.trim() ? wrapPdfText(par, fontBold, 9, (right - left) - 16) : [''])
+    : [];
+
   // Bloc en-tête (logo + titre + n° + date + société + adresse client) — répété sur chaque page.
   function drawHeaderBlock(){
     const logoTop = height - 12;
@@ -2616,6 +2630,16 @@ async function generateBonDeFabrication(q, clientAddress){
     }
     clientLines.forEach(line => { page.drawText(line, { x: left, y: yy, size: 9, font }); yy -= 12; });
     if(chapterTxt){ page.drawText(chapterTxt, { x: left, y: yy, size: 9, font }); yy -= 12; }
+
+    // Commentaire de la commande : encadré juste au-dessus du tableau des lignes, première page seulement.
+    if(commentLines.length && page === firstPage){
+      yy -= 4;
+      const boxH = commentLines.length * 11 + 14;
+      page.drawRectangle({ x: left, y: yy - boxH + 8, width: right - left, height: boxH, color: PDFLib.rgb(1, 0.97, 0.85), borderColor: PDFLib.rgb(0.85, 0.7, 0.2), borderWidth: 1 });
+      let cy = yy - 6;
+      commentLines.forEach(cl => { page.drawText(cl, { x: left + 8, y: cy, size: 9, font: fontBold }); cy -= 11; });
+      yy -= boxH + 4;
+    }
 
     yy -= 16;
     return drawTableHeader(yy);
@@ -3669,6 +3693,41 @@ function closeBlModal(){
   currentBlRecord = null; currentBlPbRecord = null; currentBlQuotation = null;
 }
 
+// Icône en bout de ligne du tableau : € = facturée, € barré = non facturée.
+function isCommandeFacturee(r){
+  if(Array.isArray(r.invoicesId) && r.invoicesId.length > 0) return true;
+  return !!invoicesByContract[String(r.contractId)];
+}
+function invoiceStatusIconHtml(r){
+  return isCommandeFacturee(r)
+    ? '<span class="invoice-status-icon facturee" title="Facturée">€</span>'
+    : '<span class="invoice-status-icon non-facturee" title="Non facturée">€</span>';
+}
+
+// ---------- Ligne « Factures : … » sous le nom de la commande ----------
+const invoiceNumberCache = {}; // invoiceId (string) -> numéro de facture Axonaut
+async function renderBlInvoiceLine(r){
+  const el = document.getElementById('blInvoiceLine');
+  const ids = Array.isArray(r.invoicesId) ? r.invoicesId.map(String) : [];
+  if(!ids.length){
+    const known = invoicesByContract[String(r.contractId)]; // facture vue dans l'onglet Facture
+    el.textContent = known && known.number ? 'Factures : ' + known.number : 'Non Facturé';
+    return;
+  }
+  const show = nums => { el.textContent = 'Factures : ' + nums.join(', '); };
+  const missing = ids.filter(id => !invoiceNumberCache[id]);
+  show(ids.map(id => invoiceNumberCache[id] || '…'));
+  if(!missing.length) return;
+  await Promise.all(missing.map(async id => {
+    try{
+      const res = await callAxonaut(`/invoices/${id}`);
+      if(res.ok && res.parsed && res.parsed.number) invoiceNumberCache[id] = res.parsed.number;
+    }catch(e){ console.warn('Numéro de facture Axonaut introuvable', id, e); }
+  }));
+  if(currentBlRecord !== r) return; // une autre commande a été ouverte entre-temps
+  show(ids.map(id => invoiceNumberCache[id] || ('#' + id)));
+}
+
 async function openBlModal(r){
   currentBlRecord = r;
   currentBlPbRecord = null;
@@ -3676,6 +3735,7 @@ async function openBlModal(r){
   const rowEl = document.querySelector(`#tbody tr[data-id="${r.contractId}"]`);
   if(rowEl) rowEl.classList.add('selected');
   document.getElementById('blModalSub').textContent = r.numeroCommande + (r.clientCompany ? ' — ' + r.clientCompany : '');
+  renderBlInvoiceLine(r);
   document.getElementById('blAddressBlock').innerHTML = buildAddrCellHtml(r);
   const addrCopyBtn = document.getElementById('blAddressBlock').querySelector('[data-action="copy-addr"]');
   if(addrCopyBtn){
@@ -3701,6 +3761,7 @@ async function openBlModal(r){
   document.getElementById('blPanelContent').style.display = 'block';
   loadBlPhotos(r.contractId);
   loadBlPrograms(r.contractId);
+  loadBlComment(r.contractId);
   const canViewQuotePdf = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'devis_pdf');
   const viewQuoteBtn = document.getElementById('blViewQuoteBtn');
   viewQuoteBtn.style.display = (canViewQuotePdf && r.quotationId) ? 'inline-flex' : 'none';
@@ -3711,7 +3772,9 @@ async function openBlModal(r){
   updateFabricationBtnLabel(r.contractId);
   fabricationBtn.onclick = async () => {
     if(!currentBlQuotation){ alert('Devis introuvable pour cette commande.'); return; }
+    await saveBlComment();
     await generateBonDeFabrication(currentBlQuotation, {
+      commentaire: blCommentSaved,
       nomSoc: r.nomSoc || r.clientCompany,
       adresse: r.adresse,
       cp: r.cp,
@@ -3857,6 +3920,42 @@ async function addBlPrograms(kind){
   if(!added.length) return;
   await saveBlPrograms([...blProgramsCurrent, ...added]);
 }
+/* ---------- Commentaire de la commande ----------
+   Texte libre lié à la commande, affiché au-dessus des lignes et sur le bon de fabrication.
+   Stocké dans les réglages partagés PocketBase (une clé par commande), enregistré à la sortie du champ. */
+const commentSettingsKey = (contractId) => 'commentaire_commande_' + contractId;
+let blCommentSaved = ''; // dernière valeur connue côté serveur pour la commande affichée
+async function loadBlComment(contractId){
+  const input = document.getElementById('blCommentInput');
+  const status = document.getElementById('blCommentStatus');
+  input.value = ''; blCommentSaved = ''; status.textContent = 'Chargement…';
+  try{
+    const saved = await fetchSharedSetting(commentSettingsKey(contractId));
+    if(!currentBlRecord || currentBlRecord.contractId !== contractId) return;
+    blCommentSaved = typeof saved === 'string' ? saved : '';
+    input.value = blCommentSaved;
+    status.textContent = '';
+  }catch(e){
+    if(currentBlRecord && currentBlRecord.contractId === contractId) status.textContent = 'Erreur de chargement : ' + e.message;
+  }
+}
+async function saveBlComment(){
+  if(!currentBlRecord) return;
+  const contractId = currentBlRecord.contractId;
+  const input = document.getElementById('blCommentInput');
+  const status = document.getElementById('blCommentStatus');
+  const text = input.value.trim();
+  if(text === blCommentSaved) return;
+  status.style.color = 'var(--muted)'; status.textContent = 'Enregistrement…';
+  try{
+    await saveSharedSettingStrict(commentSettingsKey(contractId), text);
+    blCommentSaved = text;
+    if(currentBlRecord && currentBlRecord.contractId === contractId){ status.style.color = 'var(--silk-green)'; status.textContent = '✔ Enregistré'; setTimeout(() => { if(status.textContent === '✔ Enregistré') status.textContent = ''; }, 1500); }
+  }catch(e){
+    status.style.color = 'var(--silk-red)'; status.textContent = "Échec de l'enregistrement : " + e.message;
+  }
+}
+document.getElementById('blCommentInput').addEventListener('blur', saveBlComment);
 document.getElementById('blProgramsAddFilesBtn').addEventListener('click', () => addBlPrograms('files'));
 document.getElementById('blProgramsAddFoldersBtn').addEventListener('click', () => addBlPrograms('folders'));
 
@@ -4475,10 +4574,11 @@ function render(){
       </tr>`;
     const bodyRows = expanded ? rows.map(r => {
       const rowClass = (currentBlRecord && currentBlRecord.contractId === r.contractId ? 'selected' : '');
-      const cells = cols.map(c => {
+      const cells = cols.map((c, i) => {
         const def = COLUMN_DEFS[c.id];
         const classes = [def.cellClass, ADMIN_ONLY_COLUMNS.has(c.id) ? 'admin-only' : ''].filter(Boolean).join(' ');
-        return `<td class="${classes}" style="width:${c.width}px; ${def.align==='right'?'text-align:right;':''}">${def.render(r)}</td>`;
+        const icon = i === cols.length - 1 ? invoiceStatusIconHtml(r) : '';
+        return `<td class="${classes}" style="width:${c.width}px; ${def.align==='right'?'text-align:right;':''}">${def.render(r)}${icon}</td>`;
       }).join('');
       return `<tr class="${rowClass.trim()}" data-id="${r.contractId}" style="border-left:5px solid ${color};">${cells}</tr>`;
     }).join('') : '';
@@ -6033,9 +6133,13 @@ loadSettingsForm().then(() => {
 document.querySelectorAll('#devisFilterRadios input[type="radio"]').forEach(radio => {
   radio.checked = (radio.value === devisFilter);
 });
+// Ne rouvre l'onglet Devis que si le compte connecté y a droit : le dernier onglet est
+// mémorisé par poste (localStorage), pas par utilisateur — sans cette vérification, un
+// compte sans droit « Onglet Devis » se retrouvait sur les devis (bouton masqué, impossible
+// de revenir aux commandes) si quelqu'un d'autre les avait consultés sur ce poste.
 try{
   const lastTab = localStorage.getItem(ACTIVE_TAB_KEY);
-  if(lastTab === 'devis') activateTab('devis');
+  if(lastTab === 'devis' && (typeof CSBAuth === 'undefined' || CSBAuth.can('axonaut', 'devis'))) activateTab('devis');
 }catch(e){}
 </script>
 </body>

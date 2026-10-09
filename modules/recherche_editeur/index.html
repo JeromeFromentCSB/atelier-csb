@@ -254,6 +254,7 @@
 <div class="context-menu" id="fileContextMenu">
   <button type="button" data-action="preview">👁 Aperçu</button>
   <button type="button" data-action="open">📂 Ouvrir</button>
+  <button type="button" data-action="folder">📁 Ouvrir le dossier</button>
   <hr>
   <button type="button" class="danger" data-action="delete">🗑 Supprimer</button>
 </div>
@@ -893,6 +894,7 @@ document.getElementById('fileContextMenu').addEventListener('click', async (e) =
   hideContextMenu();
   if (action === 'preview') await openEntry(targetPath);
   else if (action === 'open') await openInDefaultApp(targetPath, name);
+  else if (action === 'folder') { try { await window.csbHost.showInFolder(targetPath); } catch (err) { alert('Impossible d\'ouvrir le dossier : ' + (err.message || err)); } }
   else if (action === 'delete') await deleteEntry(targetPath, name);
 });
 

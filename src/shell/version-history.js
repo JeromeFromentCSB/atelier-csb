@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.38', items: [
+    "Gestion Commande : correction — un utilisateur sans droit « Onglet Devis » pouvait se retrouver bloqué sur les devis au lieu des commandes (dernier onglet mémorisé par poste)",
+    "Gestion Commande : le panneau de droite s'intitule désormais « Détails Commande » et affiche sous le nom de la commande « Factures : n° » ou « Non Facturé »",
+    "Gestion Commande : icône € en bout de ligne pour les commandes facturées, € barré pour celles qui ne le sont pas",
+    "Gestion Commande : champ « Commentaire de la commande » dans le détail, repris sur le bon de fabrication",
+    "Recherche / Éditeur : clic droit sur un fichier → « Ouvrir le dossier » dans l'Explorateur",
+  ]},
   { v: '0.2.37', items: [
     "Gestion Commande : possibilité de déposer des documents de fabrication et de demande de prix directement dans le détail d'une commande (glisser, choisir un fichier ou coller un e-mail) ; les documents de fabrication s'affichent en vignettes avec aperçu des images et PDF",
     "Gestion Commande / Devis : correction des devis et commandes affichés en double dans les listes",

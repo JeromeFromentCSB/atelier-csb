@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('csbHost', {
     return () => ipcRenderer.removeListener('csb:search-files-done', listener);
   },
   openPath: (filePath) => ipcRenderer.invoke('csb:open-path', filePath),
+  showInFolder: (filePath) => ipcRenderer.invoke('csb:show-in-folder', filePath),
   trashFile: (filePath) => ipcRenderer.invoke('csb:trash-file', filePath),
   onWebviewOpenTab: (callback) => {
     const listener = (_event, url) => callback(url);

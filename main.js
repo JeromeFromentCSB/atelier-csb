@@ -200,6 +200,8 @@ ipcMain.handle('csb:open-external', (_event, url) => shell.openExternal(url));
 // shell.openPath ne lève jamais d'exception : il résout une chaîne vide en cas de succès,
 // ou un message d'erreur sinon (ex. aucune appli associée à l'extension).
 ipcMain.handle('csb:open-path', (_event, filePath) => shell.openPath(filePath));
+// Ouvre le dossier du fichier dans l'Explorateur (Finder sur Mac), fichier sélectionné.
+ipcMain.handle('csb:show-in-folder', (_event, filePath) => { shell.showItemInFolder(filePath); return true; });
 // Déplace vers la corbeille (récupérable), plutôt qu'une suppression définitive.
 ipcMain.handle('csb:trash-file', (_event, filePath) => shell.trashItem(filePath));
 
