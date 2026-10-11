@@ -767,6 +767,7 @@
         <h2 style="font-family:var(--font-display); font-size:1.2rem; margin:0 0 4px;">Détails Commande</h2>
         <div class="sub" id="blModalSub" style="font-family:sans-serif; font-size:.8rem; color:var(--muted); margin-bottom:2px;"></div>
         <div id="blInvoiceLine" style="font-family:sans-serif; font-size:.8rem; color:var(--ink); margin-bottom:10px;"></div>
+        <div class="col-section-title" style="margin-top:6px; margin-bottom:6px;">📍 Adresse de livraison</div>
         <div id="blAddressBlock" style="font-family:sans-serif; font-size:.85rem; color:var(--ink); margin-bottom:14px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;"></div>
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn ghost" id="blViewQuoteBtn" style="display:none;">📄 Voir le devis</button>
@@ -1267,7 +1268,7 @@ async function syncCommandesIndex(list){
           })));
         }catch(e){ /* pas grave, on retentera à la prochaine synchro */ }
       }
-      const body = { contract_id: key, numero_commande: r.numeroCommande || '', client: r.clientCompany || r.nomSoc || '', facturee, tel: r.tel || '', date: r.startDate || '', lignes_json: lignesJson };
+      const body = { contract_id: key, numero_commande: (r.numeroCommande || '') + (r.objet ? ' - ' + r.objet : ''), client: r.clientCompany || r.nomSoc || '', facturee, tel: r.tel || '', date: r.startDate || '', lignes_json: lignesJson };
       if(!found){
         await CSBAuth.authedFetch(commandesIndexBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
       }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee || found.tel !== body.tel || found.date !== body.date || found.lignes_json !== body.lignes_json){
@@ -1719,6 +1720,7 @@ function moduleRecordToRecord(rec){
     source: 'module', moduleRec: rec,
     contractId: id,
     numeroCommande: rec.numero || id,
+    objet: ((d.commande && d.commande.title) || d.title || '').trim(), // objet du devis, affiché à côté du numéro
     clientCompany: client.name || rec.client_nom || '',
     companyId: client.id || rec.client_id || null,
     nomSoc: liv.nomSoc || '', adresse: liv.adresse || '', cp: liv.cp || '', ville: liv.ville || '', pays: liv.pays || '',
@@ -2675,18 +2677,28 @@ async function generateBonDeFabrication(q, clientAddress){
     }
   }catch(e){ console.warn('Logo illisible pour le bon de fabrication', e); }
 
-  const clientName = (clientAddress && clientAddress.nomSoc) || q.company_name || '';
-  const clientLines = clientAddress ? [
-    clientAddress.adresse,
-    [clientAddress.cp, clientAddress.ville].filter(Boolean).join(' ') + (clientAddress.pays && clientAddress.pays !== 'France' ? ' — ' + clientAddress.pays : ''),
-    clientAddress.tel
-  ].filter(Boolean) : [];
-  const chapterTxt = stripHtmlToText((q.quotation_lines && q.quotation_lines[0] && q.quotation_lines[0].chapter) || q.title || '');
+  // Les polices standard du PDF ne savent écrire que l'alphabet latin courant : le reste (emoji…)
+  // est remplacé par « ? » plutôt que de faire échouer la génération.
+  const pdfSafe = (t) => String(t || '').replace(/[^\u0009\u000A -ÿ€’‘“”–—…œŒ]/g, '?').trim();
+  // En titre : le client (la société du devis). Dessous : l'objet du devis, puis l'adresse de
+  // livraison sous son propre titre, si elle est indiquée.
+  const ca = clientAddress || {};
+  const clientName = pdfSafe(ca.client || q.company_name || ca.nomSoc || '');
+  const objetTxt = pdfSafe(stripHtmlToText(q.title || ''));
+  const hasLivraison = clientAddress ? (ca.livraison !== undefined ? !!ca.livraison : !!(ca.adresse || ca.nomSoc)) : false;
+  const livraisonLines = hasLivraison ? [
+    ca.nomSoc && ca.nomSoc !== clientName ? ca.nomSoc : '',
+    ca.contact,
+    ca.adresse,
+    [ca.cp, ca.ville].filter(Boolean).join(' ') + (ca.pays && !/^france$/i.test(ca.pays) ? ' — ' + ca.pays : ''),
+    ca.tel ? 'Tél. ' + ca.tel : ''
+  ].map(pdfSafe).filter(Boolean) : [];
+
 
   // Commentaire de la commande (facultatif) : découpé en lignes qui tiennent dans l'encadré ; on
   // remplace ce que l'encodage standard du PDF ne sait pas écrire (emoji, etc.).
   const firstPage = page;
-  const commentRaw = String((clientAddress && clientAddress.commentaire) || '').replace(/[^\u0009\u000A -ÿ€’‘“”–—…œŒ]/g, '?').trim();
+  const commentRaw = pdfSafe(clientAddress && clientAddress.commentaire);
   const commentLines = commentRaw
     ? commentRaw.split('\n').flatMap(par => par.trim() ? wrapPdfText(par, fontBold, 9, (right - left) - 16) : [''])
     : [];
@@ -2709,10 +2721,17 @@ async function generateBonDeFabrication(q, clientAddress){
     yy -= 8;
     if(clientName){
       page.drawText(clientName, { x: left, y: yy, size: 17, font: fontBold, color: navy });
-      yy -= 20;
+      yy -= 18;
     }
-    clientLines.forEach(line => { page.drawText(line, { x: left, y: yy, size: 9, font }); yy -= 12; });
-    if(chapterTxt){ page.drawText(chapterTxt, { x: left, y: yy, size: 9, font }); yy -= 12; }
+    if(objetTxt){
+      wrapPdfText('Objet : ' + objetTxt, fontBold, 10, right - left).forEach(line => { page.drawText(line, { x: left, y: yy, size: 10, font: fontBold }); yy -= 13; });
+    }
+    if(livraisonLines.length){
+      yy -= 4;
+      page.drawText('Adresse de livraison', { x: left, y: yy, size: 9.5, font: fontBold, color: navy });
+      yy -= 12;
+      livraisonLines.forEach(line => { page.drawText(line, { x: left, y: yy, size: 9, font }); yy -= 11.5; });
+    }
 
     // Commentaire de la commande : encadré juste au-dessus du tableau des lignes, première page seulement.
     if(commentLines.length && page === firstPage){
@@ -2782,9 +2801,19 @@ async function generateBonDeFabrication(q, clientAddress){
   }
 
   let totalQty = 0;
+  let lastChapter = '';
   for(let i = 0; i < lines.length; i++){
     const l = lines[i];
     const thumb = thumbImages[i];
+    // Titre de section (chapitre) du devis, comme sur le devis : une bande avant ses lignes.
+    const chapter = pdfSafe(stripHtmlToText(l.chapter || ''));
+    if(chapter && chapter !== lastChapter){
+      if(y - 22 - (THUMB_SIZE + 10) < bottom) y = newPage();
+      page.drawRectangle({ x: left, y: y - 18, width: right - left, height: 20, color: PDFLib.rgb(0.92, 0.94, 0.97) });
+      page.drawText(chapter, { x: left + 8, y: y - 12, size: 10, font: fontBold, color: navy });
+      y -= 24;
+    }
+    lastChapter = chapter;
     const details = stripHtmlToText(l.details || '').split('\n').filter(Boolean);
     const textX = left + 8 + THUMB_SIZE + 10;
     const maxTextWidth = (right - 100) - textX;
@@ -3817,7 +3846,7 @@ async function openBlModal(r){
   document.querySelectorAll('#tbody tr.selected').forEach(tr => tr.classList.remove('selected'));
   const rowEl = document.querySelector(`#tbody tr[data-id="${r.contractId}"]`);
   if(rowEl) rowEl.classList.add('selected');
-  document.getElementById('blModalSub').textContent = r.numeroCommande + (r.clientCompany ? ' — ' + r.clientCompany : '');
+  document.getElementById('blModalSub').textContent = r.numeroCommande + (r.objet ? ' — ' + r.objet : '') + (r.clientCompany ? ' — ' + r.clientCompany : '');
   renderBlInvoiceLine(r);
   document.getElementById('blAddressBlock').innerHTML = buildAddrCellHtml(r);
   const addrCopyBtn = document.getElementById('blAddressBlock').querySelector('[data-action="copy-addr"]');
@@ -3859,6 +3888,9 @@ async function openBlModal(r){
     await saveBlComment();
     await generateBonDeFabrication(currentBlQuotation, {
       commentaire: blCommentSaved,
+      client: r.clientCompany || r.nomSoc,
+      livraison: r.hasDeliveryInfo,
+      contact: r.contact,
       nomSoc: r.nomSoc || r.clientCompany,
       adresse: r.adresse,
       cp: r.cp,
@@ -4263,7 +4295,15 @@ function renderBlNotes(contractComment, chapterText, quotationComment){
 }
 function renderBlLines(lines, checkedState, contractComment, chapterText, quotationComment){
   const admin = isAdminUser();
-  document.getElementById('blLinesList').innerHTML = renderBlNotes(contractComment, chapterText, quotationComment) + lines.map((l, i) => `
+  let lastChapter = '';
+  // Titre de section du devis affiché avant ses lignes (les cases restent numérotées par ligne).
+  const sectionTitle = (l) => {
+    const ch = stripHtmlToText(l.chapter || '').trim();
+    const out = ch && ch !== lastChapter ? `<div class="col-section-title" style="margin:12px 0 2px; color:var(--ink); text-transform:none; letter-spacing:0; font-size:.88rem; border-bottom:1.5px solid var(--line); padding-bottom:3px;">${escapeHtml(ch)}</div>` : '';
+    lastChapter = ch;
+    return out;
+  };
+  document.getElementById('blLinesList').innerHTML = renderBlNotes(contractComment, chapterText, quotationComment) + lines.map((l, i) => sectionTitle(l) + `
     <label style="display:flex; gap:10px; align-items:flex-start;">
       <input type="checkbox" data-idx="${i}" ${checkedState[i] ? 'checked' : ''} style="margin-top:4px;">
       <span id="blLineImg${i}" style="width:48px; height:48px; flex-shrink:0; border-radius:6px; border:1.5px dashed var(--muted); background:var(--paper-2); color:var(--muted); font-size:16px; display:flex; align-items:center; justify-content:center; overflow:hidden;">✕</span>
@@ -4331,7 +4371,7 @@ function formatMontant(v){
   return (v == null || isNaN(v)) ? '—' : v.toFixed(2).replace('.', ',') + ' €';
 }
 function buildAddrCellHtml(r){
-  if(!r.hasDeliveryInfo) return `<span class="muted">Pas d'infos de livraison saisies dans Axonaut.</span>`;
+  if(!r.hasDeliveryInfo) return `<span class="muted">${isModuleOrder(r) ? "Pas d'adresse de livraison indiquée dans le devis." : "Pas d'infos de livraison saisies dans Axonaut."}</span>`;
   const nameLines = [
     r.nomSoc ? `<strong>${escapeHtml(r.nomSoc)}</strong>` : '',
     r.contact ? escapeHtml(r.contact) : ''
@@ -4366,7 +4406,7 @@ function updateSortArrows(){
 const ADMIN_ONLY_COLUMNS = new Set(['montant']);
 const COLUMN_DEFS = {
   commande: { label:'Commande', defaultWidth:170, cellClass:'name', required:true, render:r => isModuleOrder(r)
-    ? `${escapeHtml(r.numeroCommande)} <span title="Devis et commande gérés dans le module Devis" style="font-size:.65rem; font-weight:700; color:#2D5B9A; background:#E3ECF8; border-radius:999px; padding:1px 6px; margin-left:4px;">module</span>`
+    ? `${escapeHtml(r.numeroCommande)}${r.objet ? ` <span style="color:var(--muted); font-weight:400;">— ${escapeHtml(r.objet)}</span>` : ''} <span title="Devis et commande gérés dans le module Devis" style="font-size:.65rem; font-weight:700; color:#2D5B9A; background:#E3ECF8; border-radius:999px; padding:1px 6px; margin-left:4px;">module</span>`
     : r.quotationId
     ? `<span class="commande-devis-link" data-quotation-id="${r.quotationId}" title="Voir le devis correspondant" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(r.numeroCommande)}</span>`
     : escapeHtml(r.numeroCommande) },
@@ -4638,6 +4678,7 @@ function render(){
   if(currentSearch){
     list = list.filter(r =>
       (r.numeroCommande || '').toLowerCase().includes(currentSearch) ||
+      (r.objet || '').toLowerCase().includes(currentSearch) ||
       (r.clientCompany || '').toLowerCase().includes(currentSearch) ||
       (r.nomSoc || '').toLowerCase().includes(currentSearch) ||
       (r.ville || '').toLowerCase().includes(currentSearch)

@@ -141,6 +141,8 @@
   .st-refuse{ background:#FBE7E4; color:#B5452F; }
   .st-annule{ background:#EEEEEE; color:#777; }
   .draft-item .row1{ display:flex; justify-content:space-between; gap:6px; align-items:center; }
+  .draft-item .row1 .t{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .draft-item .obj{ font-weight:400; color:var(--muted); }
   .actions-bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-bottom:16px; }
   .actions-bar .spacer{ flex:1; }
   .histo{ font-size:12px; color:var(--muted); }
@@ -171,7 +173,7 @@
     <header>
       <h1>📝 Devis</h1>
       <button class="btn primary full" id="newDraftBtn">＋ Nouveau devis</button>
-      <input type="text" class="list-search" id="listSearch" placeholder="🔎 N° ou client…" autocomplete="off">
+      <input type="text" class="list-search" id="listSearch" placeholder="🔎 N°, objet ou client…" autocomplete="off">
       <div class="filters" id="listFilters"></div>
     </header>
     <div class="draft-list" id="draftList"><div class="hint" style="padding:6px;">Chargement…</div></div>
@@ -281,7 +283,7 @@
     <div class="hint" id="sendFrom" style="margin-bottom:8px;"></div>
     <div class="field"><label>À (séparer plusieurs adresses par des virgules)</label><input type="text" id="sendTo"><div class="contact-chips" id="sendContacts"></div></div>
     <div class="field" style="margin-top:8px;"><label>Copie (Cc)</label><input type="text" id="sendCc"></div>
-    <div class="field" style="margin-top:8px;"><label>Objet</label><input type="text" id="sendSubject"></div>
+    <div class="field" style="margin-top:8px;"><label>Objet</label><input type="text" id="sendSubject"><div class="hint" id="sendSubjectHint"></div></div>
     <div class="field" style="margin-top:8px;"><label>Message</label><textarea id="sendBody"></textarea><div class="hint">{numero}, {client}, {lien}, {montant_ttc} et {validite} sont remplacés automatiquement à l'envoi.</div></div>
     <label class="chk-line"><input type="checkbox" id="sendWithLink"> Lien de consultation et d'acceptation en ligne (avec suivi des ouvertures)</label>
     <label class="chk-line"><input type="checkbox" id="sendWithPdf"> Joindre le PDF du devis</label>
@@ -800,13 +802,13 @@ function renderDraftList(){
   const f = LIST_FILTERS.find(x => x.id === listFilter) || LIST_FILTERS[0];
   const q = norm(listSearch);
   const items = drafts.map(x => x.draft).filter(d => f.test(d.statut))
-    .filter(d => !q || norm([d.numero, d.client && d.client.name].join(' ')).includes(q));
+    .filter(d => !q || norm([d.numero, d.title, d.client && d.client.name].join(' ')).includes(q));
   if(!items.length){ list.innerHTML = '<div class="hint" style="padding:6px;">Aucun devis ici.</div>'; return; }
   list.innerHTML = items.map(d => {
     const t = computeTotals(d);
     const when = new Date(d.updatedAt).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
     return `<div class="draft-item ${current && current.id === d.id ? 'active' : ''}" data-id="${escapeHtml(d.id)}">
-      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}${suiviOpens(d) ? `<span class="eye" title="Ouvert ${suiviOpens(d)} fois par le client">👁 ${suiviOpens(d)}</span>` : ''}</span>${statutChip(d.statut)}</div>
+      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}${(d.title || '').trim() ? `<span class="obj"> — ${escapeHtml(d.title.trim())}</span>` : ''}${suiviOpens(d) ? `<span class="eye" title="Ouvert ${suiviOpens(d)} fois par le client">👁 ${suiviOpens(d)}</span>` : ''}</span>${statutChip(d.statut)}</div>
       <div class="m" style="color:var(--ink);">${escapeHtml(d.client ? d.client.name : 'Client à choisir')}</div>
       <div class="m">${eur(t.ht)} HT · modifié le ${escapeHtml(when)}${d.updatedBy ? ' par ' + escapeHtml(d.updatedBy) : ''}</div>
     </div>`;
@@ -833,12 +835,17 @@ function openDraft(d, recId, updated){
   renderDraftList();
 }
 
+// Titre du devis : numéro (inchangé), objet du devis s'il est rempli, puis le client.
+function topTitleHtml(d){
+  return `${escapeHtml(d.numero ? 'Devis ' + d.numero : 'Nouveau devis')}${(d.title || '').trim() ? ' — ' + escapeHtml(d.title.trim()) : ''}${d.client ? `<span style="font-size:15px; color:var(--muted); font-weight:400;"> · ${escapeHtml(d.client.name)}</span>` : ''}`;
+}
+function refreshTopTitle(){ const el = document.getElementById('edTitle'); if(el && current) el.innerHTML = topTitleHtml(current); }
 function renderEditor(){
   const d = current;
   const ed = document.getElementById('editor');
   ed.innerHTML = `
     <div class="topbar">
-      <h2>${escapeHtml(d.numero ? 'Devis ' + d.numero : 'Nouveau devis')}${d.client ? ' — ' + escapeHtml(d.client.name) : ''}</h2>
+      <h2 id="edTitle">${topTitleHtml(d)}</h2>
       ${statutChip(d.statut)}
       ${(d.version || 1) > 1 ? `<span class="st" style="background:#F2F5FA; color:#1F3A66;">version ${d.version}</span>` : ''}
       ${editSession ? '<span class="st" style="background:#FFF1C9; color:#8A5A00;">✏️ modification en cours</span>' : ''}
@@ -937,7 +944,7 @@ function renderEditor(){
   ed.querySelectorAll('.ed-tab').forEach(bt => bt.addEventListener('click', () => showEditorTab(bt.dataset.tab)));
   renderClientArea();
   renderLivraison();
-  document.getElementById('fTitle').addEventListener('input', e => { current.title = e.target.value; changed(); });
+  document.getElementById('fTitle').addEventListener('input', e => { current.title = e.target.value; refreshTopTitle(); changed(); });
   renderLines();
   renderTotals();
   wireProductSearch();
@@ -1356,6 +1363,7 @@ async function openSendModal(){
   // Les champs gardent les repères {numero}, {lien}… : ils sont remplacés au moment de l'envoi
   // (le numéro n'est attribué qu'à ce moment-là pour un brouillon).
   document.getElementById('sendSubject').value = moduleSettings.mailSubject || DEFAULT_MAIL_SUBJECT;
+  document.getElementById('sendSubjectHint').textContent = (d.title || '').trim() ? `« - ${d.title.trim()} » (objet du devis) sera ajouté à la fin.` : '';
   document.getElementById('sendBody').value = (moduleSettings.mailBody || DEFAULT_MAIL_BODY);
   const withLink = document.getElementById('sendWithLink');
   withLink.checked = suiviConfigured(); withLink.disabled = !suiviConfigured();
@@ -1428,7 +1436,9 @@ async function sendQuote(){
       link = up.url;
     }
     status.textContent = "Envoi de l'email…";
-    const subject = fillTemplate(document.getElementById('sendSubject').value, d, link);
+    // Objet habituel, complété par l'objet du devis s'il est renseigné.
+    let subject = fillTemplate(document.getElementById('sendSubject').value, d, link).trim();
+    if((d.title || '').trim() && !subject.includes(d.title.trim())) subject += ' - ' + d.title.trim();
     const text = fillTemplate(document.getElementById('sendBody').value, d, link);
     const bcc = document.getElementById('sendBccAxonaut').checked ? ['in@axonaut.com'] : [];
     const sent = await window.csbHost.emailSend({
@@ -1690,7 +1700,7 @@ function renderClientArea(){
   document.getElementById('changeClientBtn').addEventListener('click', () => {
     current.client = null; current.addressId = null; current.address = null; clientAddresses = [];
     renderClientArea(); renderLivPick(); changed();
-    document.querySelector('.topbar h2').textContent = current.numero ? 'Devis ' + current.numero : 'Nouveau devis';
+    refreshTopTitle();
   });
   loadAddresses(c.id);
 }
@@ -1762,7 +1772,7 @@ function wireClientSearch(){
         current.client = { id: c.id, name: c.name, street: c.address_street || '', zip: c.address_zip_code || '', city: c.address_city || '', country: c.address_country || '', siret: c.siret || '', tva: c.intracommunity_number || '' };
         current.addressId = null;
         box.classList.remove('show');
-        document.querySelector('.topbar h2').textContent = (current.numero ? 'Devis ' + current.numero : 'Nouveau devis') + ' — ' + c.name;
+        refreshTopTitle();
         renderClientArea(); changed();
       }));
     }catch(e){
@@ -2104,7 +2114,7 @@ document.getElementById('ncSave').addEventListener('click', async () => {
     if(current && !isLocked(current)){
       current.client = { id: c.id, name: c.name || body.name, street: c.address_street || body.address_street, zip: c.address_zip_code || body.address_zip_code, city: c.address_city || body.address_city, country: c.address_country || body.address_country };
       current.addressId = null;
-      document.querySelector('.topbar h2').textContent = (current.numero ? 'Devis ' + current.numero : 'Nouveau devis') + ' — ' + current.client.name;
+      refreshTopTitle();
       renderClientArea(); changed();
     }
   }catch(e){

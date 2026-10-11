@@ -2,6 +2,11 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.42', items: [
+    "Devis : l'objet du devis s'affiche à côté du numéro (liste, en-tête, Gestion Commande, page photo du téléphone) et la recherche le trouve ; il est aussi ajouté à l'objet des emails d'envoi",
+    "Bon de fabrication : nom du client en titre, objet du devis, bloc « Adresse de livraison » et titres de section du devis avant leurs lignes",
+    "Gestion Commande : dans Détails Commande, l'adresse de livraison s'affiche sous le titre « Adresse de livraison » et les lignes sont regroupées sous les titres de section du devis",
+  ]},
   { v: '0.2.41', items: [
     "Devis : PDF à la mise en page des devis Axonaut (en-tête de page, cadre client avec SIRET / TVA, titres de section, encadré des conditions de règlement, Bon pour accord, pied de page légal) — coordonnées et textes par défaut réglables",
     "Devis : un devis envoyé ou accepté se modifie avec « ✏️ Modifier » puis « ✔ Valider les modifications » (numéro de version, résumé dans l'historique) ; proposition de renvoyer le devis au client et de mettre à jour la commande",
