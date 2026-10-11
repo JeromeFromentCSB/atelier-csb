@@ -204,6 +204,18 @@ ipcMain.handle('csb:open-path', (_event, filePath) => shell.openPath(filePath));
 ipcMain.handle('csb:show-in-folder', (_event, filePath) => { shell.showItemInFolder(filePath); return true; });
 // Déplace vers la corbeille (récupérable), plutôt qu'une suppression définitive.
 ipcMain.handle('csb:trash-file', (_event, filePath) => shell.trashItem(filePath));
+// Bug connu d'Electron sous Windows : après une boîte confirm()/alert(), ou quand une <webview>
+// (Axonaut, Fournisseurs) a gardé le focus clavier, la fenêtre n'envoie plus les frappes aux
+// champs de saisie — on clique dedans mais on ne peut plus rien taper. Le preload appelle ceci
+// quand il détecte le cas ; « blur puis focus » rend réellement le clavier à la fenêtre.
+ipcMain.handle('csb:refocus-window', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return false;
+  win.blur();
+  win.focus();
+  win.webContents.focus();
+  return true;
+});
 
 // Identifiants des sites fournisseurs (onglet Fournisseurs) : chiffrés avec le trousseau du
 // système (Windows DPAPI / Keychain Mac) via safeStorage, propres à ce poste — jamais envoyés

@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.39', items: [
+    "Correction : après une boîte de confirmation ou un passage par Axonaut / Fournisseurs, il arrivait qu'on ne puisse plus rien taper dans les champs (ex. Stock de Fil, en passant d'un onglet à l'autre) — le clavier est désormais rendu automatiquement au champ cliqué",
+    "Stock de Fil : nouveau type de fil « ZX75 » (en plus de Polyneon 40 et Lurex), avec son propre stock et ses filtres",
+  ]},
   { v: '0.2.38', items: [
     "Gestion Commande : correction — un utilisateur sans droit « Onglet Devis » pouvait se retrouver bloqué sur les devis au lieu des commandes (dernier onglet mémorisé par poste)",
     "Gestion Commande : le panneau de droite s'intitule désormais « Détails Commande » et affiche sous le nom de la commande « Factures : n° » ou « Non Facturé »",

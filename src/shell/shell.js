@@ -308,6 +308,9 @@
           const tabActive = isActive && t.id === state.activeId;
           t.webview.style.visibility = tabActive ? 'visible' : 'hidden';
           t.webview.style.pointerEvents = tabActive ? 'auto' : 'none';
+          // Une webview masquée garde sinon le focus clavier : les champs du module qu'on
+          // vient d'ouvrir ne reçoivent plus les frappes.
+          if (!tabActive) t.webview.blur();
         });
       }
     });

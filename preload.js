@@ -1,5 +1,24 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Le preload tourne dans la fenêtre principale ET dans chaque module (iframe,
+// nodeIntegrationInSubFrames) : on corrige ici, une fois pour toute l'appli, le bug Electron où
+// un clic dans un champ ne permet plus de taper (après un confirm()/alert() ou quand une
+// <webview> a gardé le focus clavier). Si, juste après le clic, le champ n'a pas réellement le
+// focus, on demande au processus principal de rendre le clavier à la fenêtre puis on le
+// redonne au champ.
+const EDITABLE_SELECTOR = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]):not([type=color]):not([type=range]), textarea, select, [contenteditable=""], [contenteditable="true"]';
+window.addEventListener('mousedown', (e) => {
+  const target = e.target && e.target.closest ? e.target.closest(EDITABLE_SELECTOR) : null;
+  if (!target || target.disabled || target.readOnly) return;
+  setTimeout(() => {
+    if (!target.isConnected) return;
+    if (document.hasFocus() && document.activeElement === target) return;
+    ipcRenderer.invoke('csb:refocus-window').then(() => {
+      if (target.isConnected) target.focus();
+    }).catch(() => {});
+  }, 0);
+}, true);
+
 contextBridge.exposeInMainWorld('csbHost', {
   getConfig: () => ipcRenderer.invoke('csb:get-config'),
   setConfig: (partial) => ipcRenderer.invoke('csb:set-config', partial),

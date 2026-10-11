@@ -176,6 +176,7 @@
   .badge.sortie{background:var(--rouge-bg); color:var(--rouge);}
   .badge.fil-poly{background:#E7E2D6; color:#5C5445;}
   .badge.fil-lurex{background:#F0E3C0; color:#8A6A1E;}
+  .badge.fil-zx75{background:#DCE6F0; color:#2F5476;}
 
   .empty{padding:30px; text-align:center; color:var(--ink-soft); font-size:13px;}
 
@@ -246,7 +247,7 @@
 /* ===================== Stock de Fil — Atelier CSB ===================== */
 const DEFAULT_ZONES = ["Caisses", "Etagere"];
 const DEFAULT_THRESHOLDS = { rouge: 4, orange: 8 };
-const FIL_TYPES = ["Polyneon 40", "Lurex"];
+const FIL_TYPES = ["Polyneon 40", "Lurex", "ZX75"];
 const DEFAULT_FIL_TYPE = FIL_TYPES[0];
 const TABS = [
   { id: "stock", label: "🧵 État du stock" },
@@ -613,6 +614,7 @@ let mvDraft = { ref:"", teinte:"", qty:"", zone:"", date: todayStr(), op:"", com
 /* ---------- Derived data ---------- */
 
 function filTypeOf(m){ return m.filType || DEFAULT_FIL_TYPE; }
+function filBadgeClass(filType){ return filType === 'Lurex' ? 'fil-lurex' : filType === 'ZX75' ? 'fil-zx75' : 'fil-poly'; }
 function stockKey(filType, reference){ return filType + "||" + reference; }
 
 function computeStock(){
@@ -968,7 +970,7 @@ function stockTableHTML(rows, idPrefix, selectable, locate){
     const locCell = locate ? `<td>${empHas(r.reference) ? `<button class="ghost emp-btn" data-ref="${escapeHtml(String(r.reference))}" title="Voir où se trouve cette bobine sur les photos">📍</button>` : ''}</td>` : '';
     return `<tr>
       ${checkCell}
-      <td><span class="badge fil-${r.filType==='Lurex'?'lurex':'poly'}">${escapeHtml(r.filType)}</span></td>
+      <td><span class="badge ${filBadgeClass(r.filType)}">${escapeHtml(r.filType)}</span></td>
       <td>${escapeHtml(r.reference)}</td>
       ${locCell}
       <td><span class="teinte-cell"><span class="swatch" style="background:${colorFor(r.teinte)}"></span>${escapeHtml(r.teinte||'—')}</span></td>
@@ -1835,7 +1837,7 @@ function renderMouvementsHistory(){
     return `
     <tr>
       <td>${m.date ? escapeHtml(m.date) : '—'}</td>
-      <td><span class="badge ${ft==='Lurex'?'fil-lurex':'fil-poly'}">${escapeHtml(ft)}</span></td>
+      <td><span class="badge ${filBadgeClass(ft)}">${escapeHtml(ft)}</span></td>
       <td>${escapeHtml(m.reference)}</td>
       <td><span class="teinte-cell"><span class="swatch" style="background:${colorFor(m.teinte)}"></span>${escapeHtml(m.teinte||'—')}</span></td>
       <td><span class="badge ${m.type}">${m.type==='entree'?'Entrée':'Sortie'}</span></td>
