@@ -213,7 +213,7 @@ ipcMain.handle('csb:trash-file', (_event, filePath) => shell.trashItem(filePath)
 // listes, images), ce qu'une génération PDF « à la main » ne permet pas. Fenêtre invisible, sans
 // JavaScript ni accès Node : le HTML (déjà nettoyé par le module) n'est que mis en page.
 // Le marqueur __CSB_LOGO__ est remplacé par le logo de l'atelier (src/shell/assets/logo-full.png).
-ipcMain.handle('csb:html-to-pdf', async (_event, { html, footerHtml }) => {
+ipcMain.handle('csb:html-to-pdf', async (_event, { html, footerHtml, headerHtml }) => {
   let logo = '';
   try { logo = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, 'src', 'shell', 'assets', 'logo-full.png')).toString('base64'); } catch (e) {}
   const page = String(html).replace(/__CSB_LOGO__/g, logo);
@@ -223,12 +223,15 @@ ipcMain.handle('csb:html-to-pdf', async (_event, { html, footerHtml }) => {
   });
   try {
     await win.loadURL('data:text/html;charset=utf-8;base64,' + Buffer.from(page, 'utf8').toString('base64'));
+    // Police du devis (Inter) chargée depuis Google Fonts : petit délai pour qu'elle soit prête ;
+    // hors connexion, l'impression se fait avec la police de secours (Segoe UI / Arial).
+    await new Promise(r => setTimeout(r, 400));
     const pdf = await win.webContents.printToPDF({
       pageSize: 'A4',
       printBackground: true,
-      margins: { marginType: 'custom', top: 0.4, bottom: 0.6, left: 0.4, right: 0.4 },
-      displayHeaderFooter: !!footerHtml,
-      headerTemplate: '<span></span>',
+      margins: { marginType: 'custom', top: headerHtml ? 0.55 : 0.4, bottom: 0.75, left: 0.4, right: 0.4 },
+      displayHeaderFooter: !!(footerHtml || headerHtml),
+      headerTemplate: headerHtml || '<span></span>',
       footerTemplate: footerHtml || '<span></span>'
     });
     return pdf.toString('base64');

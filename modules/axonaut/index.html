@@ -1724,7 +1724,9 @@ function moduleRecordToRecord(rec){
     nomSoc: liv.nomSoc || '', adresse: liv.adresse || '', cp: liv.cp || '', ville: liv.ville || '', pays: liv.pays || '',
     tel: liv.tel || '', contact: liv.contact || '',
     startDate: (d.acceptedAt || rec.date_devis || rec.created || '').slice(0, 10),
-    montant: typeof rec.total_ht === 'number' ? rec.total_ht : null,
+    // La commande garde sa propre copie validée des lignes (data.commande) : elle ne suit les
+    // modifications du devis que si on a choisi de la mettre à jour dans le module Devis.
+    montant: d.commande && typeof d.commande.totalHt === 'number' ? d.commande.totalHt : (typeof rec.total_ht === 'number' ? rec.total_ht : null),
     quotationId: id,
     projectNumber: '',
     rawCustomFields: {},
@@ -1736,7 +1738,8 @@ function moduleRecordToRecord(rec){
 // Équivalent d'un devis Axonaut (mêmes noms de champs que l'API) pour le panneau Détails Commande
 // et le bon de fabrication. Les titres de section du module deviennent le "chapter" des lignes.
 function moduleQuotation(r){
-  const rec = r.moduleRec, d = rec.data || {};
+  const rec = r.moduleRec, data = rec.data || {};
+  const d = data.commande ? Object.assign({}, data, data.commande) : data;
   let chapter = '';
   const lines = [];
   (d.lines || []).forEach(l => {
@@ -1754,7 +1757,7 @@ function moduleQuotation(r){
   return {
     id: r.quotationId, number: rec.numero || '', title: d.title || '', company_name: r.clientCompany,
     date: rec.date_devis || '', contract_id: r.contractId, status: 'accepted', comments: d.comments || '',
-    pre_tax_amount: rec.total_ht, total_amount: rec.total_ttc, public_path: null, quotation_lines: lines
+    pre_tax_amount: d.totalHt != null ? d.totalHt : rec.total_ht, total_amount: d.totalTtc != null ? d.totalTtc : rec.total_ttc, public_path: null, quotation_lines: lines
   };
 }
 // Commandes Axonaut + commandes du module Devis, dans une seule liste.

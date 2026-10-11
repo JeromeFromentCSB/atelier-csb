@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.41', items: [
+    "Devis : PDF à la mise en page des devis Axonaut (en-tête de page, cadre client avec SIRET / TVA, titres de section, encadré des conditions de règlement, Bon pour accord, pied de page légal) — coordonnées et textes par défaut réglables",
+    "Devis : un devis envoyé ou accepté se modifie avec « ✏️ Modifier » puis « ✔ Valider les modifications » (numéro de version, résumé dans l'historique) ; proposition de renvoyer le devis au client et de mettre à jour la commande",
+    "Devis : la commande garde sa propre version validée (Gestion Commande, bon de fabrication, facture) tant qu'on ne choisit pas de la mettre à jour ; un devis renvoyé après accord demande au client d'accepter à nouveau en ligne",
+    "Devis : fenêtre du devis en deux onglets — Informations (client, livraison, suivi, historique) / Lignes et conditions",
+  ]},
   { v: '0.2.40', items: [
     "Nouveau module 📝 Devis : devis faits dans l'appli à partir des clients et produits Axonaut (présentation des lignes identique à Axonaut : description riche, prix d'achat, stock, marge, TVA), brouillons partagés entre les postes, numérotation à la suite d'Axonaut (réglable), historique de chaque devis",
     "Devis : PDF au logo de l'atelier (aperçu / enregistrement), adresse de livraison, statuts Brouillon → Envoyé → Accepté (= commande) → Facturé, lignes modifiables jusqu'à la facturation",

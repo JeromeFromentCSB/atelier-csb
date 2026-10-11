@@ -146,6 +146,13 @@
   .histo{ font-size:12px; color:var(--muted); }
   .histo div{ padding:3px 0; border-bottom:1px dashed #EEE7DA; }
   .histo b{ color:var(--ink); font-weight:600; }
+  .ed-tabs{ display:flex; gap:4px; border-bottom:2px solid var(--line); margin-bottom:16px; }
+  .ed-tab{ border:none; background:none; padding:9px 16px; font-weight:600; font-size:14px; color:var(--muted); border-bottom:3px solid transparent; margin-bottom:-2px; }
+  .ed-tab:hover{ color:var(--ink); }
+  .ed-tab.on{ color:var(--ink); border-bottom-color:var(--accent); }
+  .ed-tab-sum{ font-weight:400; font-size:12px; color:var(--muted); }
+  .pane{ display:none; }
+  .pane.on{ display:block; }
   .contact-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
   .contact-chips button{ border:1px solid var(--line); background:#FBF9F5; border-radius:999px; padding:3px 10px; font-size:12px; }
   .contact-chips button:hover{ background:var(--accent-light); }
@@ -256,6 +263,18 @@
   </div>
 </div>
 
+<div class="modal-bg" id="afterEditModal">
+  <div class="modal">
+    <h3 id="aeTitle">Modifications validées</h3>
+    <div id="aeSummary" class="hint" style="margin-bottom:10px;"></div>
+    <label class="chk-line" id="aeOrderLine"><input type="checkbox" id="aeOrder"> Mettre à jour la commande (Gestion Commande, bon de fabrication, facture) avec ces modifications</label>
+    <div class="hint" id="aeOrderHint" style="margin-left:24px;"></div>
+    <label class="chk-line" id="aeResendLine"><input type="checkbox" id="aeResend"> Renvoyer le devis modifié au client</label>
+    <div class="hint" id="aeResendHint" style="margin-left:24px;"></div>
+    <div class="actions"><button class="btn primary" id="aeGo">Continuer</button></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="sendModal">
   <div class="modal wide">
     <h3 id="sendTitle">Envoyer le devis</h3>
@@ -314,20 +333,34 @@ const DEFAULT_MAIL_BODY = "Bonjour,\n\nMerci d'avoir fait appel à L'Atelier CSB
 // Coordonnées imprimées sur les devis. Pré-remplies (une seule fois) avec l'expéditeur Colissimo
 // déjà réglé dans Gestion Commande.
 const ATELIER_FIELDS = [
-  ['nom', "Nom de l'entreprise"], ['adresse', 'Adresse'], ['cpVille', 'Code postal et ville'],
-  ['tel', 'Téléphone'], ['email', 'Email'], ['site', 'Site internet'],
-  ['siret', 'SIRET'], ['tva', 'N° TVA intracommunautaire'], ['mentions', 'Pied de page (forme juridique, capital, RCS…)']
+  ['nom', 'Nom commercial (page client, emails)', ''],
+  ['raisonSociale', 'Raison sociale (en-tête de page du devis)', ''],
+  ['ville', 'Ville (« Douchy-les-mines, le 11/10/2026 »)', ''],
+  ['tel', 'Téléphone', ''], ['email', 'Email', ''],
+  ['expediteur', 'Bloc expéditeur sous le logo (une information par ligne)', 'multi'],
+  ['conditionsDefaut', 'Modalités et conditions de règlement par défaut (nouveaux devis)', 'multi'],
+  ['mentionsDefaut', 'Mentions par défaut (nouveaux devis)', 'multi'],
+  ['pied1', 'Pied de page — ligne 1 (raison sociale, forme, capital)', ''],
+  ['pied2', 'Pied de page — ligne 2 (SIRET, RCS, APE, TVA…)', '']
 ];
 async function atelierInfos(){
-  if(moduleSettings.atelier) return moduleSettings.atelier;
-  const a = { nom: "L'Atelier CSB", adresse: '', cpVille: '', tel: '', email: '', site: '', siret: '', tva: '', mentions: '' };
-  try{
-    const c = await fetchSharedSetting('colissimo');
-    if(c){
-      a.nom = c.senderCompany || a.nom; a.adresse = c.senderLine2 || '';
-      a.cpVille = [c.senderZip, c.senderCity].filter(Boolean).join(' '); a.tel = c.senderPhone || '';
-    }
-  }catch(e){}
+  const a = Object.assign({ nom: "L'Atelier CSB", raisonSociale: '', ville: '', tel: '', email: '', expediteur: '', conditionsDefaut: '', mentionsDefaut: '', pied1: '', pied2: '' }, moduleSettings.atelier || {});
+  // Anciens réglages (avant cette mise en page) : on en tire un bloc expéditeur et un pied de page.
+  if(!a.expediteur && (a.adresse || a.cpVille)){
+    a.expediteur = [a.nom, a.adresse, a.cpVille, a.email, a.tel].filter(Boolean).join('\n');
+  }
+  if(!a.pied2 && (a.siret || a.tva)) a.pied2 = [a.siret ? 'N° Siret : ' + a.siret : '', a.tva ? 'TVA intracommunautaire : ' + a.tva : ''].filter(Boolean).join(' - ');
+  if(!a.pied1 && a.mentions) a.pied1 = a.mentions;
+  if(!moduleSettings.atelier && !a.expediteur){
+    try{
+      const c = await fetchSharedSetting('colissimo');
+      if(c){
+        a.nom = c.senderCompany || a.nom; a.tel = c.senderPhone || '';
+        a.ville = c.senderCity || '';
+        a.expediteur = [c.senderCompany, c.senderLine2, [c.senderZip, c.senderCity].filter(Boolean).join(' '), 'France', c.senderPhone].filter(Boolean).join('\n');
+      }
+    }catch(e){}
+  }
   return a;
 }
 async function loadModuleSettings(){
@@ -455,7 +488,9 @@ function newDraft(){
     numero: '', statut: 'brouillon', historique: [{ date: new Date().toISOString(), user: userName(), action: 'Création du brouillon' }],
     client: null, addressId: null,
     date: todayStr(), expiryDate: addDays(todayStr(), 30),
-    themeId: null, paymentTerms: '', mandatoryMentions: '', comments: '',
+    themeId: null, comments: '',
+    paymentTerms: (moduleSettings.atelier && moduleSettings.atelier.conditionsDefaut) || '',
+    mandatoryMentions: (moduleSettings.atelier && moduleSettings.atelier.mentionsDefaut) || '',
     globalDiscount: 0, globalDiscountIsPercent: true,
     lines: []
   };
@@ -539,7 +574,10 @@ async function saveCurrent(){
   return saving;
 }
 const scheduleSave = debounce(() => saveCurrent().catch(() => {}), 900);
-function changed(){ setSaveState('Modifications non enregistrées…'); scheduleSave(); }
+function changed(){
+  if(editSession){ editSession.dirty = true; setSaveState('Modifications en cours — à valider'); return; }
+  setSaveState('Modifications non enregistrées…'); scheduleSave();
+}
 async function reopenCurrent(){
   if(!currentRecId) return;
   const res = await CSBAuth.authedFetch(devisBase() + '/' + currentRecId);
@@ -566,7 +604,7 @@ async function deleteCurrent(){
   renderDraftList();
 }
 function duplicateCurrent(){
-  if(!current) return;
+  if(!current || !abandonEditIfNeeded()) return;
   const copy = JSON.parse(JSON.stringify(current));
   const from = current.numero ? 'du devis ' + current.numero : "d'un brouillon";
   Object.assign(copy, {
@@ -576,6 +614,7 @@ function duplicateCurrent(){
     date: todayStr(), expiryDate: addDays(todayStr(), 30)
   });
   delete copy.facture; delete copy.suivi; delete copy.envois; delete copy.acceptedOnline; delete copy.facturationEnCours;
+  delete copy.commande; delete copy.acceptedVersion; delete copy.attenteRevalidation; copy.version = 1;
   openDraft(copy, null, '');
   changed();
 }
@@ -624,7 +663,36 @@ function addHisto(action){
 }
 
 // ---------- Statuts ----------
-function isLocked(d){ return !d || d.statut === 'facture' || !CSBAuth.can('devis', 'creer'); }
+// Brouillon : modifications libres, enregistrées au fil de l'eau. Une fois le devis envoyé (ou
+// accepté, refusé, annulé), on passe par « ✏️ Modifier » puis « ✔ Valider les modifications ».
+// Facturé : plus jamais modifiable.
+let editSession = null; // { before: copie JSON du devis avant modification, dirty }
+function needsValidation(d){ return !!d && ['envoye', 'accepte', 'refuse', 'annule'].includes(d.statut); }
+function isLocked(d){
+  if(!d || d.statut === 'facture' || !CSBAuth.can('devis', 'creer')) return true;
+  return needsValidation(d) && !editSession;
+}
+// Copie des lignes validées pour la commande : Gestion Commande et la facture s'en servent, et
+// elle ne change que si on choisit de mettre la commande à jour.
+function snapshotCommande(d){
+  const t = computeTotals(d);
+  return { version: d.version || 1, at: new Date().toISOString(), by: userName(),
+    lines: JSON.parse(JSON.stringify(d.lines)), title: d.title || '', comments: d.comments || '',
+    globalDiscount: d.globalDiscount, globalDiscountIsPercent: d.globalDiscountIsPercent,
+    totalHt: t.ht, totalTtc: t.ttc };
+}
+function orderView(d){
+  if(!d.commande) return d;
+  const c = d.commande;
+  return Object.assign({}, d, { lines: c.lines, title: c.title, comments: c.comments, globalDiscount: c.globalDiscount, globalDiscountIsPercent: c.globalDiscountIsPercent });
+}
+function abandonEditIfNeeded(){
+  if(!editSession) return true;
+  if(editSession.dirty && !confirm('Des modifications du devis ne sont pas validées. Les abandonner ?')) return false;
+  if(current) Object.assign(current, JSON.parse(editSession.before));
+  editSession = null;
+  return true;
+}
 function validationProblems(d){
   const pb = [];
   if(!d.client) pb.push('choisir un client');
@@ -648,9 +716,14 @@ async function setStatut(next, action){
     if(next !== 'brouillon' && next !== 'annule' && !current.numero){
       if(!(await assignNumber())) return;
     }
+    if(current.statut === 'accepte' && !['accepte', 'facture'].includes(next)){
+      delete current.commande; delete current.acceptedVersion; delete current.attenteRevalidation;
+    }
     current.statut = next;
     if(next === 'accepte'){
       current.acceptedAt = new Date().toISOString();
+      current.acceptedVersion = current.version || 1;
+      current.commande = snapshotCommande(current);
       // Sans adresse de livraison saisie, la commande part à l'adresse du devis.
       if(!current.livraison || !(current.livraison.adresse || current.livraison.nomSoc)){
         const a = current.address || clientMainAddress();
@@ -739,6 +812,7 @@ function renderDraftList(){
     </div>`;
   }).join('');
   list.querySelectorAll('.draft-item').forEach(el => el.addEventListener('click', () => {
+    if(!abandonEditIfNeeded()) return;
     const entry = drafts.find(x => x.draft.id === el.dataset.id);
     if(entry) openDraft(JSON.parse(JSON.stringify(entry.draft)), entry.recId, entry.updated);
   }));
@@ -751,6 +825,7 @@ function closeEditor(){
   document.getElementById('emptyState').style.display = 'block';
 }
 function openDraft(d, recId, updated){
+  editSession = null;
   current = d; currentRecId = recId; currentUpdated = updated || '';
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('editor').style.display = 'block';
@@ -765,11 +840,19 @@ function renderEditor(){
     <div class="topbar">
       <h2>${escapeHtml(d.numero ? 'Devis ' + d.numero : 'Nouveau devis')}${d.client ? ' — ' + escapeHtml(d.client.name) : ''}</h2>
       ${statutChip(d.statut)}
+      ${(d.version || 1) > 1 ? `<span class="st" style="background:#F2F5FA; color:#1F3A66;">version ${d.version}</span>` : ''}
+      ${editSession ? '<span class="st" style="background:#FFF1C9; color:#8A5A00;">✏️ modification en cours</span>' : ''}
       <span class="status" id="saveStatus">${escapeHtml(saveState)}</span>
     </div>
     <div class="actions-bar" id="actionsBar"></div>
     <div id="axBanner"></div>
 
+    <div class="ed-tabs">
+      <button class="ed-tab ${editorTab === 'infos' ? 'on' : ''}" data-tab="infos">📋 Informations</button>
+      <button class="ed-tab ${editorTab === 'lignes' ? 'on' : ''}" data-tab="lignes">🧾 Lignes et conditions <span class="ed-tab-sum" id="tabSum"></span></button>
+    </div>
+
+    <div class="pane ${editorTab === 'infos' ? 'on' : ''}" data-pane="infos">
     <div class="card">
       <h2>Client</h2>
       <div id="clientArea"></div>
@@ -786,6 +869,18 @@ function renderEditor(){
       </div>
     </div>
 
+    <div class="card" id="suiviCard" style="display:none;">
+      <h2 style="display:flex; align-items:center; gap:10px;">Suivi client <button class="btn small" id="suiviRefresh">↻ Actualiser</button></h2>
+      <div id="suiviBox"></div>
+    </div>
+
+    <div class="card">
+      <h2>Historique</h2>
+      <div class="histo" id="histoBox"></div>
+    </div>
+    </div>
+
+    <div class="pane ${editorTab === 'lignes' ? 'on' : ''}" data-pane="lignes">
     <div class="card">
       <h2>Lignes du devis</h2>
       <div class="lines-wrap">
@@ -836,18 +931,10 @@ function renderEditor(){
         <div class="totals" id="totalsBox"></div>
       </div>
     </div>
-
-    <div class="card" id="suiviCard" style="display:none;">
-      <h2 style="display:flex; align-items:center; gap:10px;">Suivi client <button class="btn small" id="suiviRefresh">↻ Actualiser</button></h2>
-      <div id="suiviBox"></div>
-    </div>
-
-    <div class="card">
-      <h2>Historique</h2>
-      <div class="histo" id="histoBox"></div>
     </div>
   `;
 
+  ed.querySelectorAll('.ed-tab').forEach(bt => bt.addEventListener('click', () => showEditorTab(bt.dataset.tab)));
   renderClientArea();
   renderLivraison();
   document.getElementById('fTitle').addEventListener('input', e => { current.title = e.target.value; changed(); });
@@ -863,6 +950,20 @@ function renderEditor(){
   if(isLocked(d)) applyReadOnly();
 }
 
+// Deux onglets : informations (client, livraison, suivi, historique) / lignes, conditions, totaux.
+let editorTab = 'infos';
+function showEditorTab(tab){
+  editorTab = tab;
+  document.querySelectorAll('#editor .ed-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('#editor .pane').forEach(p => p.classList.toggle('on', p.dataset.pane === tab));
+  if(tab === 'lignes') alignTvaPills(); // les pastilles TVA se calent sur la hauteur des lignes visibles
+}
+function updateTabSummary(){
+  const el = document.getElementById('tabSum');
+  if(!el || !current) return;
+  const nb = current.lines.filter(l => l.type !== 'section').length;
+  el.textContent = nb ? `· ${nb} ligne${nb > 1 ? 's' : ''} · ${eur(computeTotals(current).ht)} HT` : '';
+}
 function renderHisto(){
   const box = document.getElementById('histoBox');
   const h = (current.historique || []).slice().reverse();
@@ -880,8 +981,20 @@ function renderActionsBar(){
   const canValider = CSBAuth.can('devis', 'valider');
   const b = (id, label, cls, title) => `<button class="btn small ${cls || ''}" id="${id}" ${title ? `title="${escapeHtml(title)}"` : ''}>${label}</button>`;
   let html = '';
+  if(editSession){
+    bar.innerHTML = b('aValidEdit', '✔ Valider les modifications', 'primary') + b('aCancelEdit', '✕ Annuler les modifications') +
+      '<span class="spacer"></span><span class="hint">Les modifications ne sont enregistrées qu\'une fois validées.</span>';
+    document.getElementById('aValidEdit').addEventListener('click', validateEdit);
+    document.getElementById('aCancelEdit').addEventListener('click', () => {
+      if(editSession.dirty && !confirm('Abandonner les modifications ?')) return;
+      Object.assign(current, JSON.parse(editSession.before));
+      editSession = null; setSaveState('Modifications abandonnées'); renderEditor();
+    });
+    return;
+  }
+  if(canEdit && needsValidation(d)) html += b('aEdit', '✏️ Modifier le devis', '', 'Les modifications devront être validées');
   if(canEdit){
-    if(['brouillon','envoye'].includes(d.statut) && CSBAuth.can('devis', 'envoyer')) html += b('aEmail', d.envois && d.envois.length ? '📨 Renvoyer par email' : '📨 Envoyer par email', d.statut === 'brouillon' ? 'primary' : '');
+    if(['brouillon','envoye','accepte'].includes(d.statut) && CSBAuth.can('devis', 'envoyer')) html += b('aEmail', d.envois && d.envois.length ? '📨 Renvoyer par email' : '📨 Envoyer par email', d.statut === 'brouillon' ? 'primary' : '');
     if(d.statut === 'brouillon') html += b('aSend', 'Marquer comme envoyé', '', "Attribue un numéro et passe à l'état « Envoyé » sans envoyer d'email (devis remis en main propre, envoyé autrement…)");
     if(['brouillon','envoye'].includes(d.statut) && canValider) html += b('aAccept', '✔ Valider — accepté par le client', 'primary', 'Le devis devient une commande');
     if(d.statut === 'envoye') html += b('aRefuse', '✕ Refusé par le client');
@@ -910,9 +1023,86 @@ function renderActionsBar(){
   on('pdfSave', () => exportPdf(true));
   on('delBtn', deleteCurrent);
   on('aInvoice', invoiceInAxonaut);
+  on('aEdit', () => { editSession = { before: JSON.stringify(current), dirty: false }; setSaveState(''); renderEditor(); });
+  on('aSyncOrder', updateOrderFromQuote);
 }
 
-// Devis facturé (ou compte sans droit de modification) : écran figé.
+// ---------- Validation d'une modification ----------
+function linesSummary(before, after){
+  const items = d => d.lines.filter(l => l.type !== 'section');
+  const key = l => (l.productId ? 'p' + l.productId : 'n:' + (l.name || '').trim().toLowerCase());
+  const b = items(before), a = items(after);
+  const bMap = new Map(b.map(l => [key(l), l]));
+  const aKeys = new Set(a.map(key));
+  const added = a.filter(l => !bMap.has(key(l))).length;
+  const removed = b.filter(l => !aKeys.has(key(l))).length;
+  const changedN = a.filter(l => {
+    const o = bMap.get(key(l));
+    return o && (num(o.quantity) !== num(l.quantity) || num(o.price) !== num(l.price) || num(o.discountPercent) !== num(l.discountPercent) || num(o.taxRate) !== num(l.taxRate) || (o.description || '') !== (l.description || '') || (o.name || '') !== (l.name || ''));
+  }).length;
+  const parts = [];
+  if(added) parts.push(`${added} ligne${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''}`);
+  if(removed) parts.push(`${removed} ligne${removed > 1 ? 's' : ''} supprimée${removed > 1 ? 's' : ''}`);
+  if(changedN) parts.push(`${changedN} ligne${changedN > 1 ? 's' : ''} modifiée${changedN > 1 ? 's' : ''}`);
+  const tb = computeTotals(before), ta = computeTotals(after);
+  if(tb.ht !== ta.ht) parts.push(`total HT ${eur(tb.ht)} → ${eur(ta.ht)}`);
+  return parts.join(', ') || 'conditions, livraison ou textes modifiés';
+}
+async function validateEdit(){
+  if(!editSession || !current) return;
+  const pb = validationProblems(current);
+  if(pb.length){ alert('Avant de valider : ' + pb.join(', ') + '.'); return; }
+  const before = JSON.parse(editSession.before);
+  const nowJson = JSON.stringify(current);
+  if(nowJson === editSession.before){ editSession = null; setSaveState('Aucune modification'); renderEditor(); return; }
+  const contentChanged = contentHash(before) !== contentHash(current);
+  const summary = linesSummary(before, current);
+  if(contentChanged) current.version = (current.version || 1) + 1;
+  addHisto(contentChanged ? `Modifications validées — version ${current.version} : ${summary}` : 'Modifications validées : ' + summary);
+  editSession = null;
+  try{ await saveCurrent(); }
+  catch(e){ alert("Échec de l'enregistrement : " + e.message); return; }
+  renderEditor();
+  if(contentChanged) openAfterEditModal(summary);
+}
+function openAfterEditModal(summary){
+  const d = current;
+  const isOrder = d.statut === 'accepte';
+  const wasSent = !!((d.envois && d.envois.length) || (d.suivi && d.suivi.token));
+  const canSend = CSBAuth.can('devis', 'envoyer') && ['envoye', 'accepte'].includes(d.statut);
+  document.getElementById('aeTitle').textContent = `Devis ${d.numero || ''} — version ${d.version} validée`;
+  document.getElementById('aeSummary').textContent = summary;
+  document.getElementById('aeOrderLine').style.display = isOrder ? '' : 'none';
+  document.getElementById('aeOrder').checked = isOrder;
+  document.getElementById('aeOrderHint').textContent = isOrder ? `Sinon, la commande reste en version ${(d.commande && d.commande.version) || d.acceptedVersion || 1} (vous pourrez la mettre à jour plus tard).` : '';
+  document.getElementById('aeResendLine').style.display = canSend ? '' : 'none';
+  document.getElementById('aeResend').checked = canSend && wasSent;
+  document.getElementById('aeResendHint').textContent = !canSend ? '' :
+    (isOrder && suiviConfigured() ? 'Le client devra accepter en ligne la nouvelle version.' : (wasSent && d.suivi && d.suivi.token ? 'Même lien que le précédent envoi, avec le nouveau PDF.' : ''));
+  document.getElementById('afterEditModal').classList.add('show');
+}
+document.getElementById('aeGo').addEventListener('click', async () => {
+  document.getElementById('afterEditModal').classList.remove('show');
+  if(!current) return;
+  if(current.statut === 'accepte' && document.getElementById('aeOrder').checked) await updateOrderFromQuote(true);
+  if(document.getElementById('aeResend').checked && document.getElementById('aeResendLine').style.display !== 'none') openSendModal();
+});
+async function updateOrderFromQuote(silent){
+  if(!current || current.statut !== 'accepte') return;
+  if(silent !== true && !confirm(`Mettre la commande à jour avec la version ${current.version || 1} du devis ?`)) return;
+  current.commande = snapshotCommande(current);
+  addHisto(`Commande mise à jour (version ${current.version || 1})`);
+  try{ await saveCurrent(); }catch(e){ alert("Échec de l'enregistrement : " + e.message); }
+  renderEditor();
+}
+
+function orderVersionBanner(){
+  const d = current;
+  if(d.statut !== 'accepte' || !d.commande || (d.commande.version || 1) === (d.version || 1)) return '';
+  return `<div class="banner">⚠ La commande (Gestion Commande, facture) utilise encore la <b>version ${d.commande.version}</b> du devis ; le devis est en version ${d.version}.
+    <button class="btn small" id="aSyncOrder" style="margin-left:8px;">Mettre la commande à jour</button></div>`;
+}
+// Devis figé : facturé, envoyé/accepté hors mode « Modifier », ou compte sans droit de modification.
 function applyReadOnly(){
   const ed = document.getElementById('editor');
   ed.classList.add('readonly');
@@ -920,8 +1110,15 @@ function applyReadOnly(){
   ed.querySelectorAll('[contenteditable]').forEach(el => el.setAttribute('contenteditable', 'false'));
   ed.querySelectorAll('.iconbtn, #addFreeLineBtn, #addSectionBtn, #changeClientBtn, #newClientBtn').forEach(el => el.style.display = 'none');
   const addRow = ed.querySelector('.add-row'); if(addRow) addRow.style.display = 'none';
+  if(current.statut !== 'facture' && CSBAuth.can('devis', 'creer')){
+    document.getElementById('axBanner').innerHTML = orderVersionBanner() +
+      `<div class="banner" style="background:#F2F5FA; border-color:#D5DCE6;">Devis ${escapeHtml((STATUTS[current.statut] || {}).label || '').toLowerCase()} : clique sur <b>✏️ Modifier le devis</b> pour le changer — les modifications devront être validées.</div>`;
+    const sync = document.getElementById('aSyncOrder');
+    if(sync) sync.addEventListener('click', () => updateOrderFromQuote());
+    return;
+  }
   const f = current.facture || {};
-  const t = computeTotals(current);
+  const t = computeTotals(orderView(current));
   const diff = f.total != null ? Math.abs(Number(f.total) - t.ttc) : 0;
   document.getElementById('axBanner').innerHTML = current.statut === 'facture'
     ? `<div class="banner ok">✔ Facturé${f.numero ? ' — facture <b>' + escapeHtml(f.numero) + '</b> créée dans Axonaut' : ''}${f.date ? ' le ' + escapeHtml(new Date(f.date).toLocaleDateString('fr-FR')) : ''} : le devis ne peut plus être modifié.
@@ -939,106 +1136,147 @@ function applyReadOnly(){
 function fmtDateFr(iso){ if(!iso) return ''; const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}/${m}/${y}`; }
 function pdfRate(r){ return num(r).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %'; }
 function pdfQty(q){ return num(q).toLocaleString('fr-FR', { maximumFractionDigits: 3 }); }
+// Reprend la mise en page des devis Axonaut (modèle fourni par l'atelier).
+async function clientLegalIds(d){
+  const c = d.client || {};
+  if(c.siret !== undefined && c.tva !== undefined) return { siret: c.siret || '', tva: c.tva || '' };
+  try{
+    const co = await axonaut('/companies/' + c.id);
+    c.siret = (co && co.siret) || ''; c.tva = (co && co.intracommunity_number) || '';
+  }catch(e){ return { siret: '', tva: '' }; }
+  return { siret: c.siret, tva: c.tva };
+}
+function pdfQtyUnit(l){
+  const q = num(l.quantity).toLocaleString('fr-FR', { maximumFractionDigits: 3 });
+  return l.unit ? `${q} ${escapeHtml(l.unit)}` : q;
+}
 async function buildQuotePdfHtml(d){
   const at = await atelierInfos();
   const t = computeTotals(d);
   const a = d.address || clientMainAddress();
   const e = escapeHtml;
-  const numero = d.numero || 'BROUILLON';
-  let rows = '';
-  d.lines.forEach(l => {
-    if(l.type === 'section'){ rows += `<tr class="sec"><td colspan="6">${e(l.name)}</td></tr>`; return; }
-    rows += `<tr>
-      <td class="desc"><div class="nm">${e(l.name)}</div>${l.description ? `<div class="ds">${descToHtml(l.description)}</div>` : ''}</td>
-      <td class="r">${eur(l.price)}</td>
-      <td class="r">${pdfQty(l.quantity)}${l.unit ? ' ' + e(l.unit) : ''}</td>
-      <td class="r">${num(l.discountPercent) ? pdfRate(l.discountPercent) : ''}</td>
-      <td class="r">${pdfRate(l.taxRate)}</td>
-      <td class="r">${eur(lineHT(l))}</td>
-    </tr>`;
-  });
+  const ids = await clientLegalIds(d);
   const hasDiscount = d.lines.some(l => l.type !== 'section' && num(l.discountPercent));
-  const coords = [at.adresse, at.cpVille, at.tel ? 'Tél. ' + at.tel : '', at.email, at.site].filter(Boolean).map(e).join('<br>');
-  const clientLines = [a.company || (d.client && d.client.name), a.contact, a.name && a.name !== a.company ? a.name : '', a.street, [a.zip, a.city].filter(Boolean).join(' '), a.country && !/^france$/i.test(a.country) ? a.country : '']
-    .filter(Boolean).map(e).join('<br>');
-  return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><style>
+  const nl2br = txt => e(txt).replace(/\n/g, '<br>');
+
+  // Un tableau par section, précédé de son titre (comme les chapitres d'Axonaut).
+  const groups = [];
+  let g = { title: '', lines: [] };
+  d.lines.forEach(l => {
+    if(l.type === 'section'){ if(g.title || g.lines.length) groups.push(g); g = { title: l.name || '', lines: [] }; }
+    else g.lines.push(l);
+  });
+  if(g.title || g.lines.length) groups.push(g);
+  const tables = groups.map(gr => `
+    ${gr.title ? `<div class="sec">${e(gr.title)}</div>` : ''}
+    ${gr.lines.length ? `<table class="lines">
+      <thead><tr><th>Description</th><th class="r w-pu">Prix unitaire</th>${hasDiscount ? '<th class="r w-rm">Remise</th>' : ''}<th class="r w-qt">Quantité</th><th class="r w-mt">Montant HT</th></tr></thead>
+      <tbody>${gr.lines.map(l => `<tr>
+        <td><div class="nm">${e(l.name)}</div>${l.description ? `<div class="ds">${descToHtml(l.description)}</div>` : ''}</td>
+        <td class="r">${eur(l.price)}</td>
+        ${hasDiscount ? `<td class="r">${num(l.discountPercent) ? pdfRate(l.discountPercent) : ''}</td>` : ''}
+        <td class="r">${pdfQtyUnit(l)}</td>
+        <td class="r">${eur(lineHT(l))}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : ''}`).join('');
+
+  const clientLines = [
+    a.company || (d.client && d.client.name), a.contact, a.street,
+    [a.zip, a.city].filter(Boolean).join(' '), a.country || 'France',
+    ids.tva ? 'N° de TVA : ' + ids.tva : '', ids.siret ? 'SIRET : ' + ids.siret : ''
+  ].filter(Boolean).map(e).join('<br>');
+  const notes = [
+    d.comments ? `<div class="nb">${nl2br(d.comments)}</div>` : '',
+    d.paymentTerms ? `<div class="nb"><b>Modalités et conditions de règlement :</b><br>${nl2br(d.paymentTerms)}</div>` : '',
+    d.mandatoryMentions ? `<div class="nb">${nl2br(d.mandatoryMentions)}</div>` : ''
+  ].filter(Boolean).join('');
+  const lieuDate = [at.ville, 'le ' + fmtDateFr(d.date)].filter(Boolean).join(', ');
+
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=block">
+  <style>
     @page{ size:A4; }
     *{ box-sizing:border-box; }
-    body{ margin:0; font-family:'Segoe UI', Arial, sans-serif; font-size:10.5px; color:#2b2b2b; }
-    .head{ display:flex; justify-content:space-between; align-items:flex-start; }
-    .logo{ width:170px; }
-    .doc{ text-align:right; }
-    .doc h1{ margin:0; font-size:26px; letter-spacing:2px; color:#1F3A66; }
-    .doc .n{ font-size:13px; font-weight:700; margin-top:2px; }
-    .doc .dt{ color:#555; margin-top:4px; line-height:1.5; }
-    .parties{ display:flex; justify-content:space-between; gap:24px; margin-top:18px; }
-    .from{ line-height:1.5; }
-    .from b{ font-size:12px; }
-    .to{ width:46%; border:1px solid #D5DCE6; border-radius:6px; padding:10px 12px; line-height:1.5; }
-    .to .lb{ font-size:9px; text-transform:uppercase; color:#888; letter-spacing:.06em; }
-    .to .cl{ font-size:12px; }
-    .obj{ margin-top:14px; font-size:11.5px; }
-    table{ width:100%; border-collapse:collapse; margin-top:14px; }
-    thead{ display:table-header-group; }
-    th{ background:#1F3A66; color:#fff; font-weight:700; padding:7px 8px; text-align:left; font-size:10.5px; }
-    th.r, td.r{ text-align:right; white-space:nowrap; }
-    td{ padding:7px 8px; border-bottom:1px solid #E3E7EE; vertical-align:top; }
-    tr{ page-break-inside:avoid; }
-    tr.sec td{ background:#F2F5FA; font-weight:700; color:#1F3A66; }
-    .nm{ font-weight:700; color:#3a3a3a; }
-    .ds{ margin-top:3px; color:#444; line-height:1.4; }
+    body{ margin:0; padding:0 2px; font-family:'Inter', 'Segoe UI', Arial, sans-serif; font-size:11px; color:#333; }
+    .top{ display:flex; justify-content:space-between; align-items:flex-start; margin-top:6px; }
+    .logo{ width:200px; }
+    .doc{ text-align:right; line-height:1.5; font-size:12.5px; }
+    .doc h1{ margin:0 0 6px; font-size:25px; font-weight:400; color:#1F3A66; }
+    .parties{ display:flex; justify-content:space-between; align-items:flex-start; margin-top:-6px; }
+    .from{ margin-top:34px; font-size:12.5px; line-height:1.75; }
+    .to{ width:47%; border:1px solid #D0D5DD; border-radius:8px; padding:10px 12px; font-size:12.5px; line-height:1.75; }
+    .sec{ margin:34px 0 8px 10px; font-size:15px; color:#1F3A66; }
+    .lines + .sec{ margin-top:22px; }
+    table.lines{ width:100%; border-collapse:separate; border-spacing:0; border:1px solid #D0D5DD; border-radius:8px; overflow:hidden; margin-top:${groups[0] && groups[0].title ? '0' : '34px'}; }
+    .sec + table.lines{ margin-top:0; }
+    table.lines th{ background:#1F3A66; color:#fff; font-weight:700; font-size:12px; padding:9px 8px; text-align:left; }
+    table.lines th.r{ text-align:right; }
+    table.lines th + th{ border-left:1px solid #ffffff; }
+    table.lines td{ padding:9px 8px; vertical-align:top; border-top:1px solid #D0D5DD; font-size:12px; line-height:1.6; }
+    table.lines tbody tr:first-child td{ border-top:none; }
+    table.lines td + td{ border-left:1px solid #D0D5DD; }
+    table.lines tr{ page-break-inside:avoid; }
+    .r{ text-align:right; white-space:nowrap; }
+    .w-pu{ width:100px; } .w-rm{ width:70px; } .w-qt{ width:88px; } .w-mt{ width:98px; }
+    .nm{ font-weight:700; color:#333; }
+    .ds{ color:#333; }
     .ds img{ max-width:70px; max-height:70px; float:left; margin:0 8px 4px 0; }
-    .ds ul, .ds ol{ margin:2px 0; padding-left:16px; }
+    .ds ul, .ds ol{ margin:2px 0; padding-left:18px; }
     .ds p{ margin:0; }
-    .bottom{ display:flex; justify-content:space-between; gap:24px; margin-top:16px; page-break-inside:avoid; }
-    .notes{ flex:1; line-height:1.5; }
-    .notes h4{ margin:0 0 3px; font-size:10px; text-transform:uppercase; color:#1F3A66; letter-spacing:.05em; }
-    .notes .blk{ margin-bottom:10px; white-space:pre-line; }
-    .tot{ width:260px; }
-    .tot div{ display:flex; justify-content:space-between; padding:3px 0; }
-    .tot .ttc{ background:#1F3A66; color:#fff; font-weight:700; font-size:12.5px; padding:7px 8px; margin-top:4px; border-radius:4px; }
-    .sign{ margin-top:18px; display:flex; justify-content:flex-end; page-break-inside:avoid; }
-    .sign div{ width:260px; height:95px; border:1px solid #D5DCE6; border-radius:6px; padding:8px 10px; color:#666; line-height:1.5; }
+    .bottom{ display:flex; justify-content:space-between; align-items:flex-start; gap:30px; margin-top:40px; page-break-inside:avoid; }
+    .notes{ flex:1; border:1px solid #D0D5DD; border-radius:8px; padding:4px 10px; font-size:10px; line-height:1.55; text-align:justify; }
+    .notes .nb{ padding:6px 0; }
+    .notes .nb + .nb{ border-top:1px solid #E4E7EC; }
+    .right{ width:268px; }
+    table.tot{ width:100%; border-collapse:separate; border-spacing:0; border:1px solid #D0D5DD; border-radius:8px; overflow:hidden; font-size:12.5px; }
+    table.tot td{ padding:8px 10px; text-align:right; border-top:1px solid #D0D5DD; }
+    table.tot tr:first-child td{ border-top:none; }
+    table.tot td + td{ border-left:1px solid #D0D5DD; width:110px; }
+    table.tot tr.ttc td{ background:#1F3A66; color:#fff; font-weight:700; }
+    table.tot tr.ttc td + td{ border-left:1px solid #fff; }
+    .valid{ text-align:center; margin-top:14px; font-size:12.5px; }
+    .bpa{ text-align:center; color:#1F3A66; font-size:16px; line-height:1.3; margin-top:18px; }
+    .sign{ border:1px solid #D0D5DD; border-radius:8px; height:88px; margin-top:8px; padding:10px; font-size:12px; display:flex; gap:110px; }
     .draft{ position:fixed; top:40%; left:0; right:0; text-align:center; font-size:90px; color:rgba(181,69,47,.08); transform:rotate(-25deg); font-weight:800; }
   </style></head><body>
     ${d.numero ? '' : '<div class="draft">BROUILLON</div>'}
-    <div class="head">
+    <div class="top">
       <img class="logo" src="__CSB_LOGO__" alt="">
-      <div class="doc">
-        <h1>DEVIS</h1>
-        <div class="n">N° ${e(numero)}</div>
-        <div class="dt">Date : ${fmtDateFr(d.date)}${d.expiryDate ? '<br>Valable jusqu\'au : ' + fmtDateFr(d.expiryDate) : ''}</div>
-      </div>
+      <div class="doc"><h1>Devis</h1>${e(d.numero || 'Brouillon')}<br>${e(lieuDate)}</div>
     </div>
     <div class="parties">
-      <div class="from"><b>${e(at.nom || "L'Atelier CSB")}</b><br>${coords}</div>
-      <div class="to"><div class="lb">Client</div><div class="cl">${clientLines}</div></div>
+      <div class="from">${nl2br(at.expediteur || at.nom || '')}</div>
+      <div class="to">${clientLines}</div>
     </div>
-    ${d.title ? `<div class="obj"><b>Objet :</b> ${e(d.title)}</div>` : ''}
-    <table>
-      <thead><tr><th>Description</th><th class="r">Prix unitaire HT</th><th class="r">Quantité</th><th class="r">${hasDiscount ? 'Remise' : ''}</th><th class="r">TVA</th><th class="r">Montant HT</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    ${d.title ? `<div class="sec" style="margin-bottom:0;">Objet : ${e(d.title)}</div>` : ''}
+    ${tables}
     <div class="bottom">
-      <div class="notes">
-        ${d.comments ? `<div class="blk"><h4>Commentaire</h4>${e(d.comments)}</div>` : ''}
-        ${d.paymentTerms ? `<div class="blk"><h4>Conditions de paiement</h4>${e(d.paymentTerms)}</div>` : ''}
-        ${d.mandatoryMentions ? `<div class="blk"><h4>Mentions</h4>${e(d.mandatoryMentions)}</div>` : ''}
-      </div>
-      <div class="tot">
-        ${t.globalAmount ? `<div><span>Total HT avant remise</span><span>${eur(t.htBeforeGlobal)}</span></div><div><span>Remise${d.globalDiscountIsPercent ? ' ' + pdfRate(d.globalDiscount) : ''}</span><span>− ${eur(t.globalAmount)}</span></div>` : ''}
-        <div><span>Total HT</span><span>${eur(t.ht)}</span></div>
-        ${t.taxes.map(x => `<div><span>TVA ${pdfRate(x.rate)}</span><span>${eur(x.amount)}</span></div>`).join('')}
-        <div class="ttc"><span>Total TTC</span><span>${eur(t.ttc)}</span></div>
+      ${notes ? `<div class="notes">${notes}</div>` : '<div style="flex:1;"></div>'}
+      <div class="right">
+        <table class="tot">
+          ${t.globalAmount ? `<tr><td>Total HT avant remise</td><td>${eur(t.htBeforeGlobal)}</td></tr><tr><td>Remise${d.globalDiscountIsPercent ? ' ' + pdfRate(d.globalDiscount) : ''}</td><td>− ${eur(t.globalAmount)}</td></tr>` : ''}
+          <tr><td>Total HT</td><td>${eur(t.ht)}</td></tr>
+          ${t.taxes.map(x => `<tr><td>TVA ${num(x.rate).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}%</td><td>${eur(x.amount)}</td></tr>`).join('')}
+          <tr class="ttc"><td>Total TTC</td><td>${eur(t.ttc)}</td></tr>
+        </table>
+        ${d.expiryDate ? `<div class="valid">Offre valable jusqu'au ${fmtDateFr(d.expiryDate)}</div>` : ''}
+        <div class="bpa">Bon pour accord<br>et signature</div>
+        <div class="sign"><span>Fait à :</span><span>Le :</span></div>
       </div>
     </div>
-    <div class="sign"><div><b>Bon pour accord</b><br>Date, signature et cachet :</div></div>
   </body></html>`;
 }
+// En-tête et pied de page répétés sur chaque page (comme Axonaut).
+function buildQuotePdfHeader(at, d){
+  const left = [at.raisonSociale || at.nom, 'Devis ' + (d.numero || 'brouillon')].filter(Boolean).map(escapeHtml).join(' - ');
+  return `<div style="width:100%; margin:0 28px; padding-bottom:5px; border-bottom:1px solid #E4E7EC; font-family:Arial, sans-serif; font-size:8px; color:#777; display:flex; justify-content:space-between;">
+    <span>${left}</span><span>Page <span class="pageNumber"></span>/<span class="totalPages"></span></span></div>`;
+}
 function buildQuotePdfFooter(at){
-  const legal = [at.nom, at.siret ? 'SIRET ' + at.siret : '', at.tva ? 'TVA ' + at.tva : '', at.mentions].filter(Boolean).map(escapeHtml).join(' · ');
-  return `<div style="width:100%; font-family:Arial, sans-serif; font-size:7.5px; color:#888; padding:0 28px; display:flex; justify-content:space-between;">
-    <span>${legal}</span><span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`;
+  const l1 = at.pied1 || '', l2 = at.pied2 || '';
+  if(!l1 && !l2) return '<span></span>';
+  return `<div style="width:100%; margin:0 28px; padding-top:5px; border-top:1px solid #E4E7EC; font-family:Arial, sans-serif; text-align:center; color:#888;">
+    ${l1 ? `<div style="font-size:8px;">${escapeHtml(l1)}</div>` : ''}${l2 ? `<div style="font-size:6.5px; margin-top:3px;">${escapeHtml(l2)}</div>` : ''}</div>`;
 }
 let exportingPdf = false;
 async function exportPdf(save){
@@ -1050,7 +1288,8 @@ async function exportPdf(save){
   if(btn){ btn.disabled = true; btn.textContent = 'PDF en cours…'; }
   try{
     const html = await buildQuotePdfHtml(current);
-    const base64 = await window.csbHost.htmlToPdf(html, buildQuotePdfFooter(await atelierInfos()));
+    const at = await atelierInfos();
+    const base64 = await window.csbHost.htmlToPdf(html, buildQuotePdfFooter(at), buildQuotePdfHeader(at, current));
     const client = current.client ? current.client.name : 'client';
     const name = `Devis ${current.numero || 'brouillon'} - ${client}.pdf`;
     if(save){
@@ -1170,14 +1409,18 @@ async function sendQuote(){
       await saveCurrent();
     }
     status.textContent = 'Création du PDF…';
-    const pdfBase64 = await window.csbHost.htmlToPdf(await buildQuotePdfHtml(d), buildQuotePdfFooter(await atelierInfos()));
+    const atPdf = await atelierInfos();
+    const pdfBase64 = await window.csbHost.htmlToPdf(await buildQuotePdfHtml(d), buildQuotePdfFooter(atPdf), buildQuotePdfHeader(atPdf, d));
     let link = '';
     if(withLink){
       status.textContent = 'Mise en ligne du devis…';
       const t = computeTotals(d);
       const at = await atelierInfos();
+      // Commande dont le devis a changé depuis l'accord du client : il doit accepter la nouvelle version.
+      const reaccept = d.statut === 'accepte' && (d.version || 1) !== (d.acceptedVersion || 1);
       const body = { token: d.suivi && d.suivi.token, numero: d.numero, client: d.client.name, totalHt: t.ht, totalTtc: t.ttc,
-        expiry: d.expiryDate || '', atelier: { nom: at.nom, tel: at.tel, email: at.email }, pdfBase64 };
+        expiry: d.expiryDate || '', atelier: { nom: at.nom, tel: at.tel, email: at.email }, pdfBase64, reaccept };
+      if(reaccept) d.attenteRevalidation = d.version || 1;
       if(!moduleSettings.logoUploaded && window.csbHost.logoDataUrl) body.logoDataUrl = await window.csbHost.logoDataUrl();
       const up = await suiviApi('/api/devis', { method:'POST', body: JSON.stringify(body) });
       if(body.logoDataUrl){ moduleSettings.logoUploaded = true; saveSharedSetting(MODULE_SETTINGS_KEY, moduleSettings).catch(() => {}); }
@@ -1197,7 +1440,7 @@ async function sendQuote(){
     if(!d.suivi && withPdf) d.suivi = { hash: contentHash(d) };
     else if(d.suivi) d.suivi.hash = contentHash(d);
     if(d.statut === 'brouillon') d.statut = 'envoye';
-    addHisto('Envoyé par email à ' + to.join(', ') + (link ? ' (lien en ligne)' : '') + (withPdf ? ' (PDF joint)' : ''));
+    addHisto('Envoyé par email à ' + to.join(', ') + ((d.version || 1) > 1 ? ` (version ${d.version})` : '') + (link ? ' (lien en ligne)' : '') + (withPdf ? ' (PDF joint)' : '') + (d.attenteRevalidation && d.attenteRevalidation === (d.version || 1) ? ' — nouvelle acceptation demandée' : ''));
     await saveCurrent();
     document.getElementById('sendModal').classList.remove('show');
     renderEditor();
@@ -1242,11 +1485,29 @@ async function applyOnlineAcceptance(d, acc){
   const res = await CSBAuth.authedFetch(devisBase() + '/' + recId);
   if(!res.ok) return;
   const rec = await res.json();
-  if(rec.statut !== 'envoye' && rec.statut !== 'brouillon') return;
   const fresh = recordToDraft(rec);
+  if(fresh.acceptedOnline && fresh.acceptedOnline.at === acc.at) return; // déjà consignée
+  if(rec.statut === 'accepte' && fresh.attenteRevalidation){
+    // Commande modifiée puis renvoyée : le client vient d'accepter la nouvelle version.
+    const v = fresh.attenteRevalidation;
+    fresh.acceptedOnline = acc; fresh.acceptedVersion = v; delete fresh.attenteRevalidation;
+    fresh.historique = (fresh.historique || []).concat([{ date: new Date().toISOString(), user: 'en ligne', action: `Version ${v} acceptée en ligne par ${acc.name} le ${new Date(acc.at).toLocaleString('fr-FR')}` }]);
+    const body2 = draftToBody(fresh); body2.modifie_par = 'acceptation en ligne';
+    const up2 = await CSBAuth.authedFetch(devisBase() + '/' + recId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body2) });
+    if(!up2.ok) return;
+    const saved2 = await up2.json();
+    const i2 = drafts.findIndex(x => x.recId === recId);
+    if(i2 >= 0) drafts[i2] = { recId, updated: saved2.updated, draft: recordToDraft(saved2) };
+    renderDraftList();
+    if(current && current.id === d.id && !editSession) openDraft(recordToDraft(saved2), recId, saved2.updated);
+    return;
+  }
+  if(rec.statut !== 'envoye' && rec.statut !== 'brouillon') return;
   fresh.statut = 'accepte';
   fresh.acceptedAt = acc.at;
   fresh.acceptedOnline = acc;
+  fresh.acceptedVersion = fresh.version || 1;
+  fresh.commande = snapshotCommande(fresh);
   if(!fresh.livraison || !(fresh.livraison.adresse || fresh.livraison.nomSoc)){
     const a = fresh.address || {};
     fresh.livraison = Object.assign({}, fresh.livraison || {}, { nomSoc: a.company || a.name || (fresh.client && fresh.client.name) || '', contact: a.contact || '', adresse: a.street || '', cp: a.zip || '', ville: a.city || '', pays: a.country || 'France' });
@@ -1260,7 +1521,7 @@ async function applyOnlineAcceptance(d, acc){
   const i = drafts.findIndex(x => x.recId === recId);
   if(i >= 0) drafts[i] = { recId, updated: saved.updated, draft: recordToDraft(saved) };
   renderDraftList();
-  if(current && current.id === d.id) openDraft(recordToDraft(saved), recId, saved.updated);
+  if(current && current.id === d.id && !editSession) openDraft(recordToDraft(saved), recId, saved.updated);
 }
 function renderSuivi(){
   const card = document.getElementById('suiviCard');
@@ -1282,11 +1543,14 @@ function renderSuivi(){
       const dls = c.events.filter(e => e.type === 'download');
       rows += `<div class="suivi-row"><span class="ic">👁</span><span>${opens.length ? `Ouvert <b>${opens.length} fois</b> — dernière ouverture le ${escapeHtml(fmt(opens[opens.length - 1].at))}` : 'Pas encore ouvert par le client'}</span></div>`;
       if(dls.length) rows += `<div class="suivi-row"><span class="ic">⬇</span><span>PDF téléchargé ${dls.length} fois — dernier téléchargement le ${escapeHtml(fmt(dls[dls.length - 1].at))}</span></div>`;
-      if(c.accepted) rows += `<div class="suivi-row"><span class="ic">✍️</span><span><b>Accepté en ligne</b> par ${escapeHtml(c.accepted.name)} le ${escapeHtml(fmt(c.accepted.at))}</span></div>`;
+      if(c.accepted) rows += `<div class="suivi-row"><span class="ic">✍️</span><span><b>Accepté en ligne</b> par ${escapeHtml(c.accepted.name)} le ${escapeHtml(fmt(c.accepted.at))}${c.accepted.version ? '' : ''}</span></div>`;
     }
     rows += `<div class="suivi-row"><span class="ic">🔗</span><span><a href="#" id="openClientPage">Voir la page client</a></span></div>`;
   }
-  if(d.suivi && d.suivi.hash && d.suivi.hash !== contentHash(d) && ['envoye', 'brouillon'].includes(d.statut)){
+  if(d.attenteRevalidation){
+    rows += `<div class="suivi-row"><span class="ic">⏳</span><span>En attente de l'accord du client sur la <b>version ${d.attenteRevalidation}</b></span></div>`;
+  }
+  if(d.suivi && d.suivi.hash && d.suivi.hash !== contentHash(d) && ['envoye', 'brouillon', 'accepte'].includes(d.statut)){
     rows += `<div class="banner" style="margin:8px 0 0;">⚠ Le devis a été modifié depuis le dernier envoi : renvoie-le pour que le client ait la bonne version${d.suivi.token ? ' (le lien reste le même)' : ''}.</div>`;
   }
   document.getElementById('suiviBox').innerHTML = rows;
@@ -1296,7 +1560,7 @@ function renderSuivi(){
 // Relève régulière des devis envoyés (ouvertures, acceptations en ligne).
 async function pollSuivi(){
   if(!suiviConfigured()) return;
-  const list = drafts.map(x => x.draft).filter(d => d.statut === 'envoye' && d.suivi && d.suivi.token).slice(0, 40);
+  const list = drafts.map(x => x.draft).filter(d => d.suivi && d.suivi.token && (d.statut === 'envoye' || (d.statut === 'accepte' && d.attenteRevalidation))).slice(0, 40);
   for(const d of list){ await refreshSuivi(d, true); }
   renderDraftList();
   if(current) renderSuivi();
@@ -1329,13 +1593,17 @@ async function invoiceInAxonaut(){
   const d = current;
   const pb = validationProblems(d);
   if(pb.length){ alert('Avant de facturer : ' + pb.join(', ') + '.'); return; }
+  if(d.commande && (d.commande.version || 1) !== (d.version || 1)){
+    if(!confirm(`La commande est en version ${d.commande.version}, le devis en version ${d.version}.\n\nLa facture reprendra la COMMANDE (version ${d.commande.version}). Pour facturer la dernière version, clique d'abord sur « Mettre la commande à jour ».\n\nContinuer avec la version ${d.commande.version} ?`)) return;
+  }
+  const ov = orderView(d);
   if(d.facturationEnCours){
     const ok = confirm(`Une facturation de ce devis a déjà été lancée le ${new Date(d.facturationEnCours).toLocaleString('fr-FR')} sans que la réponse d'Axonaut soit enregistrée.\n\nVérifie d'abord dans Axonaut qu'aucune facture n'a été créée pour ${d.numero}, sinon tu créeras un doublon.\n\nOK = je l'ai vérifié, créer la facture`);
     if(!ok) return;
   }
   await loadModuleSettings();
-  const t = computeTotals(d);
-  const freeLines = d.lines.filter(l => l.type !== 'section' && !l.productId).length;
+  const t = computeTotals(ov);
+  const freeLines = ov.lines.filter(l => l.type !== 'section' && !l.productId).length;
   let msg = `Créer la facture dans Axonaut pour « ${d.client.name} » ?\n\nDevis ${d.numero} — ${eur(t.ht)} HT / ${eur(t.ttc)} TTC.\n\nLa facture sera définitive dans Axonaut et le devis ne sera plus modifiable.`;
   if(freeLines && !moduleSettings.genericProductId){
     msg += `\n\n⚠ ${freeLines} ligne(s) libre(s) : Axonaut va créer un NOUVEAU PRODUIT pour chacune. Pour l'éviter, choisis un produit générique dans « ⚙︎ Réglages du module ».`;
@@ -1347,7 +1615,7 @@ async function invoiceInAxonaut(){
   try{
     d.facturationEnCours = new Date().toISOString();
     await saveCurrent();
-    const created = await axonaut('/invoices', 'POST', buildInvoicePayload(d));
+    const created = await axonaut('/invoices', 'POST', buildInvoicePayload(ov));
     if(!created || !created.id) throw new Error("réponse d'Axonaut inattendue");
     let inv = created;
     try{ inv = (await axonaut('/invoices/' + created.id)) || created; }catch(e){}
@@ -1491,7 +1759,7 @@ function wireClientSearch(){
       box.querySelectorAll('.suggestion[data-i]').forEach(el => el.addEventListener('mousedown', e => {
         e.preventDefault();
         const c = list[Number(el.dataset.i)];
-        current.client = { id: c.id, name: c.name, street: c.address_street || '', zip: c.address_zip_code || '', city: c.address_city || '', country: c.address_country || '' };
+        current.client = { id: c.id, name: c.name, street: c.address_street || '', zip: c.address_zip_code || '', city: c.address_city || '', country: c.address_country || '', siret: c.siret || '', tva: c.intracommunity_number || '' };
         current.addressId = null;
         box.classList.remove('show');
         document.querySelector('.topbar h2').textContent = (current.numero ? 'Devis ' + current.numero : 'Nouveau devis') + ' — ' + c.name;
@@ -1788,6 +2056,7 @@ function wireConditions(){
   });
 }
 function renderTotals(){
+  updateTabSummary();
   const t = computeTotals(current);
   const box = document.getElementById('totalsBox');
   box.innerHTML = `
@@ -1864,8 +2133,9 @@ async function openSettings(){
   document.getElementById('settingsStatus').textContent = '';
   await loadModuleSettings();
   const at = await atelierInfos();
-  document.getElementById('atelierFields').innerHTML = ATELIER_FIELDS.map(([k, label]) =>
-    `<div class="field" style="${k === 'mentions' ? 'min-width:100%;' : ''}"><label style="font-weight:400;">${escapeHtml(label)}</label><input type="text" data-at="${k}" value="${escapeHtml(at[k] || '')}"></div>`).join('');
+  document.getElementById('atelierFields').innerHTML = ATELIER_FIELDS.map(([k, label, kind]) => kind === 'multi'
+    ? `<div class="field" style="min-width:100%;"><label style="font-weight:400;">${escapeHtml(label)}</label><textarea data-at="${k}" rows="4">${escapeHtml(at[k] || '')}</textarea></div>`
+    : `<div class="field" style="${k.startsWith('pied') ? 'min-width:100%;' : ''}"><label style="font-weight:400;">${escapeHtml(label)}</label><input type="text" data-at="${k}" value="${escapeHtml(at[k] || '')}"></div>`).join('');
   document.getElementById('suiviUrl').value = moduleSettings.suiviUrl || '';
   document.getElementById('suiviKey').value = moduleSettings.suiviKey || '';
   document.getElementById('mailSubject').value = moduleSettings.mailSubject || DEFAULT_MAIL_SUBJECT;
@@ -1904,7 +2174,7 @@ document.getElementById('suiviTest').addEventListener('click', async () => {
 document.getElementById('atelierSave').addEventListener('click', async () => {
   await loadModuleSettings();
   const at = {};
-  document.querySelectorAll('#atelierFields [data-at]').forEach(el => at[el.dataset.at] = el.value.trim());
+  document.querySelectorAll('#atelierFields [data-at]').forEach(el => at[el.dataset.at] = el.value.replace(/\s+$/, ''));
   moduleSettings.atelier = at;
   saveModuleSettings();
 });
@@ -1949,7 +2219,9 @@ document.getElementById('genericClear').addEventListener('click', () => {
 // ================== Démarrage ==================
 document.getElementById('listSearch').addEventListener('input', e => { listSearch = e.target.value; renderDraftList(); });
 document.getElementById('newDraftBtn').addEventListener('click', () => {
+  if(!abandonEditIfNeeded()) return;
   if(!CSBAuth.can('devis', 'creer')){ alert("Tu n'as pas le droit de créer des devis — demande à un administrateur."); return; }
+  editorTab = 'infos';
   openDraft(newDraft(), null, '');
   setSaveState('Nouveau brouillon — il sera enregistré dès la première modification.');
 });

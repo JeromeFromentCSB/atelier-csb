@@ -54,7 +54,10 @@ async function handleApi(request, env, url, path) {
       numero: String(body.numero || ''), client: String(body.client || ''),
       totalHt: num(body.totalHt), totalTtc: num(body.totalTtc), expiry: String(body.expiry || ''),
       atelier: body.atelier || {}, closed: false, closedReason: '',
-      accepted: prev ? prev.accepted || null : null,
+      // reaccept : commande modifiée renvoyée au client, qui doit accepter la nouvelle version
+      // (l'accord précédent est conservé dans previousAcceptances).
+      accepted: body.reaccept ? null : (prev ? prev.accepted || null : null),
+      previousAcceptances: (prev && prev.previousAcceptances ? prev.previousAcceptances : []).concat(body.reaccept && prev && prev.accepted ? [prev.accepted] : []),
       createdAt: prev ? prev.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString(),
       version: prev ? (prev.version || 1) + 1 : 1
     };
@@ -130,8 +133,10 @@ function page(meta, token, env, logo, error) {
   } else if (expired) {
     action = `<div class="warn">Ce devis a expiré le ${e(frDate(meta.expiry))}. Contactez-nous pour le renouveler.</div>`;
   } else {
+    const prevAcc = (meta.previousAcceptances || []).slice(-1)[0];
     action = `<form method="post" action="/d/${e(token)}/accept" class="accept">
       <h2>Accepter le devis</h2>
+      ${prevAcc ? `<div class="warn" style="margin-bottom:12px;">Ce devis a été modifié depuis votre accord du ${e(frDateTime(prevAcc.at))}. Merci de vérifier la nouvelle version ci-dessus et de l'accepter à nouveau.</div>` : ''}
       ${error ? `<div class="err">${e(error)}</div>` : ''}
       <label>Nom et prénom<input type="text" name="name" required maxlength="120" autocomplete="name"></label>
       <label class="chk"><input type="checkbox" name="ok" required> Bon pour accord : j'accepte le devis n° ${e(meta.numero)} d'un montant de ${e(eur(meta.totalTtc))} TTC.</label>

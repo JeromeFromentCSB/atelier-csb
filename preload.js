@@ -69,7 +69,7 @@ contextBridge.exposeInMainWorld('csbHost', {
   },
   openPath: (filePath) => ipcRenderer.invoke('csb:open-path', filePath),
   showInFolder: (filePath) => ipcRenderer.invoke('csb:show-in-folder', filePath),
-  htmlToPdf: (html, footerHtml) => ipcRenderer.invoke('csb:html-to-pdf', { html, footerHtml }),
+  htmlToPdf: (html, footerHtml, headerHtml) => ipcRenderer.invoke('csb:html-to-pdf', { html, footerHtml, headerHtml }),
   savePdf: (base64, defaultName) => ipcRenderer.invoke('csb:save-pdf', { base64, defaultName }),
   openTempPdf: (base64, name) => ipcRenderer.invoke('csb:open-temp-pdf', { base64, name }),
   emailSend: (message) => ipcRenderer.invoke('csb:email-send', message),
