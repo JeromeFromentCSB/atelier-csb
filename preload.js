@@ -69,6 +69,11 @@ contextBridge.exposeInMainWorld('csbHost', {
   },
   openPath: (filePath) => ipcRenderer.invoke('csb:open-path', filePath),
   showInFolder: (filePath) => ipcRenderer.invoke('csb:show-in-folder', filePath),
+  htmlToPdf: (html, footerHtml) => ipcRenderer.invoke('csb:html-to-pdf', { html, footerHtml }),
+  savePdf: (base64, defaultName) => ipcRenderer.invoke('csb:save-pdf', { base64, defaultName }),
+  openTempPdf: (base64, name) => ipcRenderer.invoke('csb:open-temp-pdf', { base64, name }),
+  emailSend: (message) => ipcRenderer.invoke('csb:email-send', message),
+  logoDataUrl: () => ipcRenderer.invoke('csb:logo-data-url'),
   trashFile: (filePath) => ipcRenderer.invoke('csb:trash-file', filePath),
   onWebviewOpenTab: (callback) => {
     const listener = (_event, url) => callback(url);

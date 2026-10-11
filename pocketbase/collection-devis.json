@@ -1,0 +1,164 @@
+[
+  {
+    "id": "pbc_2847193650",
+    "name": "devis",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\"",
+    "deleteRule": "@request.auth.id != \"\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "primaryKey": true,
+        "required": true,
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "pattern": "^[a-z0-9]+$",
+        "min": 15,
+        "max": 15,
+        "hidden": false,
+        "presentable": false
+      },
+      {
+        "id": "text1700015838",
+        "name": "numero",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 40,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text1700023757",
+        "name": "statut",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 20,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "number1700031676",
+        "name": "client_id",
+        "type": "number",
+        "required": false,
+        "onlyInt": true,
+        "min": null,
+        "max": null
+      },
+      {
+        "id": "text1700039595",
+        "name": "client_nom",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 200,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text1700047514",
+        "name": "date_devis",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 10,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "number1700055433",
+        "name": "total_ht",
+        "type": "number",
+        "required": false,
+        "onlyInt": false,
+        "min": null,
+        "max": null
+      },
+      {
+        "id": "number1700063352",
+        "name": "total_ttc",
+        "type": "number",
+        "required": false,
+        "onlyInt": false,
+        "min": null,
+        "max": null
+      },
+      {
+        "id": "json1700071271",
+        "name": "data",
+        "type": "json",
+        "required": false,
+        "maxSize": 2000000
+      },
+      {
+        "id": "json1700079190",
+        "name": "historique",
+        "type": "json",
+        "required": false,
+        "maxSize": 500000
+      },
+      {
+        "id": "number1700087109",
+        "name": "axonaut_facture_id",
+        "type": "number",
+        "required": false,
+        "onlyInt": true,
+        "min": null,
+        "max": null
+      },
+      {
+        "id": "text1700095028",
+        "name": "axonaut_facture_numero",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 60,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text1700102947",
+        "name": "auteur",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 100,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text1700110866",
+        "name": "modifie_par",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 100,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "autodate1700118785",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      },
+      {
+        "id": "autodate1700126704",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true
+      }
+    ],
+    "indexes": []
+  }
+]

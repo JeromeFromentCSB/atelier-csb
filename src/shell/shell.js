@@ -10,6 +10,15 @@
       { key: 'addressbook', label: "Carnet d'adresses" },
       { key: 'photos_supprimer', label: 'Supprimer une photo de commande' }
     ] },
+    // Devis et commandes gérés dans l'appli (collection PocketBase "devis"), à partir des clients
+    // et produits Axonaut ; seule la facture est créée dans Axonaut.
+    { id: 'devis', label: 'Devis', icon: '📝', path: '../../modules/devis/index.html', perms: [
+      { key: 'creer', label: 'Créer et modifier des devis' },
+      { key: 'valider', label: 'Valider les devis (accepté = commande)' },
+      { key: 'facturer', label: 'Facturer dans Axonaut' },
+      { key: 'envoyer', label: 'Envoyer des devis aux clients' },
+      { key: 'marge', label: "Voir prix d'achat et marge" }
+    ] },
     { id: 'casaque', label: 'Gestion Casaque', icon: '🏇', path: '../../modules/casaque/index.html', perms: [
       { key: 'coussin_trousse', label: 'Modifier Coussin / Trousse' },
       { key: 'labels', label: 'Étiquettes Colissimo' },

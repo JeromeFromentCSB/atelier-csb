@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Devis · L'Atelier CSB</title>
+<!--
+  Module Devis : composer un devis à partir des clients et produits de la base Axonaut.
+  Les devis (et les commandes = devis acceptés) sont gérés entièrement ici et enregistrés dans
+  la collection PocketBase "devis" ; seule la facture sera créée dans Axonaut. Les réglages du
+  module (numérotation, produit générique) sont dans "axonaut_settings" (clé "devis_reglages").
+  Les appels Axonaut passent par le même relais Cloudflare et la même clé API que Gestion
+  Commande (clé gardée par poste dans la config locale, URL du relais dans les réglages partagés).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#F5F2EC; --card:#fff; --ink:#211C16; --muted:#8A8074; --line:#E7E0D3;
+    --accent:#B5452F; --accent-light:#F7E3DC; --ok:#2E7D32; --warn:#B26A00; --danger:#B5544A;
+    --font-display:'Fraunces', Georgia, serif;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Public Sans', -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); height:100vh; overflow:hidden; font-size:14px; }
+  button{ font:inherit; cursor:pointer; }
+  input, select, textarea{ font:inherit; color:var(--ink); }
+  .layout{ display:flex; height:100vh; }
+  .sidebar{ width:290px; flex-shrink:0; border-right:1px solid var(--line); background:#FBF9F5; display:flex; flex-direction:column; }
+  .sidebar header{ padding:18px 16px 10px; }
+  .sidebar h1{ margin:0 0 10px; font-family:var(--font-display); font-size:21px; font-weight:600; }
+  .draft-list{ flex:1; overflow-y:auto; padding:0 10px 16px; }
+  .draft-item{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+  .draft-item:hover{ border-color:#cfc5b2; }
+  .draft-item.active{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-light); }
+  .draft-item .t{ font-weight:600; }
+  .draft-item .m{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .main{ flex:1; overflow-y:auto; padding:22px 28px 60px; min-width:0; }
+  .btn{ border:1px solid var(--line); background:var(--card); border-radius:8px; padding:7px 14px; font-weight:600; font-size:13px; }
+  .btn:hover{ background:#F1ECE3; }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover{ background:#9E3B28; }
+  .btn.primary:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn.danger{ color:var(--danger); }
+  .btn.small{ padding:4px 10px; font-size:12px; }
+  .btn.full{ width:100%; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:16px; }
+  .card h2{ margin:0 0 12px; font-family:var(--font-display); font-size:17px; font-weight:600; }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; }
+  .field{ display:flex; flex-direction:column; gap:4px; flex:1; min-width:160px; }
+  .field label{ font-size:12px; font-weight:600; color:var(--muted); }
+  .field input, .field select, .field textarea{ border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:#fff; }
+  .field textarea{ resize:vertical; min-height:60px; }
+  .hint{ font-size:12px; color:var(--muted); }
+  .empty{ text-align:center; color:var(--muted); padding:60px 20px; }
+  .empty h2{ font-family:var(--font-display); color:var(--ink); }
+  .search-wrap{ position:relative; }
+  .suggestions{ position:absolute; z-index:20; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.08); max-height:320px; overflow-y:auto; display:none; }
+  .suggestions.show{ display:block; }
+  .suggestion{ padding:8px 12px; cursor:pointer; border-bottom:1px solid #F3EEE5; }
+  .suggestion:last-child{ border-bottom:none; }
+  .suggestion:hover, .suggestion.hl{ background:var(--accent-light); }
+  .suggestion .s1{ font-weight:600; }
+  .suggestion .s2{ font-size:12px; color:var(--muted); }
+  .client-box{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; background:#FBF9F5; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  /* Lignes : même présentation que l'écran de devis d'Axonaut */
+  .lines-wrap{ display:flex; gap:10px; align-items:flex-start; }
+  table.lines{ width:100%; border-collapse:separate; border-spacing:0; border:1px solid #D5DCE6; border-radius:8px; overflow:hidden; }
+  table.lines thead th{ background:#1F3A66; color:#fff; font-size:13px; font-weight:700; padding:8px 10px; text-align:left; text-transform:none; letter-spacing:0; border:none; }
+  table.lines thead th.num{ text-align:right; }
+  table.lines td{ padding:10px; border-top:1px solid #E3E7EE; vertical-align:top; background:#fff; }
+  table.lines td + td{ border-left:1px solid #E3E7EE; }
+  table.lines td.num{ text-align:right; }
+  table.lines tr:first-child td{ border-top:none; }
+  table.lines input{ border:1px solid transparent; border-radius:5px; padding:3px 6px; background:transparent; width:100%; }
+  table.lines input:hover{ border-color:#E3E7EE; }
+  table.lines input:focus{ border-color:#9DB2D3; background:#fff; outline:none; }
+  table.lines input.n{ text-align:right; }
+  table.lines input.l-name{ font-weight:700; color:#3A3A3A; font-size:14px; padding-left:4px; }
+  .l-desc{ font-size:13px; color:#3A3A3A; line-height:1.45; margin-top:6px; padding:4px; border:1px solid transparent; border-radius:5px; min-height:22px; overflow-wrap:anywhere; }
+  .l-desc:hover{ border-color:#E3E7EE; }
+  .l-desc:focus{ border-color:#9DB2D3; outline:none; }
+  .l-desc:empty::before{ content:attr(data-placeholder); color:#B9B2A6; }
+  .l-desc img{ max-width:90px; max-height:90px; float:left; margin:0 10px 6px 0; }
+  .l-desc ul, .l-desc ol{ margin:2px 0; padding-left:20px; }
+  .l-desc p{ margin:0; }
+  .l-sub{ display:flex; justify-content:flex-end; align-items:center; gap:3px; font-size:11px; margin-top:3px; white-space:nowrap; }
+  .l-sub input{ width:62px !important; font-size:11px; padding:1px 4px !important; text-align:right; }
+  .l-cost{ color:#8FB4E0; }
+  .l-cost input{ color:#5E8FCB; }
+  .l-stock{ color:#8A8A8A; }
+  .l-stock.neg{ color:#E58FAE; }
+  .l-margin{ color:#7DBF7D; }
+  .l-disc{ color:var(--muted); justify-content:flex-start; }
+  .l-amount{ font-size:14px; color:#3A3A3A; padding-top:4px; }
+  .l-meta{ font-size:11px; color:var(--muted); margin-top:4px; padding-left:4px; }
+  .tva-col{ width:150px; flex-shrink:0; padding-top:36px; }
+  .tva-pill{ display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid #E3E7EE; border-radius:8px; padding:6px 10px; background:#fff; margin-bottom:8px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .tva-pill .tag{ background:#E6E6E6; color:#555; font-size:11px; font-weight:600; border-radius:999px; padding:2px 8px; }
+  .tva-pill select{ border:none; background:transparent; text-align:right; font-size:13px; color:#3A3A3A; }
+  table.lines tr.section td{ background:#F2F5FA; }
+  table.lines tr.section input{ font-weight:700; color:#1F3A66; }
+  .l-actions{ display:flex; gap:0; justify-content:flex-start; margin-top:6px; }
+  .line-total{ font-family:"SF Mono", Consolas, monospace; white-space:nowrap; padding-top:11px !important; }
+  .line-actions{ white-space:nowrap; }
+  .iconbtn{ border:none; background:none; padding:4px 5px; border-radius:6px; color:var(--muted); }
+  .iconbtn:hover{ background:#F1ECE3; color:var(--ink); }
+  .totals{ margin-left:auto; width:340px; max-width:100%; }
+  .totals .tr{ display:flex; justify-content:space-between; padding:4px 0; }
+  .totals .tr.big{ font-weight:700; font-size:16px; border-top:1px solid var(--line); margin-top:4px; padding-top:8px; }
+  .totals .v{ font-family:"SF Mono", Consolas, monospace; }
+  .margin-box{ font-size:12px; color:var(--muted); margin-top:6px; text-align:right; }
+  .status{ font-size:12px; color:var(--muted); }
+  .status.err{ color:var(--danger); }
+  .topbar{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .topbar h2{ margin:0; font-family:var(--font-display); font-size:22px; font-weight:600; flex:1; min-width:200px; }
+  .banner{ background:#FFF6E0; border:1px solid #EBD59A; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:16px; }
+  .banner.err{ background:#FBE9E7; border-color:#E8B4AC; }
+  .add-row{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:flex-start; }
+  .add-row .search-wrap{ flex:1; min-width:260px; }
+  .add-row input{ width:100%; border:1px solid var(--line); border-radius:8px; padding:7px 10px; }
+  .banner.ok{ background:#EAF4EA; border-color:#B9D8BA; }
+  .banner a{ color:var(--accent); font-weight:600; }
+  .draft-item .badge{ display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px; background:#EAF4EA; color:var(--ok); margin-top:4px; }
+  .list-title{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:12px 4px 6px; }
+  .readonly input, .readonly select, .readonly textarea{ background:#F7F4EE !important; }
+  .sidebar footer{ border-top:1px solid var(--line); padding:10px 12px; }
+  .modal-bg{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal-bg.show{ display:flex; }
+  .modal{ background:#fff; border-radius:14px; width:560px; max-width:100%; max-height:90vh; overflow-y:auto; padding:20px 22px; box-shadow:0 20px 60px rgba(0,0,0,.2); }
+  .modal h3{ margin:0 0 12px; font-family:var(--font-display); font-size:19px; }
+  .modal .actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  .filters{ display:flex; flex-wrap:wrap; gap:4px; margin-top:10px; }
+  .chip{ border:1px solid var(--line); background:#fff; border-radius:999px; padding:3px 9px; font-size:11px; font-weight:600; color:var(--muted); }
+  .chip.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
+  .list-search{ width:100%; margin-top:10px; border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  .st{ display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .st-brouillon{ background:#EEE9E0; color:#7A7062; }
+  .st-envoye{ background:#E3ECF8; color:#2D5B9A; }
+  .st-accepte{ background:#E3F2E4; color:#2E7D32; }
+  .st-facture{ background:#EEE5F6; color:#6A3F96; }
+  .st-refuse{ background:#FBE7E4; color:#B5452F; }
+  .st-annule{ background:#EEEEEE; color:#777; }
+  .draft-item .row1{ display:flex; justify-content:space-between; gap:6px; align-items:center; }
+  .actions-bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-bottom:16px; }
+  .actions-bar .spacer{ flex:1; }
+  .histo{ font-size:12px; color:var(--muted); }
+  .histo div{ padding:3px 0; border-bottom:1px dashed #EEE7DA; }
+  .histo b{ color:var(--ink); font-weight:600; }
+  .contact-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .contact-chips button{ border:1px solid var(--line); background:#FBF9F5; border-radius:999px; padding:3px 10px; font-size:12px; }
+  .contact-chips button:hover{ background:var(--accent-light); }
+  .suivi-row{ display:flex; gap:10px; align-items:baseline; padding:5px 0; border-bottom:1px dashed #EEE7DA; font-size:13px; }
+  .suivi-row:last-child{ border-bottom:none; }
+  .suivi-row .ic{ width:22px; text-align:center; }
+  .eye{ font-size:11px; color:#2D5B9A; font-weight:700; margin-left:4px; }
+  .modal.wide{ width:680px; }
+  .modal textarea{ width:100%; min-height:190px; font-family:inherit; }
+  .chk-line{ display:flex; gap:8px; align-items:center; font-size:13px; margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <header>
+      <h1>📝 Devis</h1>
+      <button class="btn primary full" id="newDraftBtn">＋ Nouveau devis</button>
+      <input type="text" class="list-search" id="listSearch" placeholder="🔎 N° ou client…" autocomplete="off">
+      <div class="filters" id="listFilters"></div>
+    </header>
+    <div class="draft-list" id="draftList"><div class="hint" style="padding:6px;">Chargement…</div></div>
+    <footer><button class="btn small full" id="settingsBtn">⚙︎ Réglages du module</button></footer>
+  </aside>
+  <main class="main" id="main">
+    <div class="empty" id="emptyState">
+      <h2>Aucun devis ouvert</h2>
+      <p>Crée un nouveau devis ou ouvre un brouillon dans la liste de gauche.</p>
+    </div>
+    <div id="editor" style="display:none;"></div>
+  </main>
+</div>
+
+<div class="modal-bg" id="clientModal">
+  <div class="modal">
+    <h3>Nouveau client dans Axonaut</h3>
+    <div class="row">
+      <div class="field" style="min-width:100%;"><label>Nom de la société (ou du client) *</label><input type="text" id="ncName"></div>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <div class="field"><label>Prénom du contact</label><input type="text" id="ncFirst"></div>
+      <div class="field"><label>Nom du contact</label><input type="text" id="ncLast"></div>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <div class="field"><label>Email du contact</label><input type="email" id="ncEmail"></div>
+      <div class="field"><label>Téléphone</label><input type="text" id="ncPhone"></div>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <div class="field" style="min-width:100%;"><label>Adresse</label><input type="text" id="ncStreet"></div>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <div class="field" style="max-width:140px;"><label>Code postal</label><input type="text" id="ncZip"></div>
+      <div class="field"><label>Ville</label><input type="text" id="ncCity"></div>
+      <div class="field" style="max-width:160px;"><label>Pays</label><input type="text" id="ncCountry" value="France"></div>
+    </div>
+    <label style="display:flex; gap:8px; align-items:center; margin-top:10px; font-size:13px;"><input type="checkbox" id="ncB2C"> Particulier (B2C)</label>
+    <div class="status" id="ncStatus" style="margin-top:8px;"></div>
+    <div class="actions">
+      <button class="btn" id="ncCancel">Annuler</button>
+      <button class="btn primary" id="ncSave">Créer le client dans Axonaut</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h3>Réglages du module Devis</h3>
+    <div class="field" style="margin-bottom:16px;">
+      <label>Envoi des devis par email</label>
+      <div class="row">
+        <div class="field"><label style="font-weight:400;">Adresse du suivi (vide = relais Axonaut habituel)</label><input type="text" id="suiviUrl" placeholder="relais Axonaut (automatique)"></div>
+        <div class="field" style="max-width:220px;"><label style="font-weight:400;">Clé secrète</label><input type="password" id="suiviKey" autocomplete="off"></div>
+      </div>
+      <div style="margin-top:6px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><button class="btn small" id="suiviTest">Tester la connexion</button><span class="hint">Mise en place une fois sur Cloudflare : voir cloudflare/axonaut-proxy/LISEZMOI.md. Sans la clé, les devis partent en pièce jointe, sans suivi ni acceptation en ligne.</span></div>
+      <div class="field" style="margin-top:10px;"><label style="font-weight:400;">Objet de l'email</label><input type="text" id="mailSubject"></div>
+      <div class="field" style="margin-top:8px;"><label style="font-weight:400;">Message ({numero}, {client}, {lien}, {montant_ttc}, {validite})</label><textarea id="mailBody" rows="8" style="font-family:inherit;"></textarea></div>
+      <label class="chk-line"><input type="checkbox" id="mailBccAxonaut"> Mettre Axonaut en copie cachée (in@axonaut.com) pour ranger l'email dans la fiche client</label>
+      <div style="margin-top:8px;"><button class="btn small" id="mailSave">Enregistrer l'envoi des devis</button></div>
+    </div>
+    <div class="field" style="margin-bottom:16px;">
+      <label>Coordonnées imprimées sur les devis</label>
+      <div class="row" id="atelierFields"></div>
+      <div style="margin-top:8px;"><button class="btn small" id="atelierSave">Enregistrer les coordonnées</button></div>
+    </div>
+    <div class="field" style="margin-bottom:16px;">
+      <label>Numérotation des devis</label>
+      <div class="row">
+        <div class="field"><label style="font-weight:400;">Format</label><input type="text" id="numFormat" placeholder="DE{AAAA}{MM}-{N}"></div>
+        <div class="field" style="max-width:150px;"><label style="font-weight:400;">Prochain numéro {N}</label><input type="text" id="numNext" placeholder="ex. 1313"></div>
+      </div>
+      <div class="hint" style="margin-top:6px;">{AAAA} = année, {MM} = mois, {N} = compteur (qui continue d'un mois à l'autre, comme Axonaut). Prochain devis : <b id="numPreview">—</b>. Le numéro est attribué quand le devis quitte l'état « Brouillon ». Pour reprendre la suite d'Axonaut, mets ici le numéro qui suit le dernier devis Axonaut.</div>
+      <div style="margin-top:8px;"><button class="btn small" id="numSave">Enregistrer la numérotation</button></div>
+    </div>
+    <div class="field">
+      <label>Produit générique pour les lignes libres</label>
+      <div class="search-wrap">
+        <input type="text" id="genericSearch" placeholder="🔎 Chercher un produit Axonaut (ex. « Divers »)…" autocomplete="off">
+        <div class="suggestions" id="genericSuggest"></div>
+      </div>
+      <div class="hint" id="genericCurrent" style="margin-top:6px;"></div>
+      <div class="hint" style="margin-top:6px;">Axonaut crée automatiquement un nouveau produit dans ta base pour chaque ligne envoyée sans produit. Avec un produit générique (à créer une fois dans Axonaut, ex. « Divers »), les lignes libres l'utilisent avec leur propre désignation et leur propre prix, sans ajouter de produit.</div>
+    </div>
+    <div class="status" id="settingsStatus" style="margin-top:8px;"></div>
+    <div class="actions">
+      <button class="btn" id="genericClear">Ne pas utiliser de produit générique</button>
+      <button class="btn primary" id="settingsClose">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="sendModal">
+  <div class="modal wide">
+    <h3 id="sendTitle">Envoyer le devis</h3>
+    <div class="hint" id="sendFrom" style="margin-bottom:8px;"></div>
+    <div class="field"><label>À (séparer plusieurs adresses par des virgules)</label><input type="text" id="sendTo"><div class="contact-chips" id="sendContacts"></div></div>
+    <div class="field" style="margin-top:8px;"><label>Copie (Cc)</label><input type="text" id="sendCc"></div>
+    <div class="field" style="margin-top:8px;"><label>Objet</label><input type="text" id="sendSubject"></div>
+    <div class="field" style="margin-top:8px;"><label>Message</label><textarea id="sendBody"></textarea><div class="hint">{numero}, {client}, {lien}, {montant_ttc} et {validite} sont remplacés automatiquement à l'envoi.</div></div>
+    <label class="chk-line"><input type="checkbox" id="sendWithLink"> Lien de consultation et d'acceptation en ligne (avec suivi des ouvertures)</label>
+    <label class="chk-line"><input type="checkbox" id="sendWithPdf"> Joindre le PDF du devis</label>
+    <label class="chk-line"><input type="checkbox" id="sendBccAxonaut"> Copie cachée à Axonaut (in@axonaut.com)</label>
+    <div class="status" id="sendStatus" style="margin-top:10px;"></div>
+    <div class="actions">
+      <button class="btn" id="sendCancel">Annuler</button>
+      <button class="btn primary" id="sendGo">📨 Envoyer</button>
+    </div>
+  </div>
+</div>
+
+<script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/csb-auth.js"></script>
+<script>
+// ================== Accès Axonaut (même relais et même clé que Gestion Commande) ==================
+const AXONAUT_KEY_CONFIG_KEY = 'csb_envoi_axonaut_api_config';
+const DEFAULT_PROXY_URL = 'https://axonaut-proxy.atelier-csb.workers.dev';
+
+function settingsBase(){
+  return CSBAuth.getPbUrl().replace(/\/+$/,'') + '/api/collections/axonaut_settings/records';
+}
+async function fetchSharedSetting(key){
+  const filter = encodeURIComponent(`settings_key='${key}'`);
+  const res = await CSBAuth.authedFetch(settingsBase() + `?filter=(${filter})`);
+  if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
+  const json = await res.json();
+  const rec = (json.items && json.items[0]) || null;
+  return rec ? JSON.parse(rec.settings_value) : null;
+}
+
+async function saveSharedSetting(key, value){
+  const filter = encodeURIComponent(`settings_key='${key}'`);
+  const res = await CSBAuth.authedFetch(settingsBase() + `?filter=(${filter})`);
+  if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
+  const json = await res.json();
+  const rec = (json.items && json.items[0]) || null;
+  const body = JSON.stringify({ settings_key: key, settings_value: JSON.stringify(value) });
+  const r2 = rec
+    ? await CSBAuth.authedFetch(settingsBase() + '/' + rec.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body })
+    : await CSBAuth.authedFetch(settingsBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body });
+  if(!r2.ok) throw new Error('PocketBase HTTP ' + r2.status);
+}
+const MODULE_SETTINGS_KEY = 'devis_reglages';
+let moduleSettings = { genericProductId: null, genericProductName: '', numFormat: 'DE{AAAA}{MM}-{N}', nextNumber: null, atelier: null,
+  suiviUrl: '', suiviKey: '', mailSubject: '', mailBody: '', mailBccAxonaut: true, logoUploaded: false };
+const DEFAULT_MAIL_SUBJECT = "Devis N°{numero} - L'Atelier CSB";
+const DEFAULT_MAIL_BODY = "Bonjour,\n\nMerci d'avoir fait appel à L'Atelier CSB.\nVeuillez trouver ci-dessous le devis N°{numero} :\n{lien}\nCordialement\n\nJérôme FROMENT\nL'Atelier CSB\n0642852676";
+// Coordonnées imprimées sur les devis. Pré-remplies (une seule fois) avec l'expéditeur Colissimo
+// déjà réglé dans Gestion Commande.
+const ATELIER_FIELDS = [
+  ['nom', "Nom de l'entreprise"], ['adresse', 'Adresse'], ['cpVille', 'Code postal et ville'],
+  ['tel', 'Téléphone'], ['email', 'Email'], ['site', 'Site internet'],
+  ['siret', 'SIRET'], ['tva', 'N° TVA intracommunautaire'], ['mentions', 'Pied de page (forme juridique, capital, RCS…)']
+];
+async function atelierInfos(){
+  if(moduleSettings.atelier) return moduleSettings.atelier;
+  const a = { nom: "L'Atelier CSB", adresse: '', cpVille: '', tel: '', email: '', site: '', siret: '', tva: '', mentions: '' };
+  try{
+    const c = await fetchSharedSetting('colissimo');
+    if(c){
+      a.nom = c.senderCompany || a.nom; a.adresse = c.senderLine2 || '';
+      a.cpVille = [c.senderZip, c.senderCity].filter(Boolean).join(' '); a.tel = c.senderPhone || '';
+    }
+  }catch(e){}
+  return a;
+}
+async function loadModuleSettings(){
+  try{ moduleSettings = Object.assign(moduleSettings, (await fetchSharedSetting(MODULE_SETTINGS_KEY)) || {}); }catch(e){}
+}
+
+let proxyUrlPromise = null;
+function getProxyUrl(){
+  if(!proxyUrlPromise){
+    proxyUrlPromise = fetchSharedSetting('colissimo')
+      .then(c => (c && c.workerUrl) ? c.workerUrl.replace(/\/+$/,'') : DEFAULT_PROXY_URL)
+      .catch(() => DEFAULT_PROXY_URL);
+  }
+  return proxyUrlPromise;
+}
+async function getApiKey(){
+  if(window.csbHost){
+    try{
+      const cfg = await window.csbHost.getConfig();
+      const saved = cfg && cfg[AXONAUT_KEY_CONFIG_KEY];
+      if(saved && saved.apiKey) return saved.apiKey;
+    }catch(e){}
+  }
+  return null;
+}
+async function axonaut(path, method, body){
+  const apiKey = await getApiKey();
+  if(!apiKey) throw new Error("Clé API Axonaut non configurée sur ce poste — renseigne-la dans Gestion Commande → Réglages ⚙︎ ; elle sera réutilisée ici automatiquement.");
+  const proxy = await getProxyUrl();
+  const init = { method: method || 'GET', headers: { 'Content-Type':'application/json', 'x-axonaut-key': apiKey } };
+  if(body !== undefined) init.body = JSON.stringify(body);
+  const res = await fetch(proxy + '?path=' + encodeURIComponent(path), init);
+  const text = await res.text();
+  let data = null; try{ data = JSON.parse(text); }catch(e){}
+  if(!res.ok) throw new Error('Axonaut HTTP ' + res.status + (text ? ' — ' + text.slice(0,200) : ''));
+  return data;
+}
+function asArray(d){ return Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : []); }
+
+// Tous les produits actifs, une fois par session (pagination défensive : on s'arrête dès qu'une
+// page ne ramène plus rien de nouveau, comme pour les commandes dans Gestion Commande).
+let productsCache = null, productsPromise = null;
+function loadProducts(){
+  if(productsCache) return Promise.resolve(productsCache);
+  if(!productsPromise){
+    productsPromise = (async () => {
+      const seen = new Set(); let all = []; let page = 1;
+      while(page <= 40){
+        const arr = asArray(await axonaut(`/products?page=${page}&per_page=200`));
+        const fresh = arr.filter(p => p && !seen.has(p.id));
+        if(!fresh.length) break;
+        fresh.forEach(p => seen.add(p.id));
+        all = all.concat(fresh);
+        if(arr.length < 50) break;
+        page++;
+      }
+      productsCache = all.filter(p => !p.disabled);
+      return productsCache;
+    })().catch(e => { productsPromise = null; throw e; });
+  }
+  return productsPromise;
+}
+let taxRates = null;
+async function loadTaxRates(){
+  if(taxRates) return taxRates;
+  try{
+    const arr = asArray(await axonaut('/tax-rates')).filter(t => !t.disabled && t.for_sales !== false);
+    const rates = [...new Set(arr.map(t => Number(t.rate)).filter(r => !isNaN(r)))].sort((a,b) => b-a);
+    taxRates = rates.length ? rates : [20, 10, 5.5, 0];
+  }catch(e){ taxRates = [20, 10, 5.5, 0]; }
+  return taxRates;
+}
+let themes = null;
+async function loadThemes(){
+  if(themes) return themes;
+  try{ themes = asArray(await axonaut('/themes')); }catch(e){ themes = []; }
+  return themes;
+}
+
+// ================== Utilitaires ==================
+function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function eur(n){ return (Number(n) || 0).toLocaleString('fr-FR', { style:'currency', currency:'EUR' }); }
+function num(v){ const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/\s/g,'')); return isNaN(n) ? 0 : n; }
+function round2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function addDays(dateStr, days){ const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() + days); return d.toISOString().slice(0,10); }
+// Date du jour choisie (yyyy-mm-dd) -> RFC3339 attendu par Axonaut, à midi heure locale.
+function toRfc3339(dateStr){
+  const d = new Date(dateStr + 'T12:00:00');
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? '+' : '-';
+  const pad = n => String(Math.floor(Math.abs(n))).padStart(2, '0');
+  return `${dateStr}T12:00:00${sign}${pad(off / 60)}:${pad(off % 60)}`;
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function norm(s){ return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function debounce(fn, ms){ let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function canMarge(){ return CSBAuth.can('devis', 'marge'); }
+function userName(){ const u = CSBAuth.currentUser(); return u ? (u.username || u.email || '') : ''; }
+
+// ================== Devis (collection PocketBase "devis", partagée) ==================
+const STATUTS = {
+  brouillon: { label:'Brouillon' },
+  envoye:    { label:'Envoyé' },
+  accepte:   { label:'Accepté — commande' },
+  facture:   { label:'Facturé' },
+  refuse:    { label:'Refusé' },
+  annule:    { label:'Annulé' }
+};
+function statutChip(st){ return `<span class="st st-${escapeHtml(st)}">${escapeHtml((STATUTS[st] || STATUTS.brouillon).label)}</span>`; }
+function devisBase(){ return CSBAuth.getPbUrl().replace(/\/+$/,'') + '/api/collections/devis/records'; }
+
+let drafts = [];          // [{ recId, updated, draft }]
+let current = null;       // devis ouvert (objet "data" + numero/statut/historique)
+let currentRecId = null;  // id PocketBase du devis ouvert
+let currentUpdated = '';  // date "updated" PocketBase connue, pour repérer une modif d'un autre poste
+let saveState = '';
+let listFilter = 'actifs';
+let listSearch = '';
+
+function newDraft(){
+  return {
+    id: uid(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    author: userName(), updatedBy: userName(),
+    numero: '', statut: 'brouillon', historique: [{ date: new Date().toISOString(), user: userName(), action: 'Création du brouillon' }],
+    client: null, addressId: null,
+    date: todayStr(), expiryDate: addDays(todayStr(), 30),
+    themeId: null, paymentTerms: '', mandatoryMentions: '', comments: '',
+    globalDiscount: 0, globalDiscountIsPercent: true,
+    lines: []
+  };
+}
+function recordToDraft(rec){
+  const d = Object.assign(newDraft(), rec.data || {});
+  d.numero = rec.numero || '';
+  d.statut = rec.statut || 'brouillon';
+  d.historique = Array.isArray(rec.historique) ? rec.historique : [];
+  d.updatedAt = rec.updated || d.updatedAt;
+  d.updatedBy = rec.modifie_par || d.updatedBy;
+  return d;
+}
+async function loadDrafts(){
+  let page = 1, all = [];
+  while(page <= 20){
+    const res = await CSBAuth.authedFetch(devisBase() + `?perPage=200&page=${page}&sort=-updated`);
+    if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
+    const json = await res.json();
+    all = all.concat(json.items || []);
+    if(page >= (json.totalPages || 1)) break;
+    page++;
+  }
+  drafts = all.map(rec => ({ recId: rec.id, updated: rec.updated, draft: recordToDraft(rec) }));
+}
+function draftToBody(d){
+  const t = computeTotals(d);
+  const data = Object.assign({}, d);
+  delete data.numero; delete data.statut; delete data.historique;
+  return {
+    numero: d.numero || '', statut: d.statut || 'brouillon',
+    client_id: d.client ? d.client.id : null, client_nom: d.client ? d.client.name : '',
+    date_devis: d.date || '', total_ht: t.ht, total_ttc: t.ttc,
+    data, historique: d.historique || [],
+    axonaut_facture_id: d.facture ? d.facture.id : null,
+    axonaut_facture_numero: d.facture ? (d.facture.numero || '') : '',
+    auteur: d.author || '', modifie_par: userName()
+  };
+}
+let saving = null;
+async function saveCurrent(){
+  if(!current) return;
+  if(saving) await saving.catch(() => {});
+  saving = (async () => {
+    const d = current;
+    d.updatedAt = new Date().toISOString();
+    d.updatedBy = userName();
+    setSaveState('Enregistrement…');
+    try{
+      // Un autre poste a-t-il modifié ce devis depuis qu'on l'a ouvert ?
+      if(currentRecId && currentUpdated){
+        const chk = await CSBAuth.authedFetch(devisBase() + '/' + currentRecId + '?fields=updated,modifie_par');
+        if(chk.ok){
+          const r = await chk.json();
+          if(r.updated && r.updated !== currentUpdated && r.modifie_par !== userName()){
+            if(!confirm(`Ce devis vient d'être modifié sur un autre poste${r.modifie_par ? ' par ' + r.modifie_par : ''}.\n\nOK = garder MA version (écrase la sienne)\nAnnuler = recharger la sienne`)){
+              await reopenCurrent();
+              return;
+            }
+          }
+        }
+      }
+      const body = JSON.stringify(draftToBody(d));
+      const res = currentRecId
+        ? await CSBAuth.authedFetch(devisBase() + '/' + currentRecId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body })
+        : await CSBAuth.authedFetch(devisBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body });
+      if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 150));
+      const rec = await res.json();
+      if(current === d){ currentRecId = rec.id; currentUpdated = rec.updated; }
+      const entry = { recId: rec.id, updated: rec.updated, draft: recordToDraft(rec) };
+      const idx = drafts.findIndex(x => x.recId === rec.id || x.draft.id === d.id);
+      if(idx >= 0) drafts[idx] = entry; else drafts.unshift(entry);
+      drafts.sort((a,b) => String(b.updated).localeCompare(String(a.updated)));
+      renderDraftList();
+      setSaveState('✔ Enregistré');
+    }catch(e){
+      setSaveState("Échec de l'enregistrement : " + e.message, true);
+      throw e;
+    }
+  })();
+  return saving;
+}
+const scheduleSave = debounce(() => saveCurrent().catch(() => {}), 900);
+function changed(){ setSaveState('Modifications non enregistrées…'); scheduleSave(); }
+async function reopenCurrent(){
+  if(!currentRecId) return;
+  const res = await CSBAuth.authedFetch(devisBase() + '/' + currentRecId);
+  if(!res.ok) return;
+  const rec = await res.json();
+  openDraft(recordToDraft(rec), rec.id, rec.updated);
+  setSaveState('Version du serveur rechargée');
+}
+async function deleteCurrent(){
+  if(!current) return;
+  if(current.numero){
+    alert('Un devis numéroté ne se supprime pas (pour garder la suite des numéros) : utilise « Annuler » à la place.');
+    return;
+  }
+  if(!confirm('Supprimer définitivement ce brouillon ?')) return;
+  if(currentRecId){
+    try{
+      const res = await CSBAuth.authedFetch(devisBase() + '/' + currentRecId, { method:'DELETE' });
+      if(!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
+    }catch(e){ alert('Suppression impossible : ' + e.message); return; }
+  }
+  drafts = drafts.filter(x => x.draft.id !== current.id);
+  closeEditor();
+  renderDraftList();
+}
+function duplicateCurrent(){
+  if(!current) return;
+  const copy = JSON.parse(JSON.stringify(current));
+  const from = current.numero ? 'du devis ' + current.numero : "d'un brouillon";
+  Object.assign(copy, {
+    id: uid(), createdAt: new Date().toISOString(), author: userName(),
+    numero: '', statut: 'brouillon',
+    historique: [{ date: new Date().toISOString(), user: userName(), action: 'Copie ' + from }],
+    date: todayStr(), expiryDate: addDays(todayStr(), 30)
+  });
+  delete copy.facture; delete copy.suivi; delete copy.envois; delete copy.acceptedOnline; delete copy.facturationEnCours;
+  openDraft(copy, null, '');
+  changed();
+}
+
+// ---------- Numérotation (suite d'Axonaut, réglable) ----------
+function formatNumero(fmt, n, date){
+  const d = date || new Date();
+  return String(fmt || 'DE{AAAA}{MM}-{N}')
+    .replace(/\{AAAA\}/g, String(d.getFullYear()))
+    .replace(/\{AA\}/g, String(d.getFullYear()).slice(2))
+    .replace(/\{MM\}/g, String(d.getMonth() + 1).padStart(2, '0'))
+    .replace(/\{N\}/g, String(n));
+}
+async function numeroExists(numero){
+  const f = encodeURIComponent(`numero='${numero.replace(/'/g, "\\'")}'`);
+  const res = await CSBAuth.authedFetch(devisBase() + `?perPage=1&fields=id&filter=(${f})`);
+  if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
+  return ((await res.json()).totalItems || 0) > 0;
+}
+// Réserve le prochain numéro libre (relit le compteur partagé juste avant, pour limiter le risque
+// que deux postes prennent le même) et le fixe sur le devis ouvert.
+async function assignNumber(){
+  if(current.numero) return true;
+  await loadModuleSettings();
+  let n = parseInt(moduleSettings.nextNumber, 10);
+  if(!n){
+    alert("La numérotation n'est pas encore réglée : indique le prochain numéro (la suite du dernier devis Axonaut) dans « ⚙︎ Réglages du module ».");
+    openSettings();
+    return false;
+  }
+  let numero = formatNumero(moduleSettings.numFormat, n);
+  let guard = 0;
+  while(await numeroExists(numero)){
+    n++; numero = formatNumero(moduleSettings.numFormat, n);
+    if(++guard > 500) throw new Error('impossible de trouver un numéro libre');
+  }
+  moduleSettings.nextNumber = n + 1;
+  await saveSharedSetting(MODULE_SETTINGS_KEY, moduleSettings);
+  current.numero = numero;
+  addHisto('Numéro attribué : ' + numero);
+  return true;
+}
+function addHisto(action){
+  current.historique = current.historique || [];
+  current.historique.push({ date: new Date().toISOString(), user: userName(), action });
+}
+
+// ---------- Statuts ----------
+function isLocked(d){ return !d || d.statut === 'facture' || !CSBAuth.can('devis', 'creer'); }
+function validationProblems(d){
+  const pb = [];
+  if(!d.client) pb.push('choisir un client');
+  const items = d.lines.filter(l => l.type !== 'section');
+  if(!items.length) pb.push('ajouter au moins une ligne');
+  if(items.some(l => !(l.name || '').trim())) pb.push('donner une désignation à chaque ligne');
+  if(items.some(l => num(l.quantity) <= 0)) pb.push('mettre une quantité supérieure à 0 sur chaque ligne');
+  if(d.globalDiscountIsPercent && (num(d.globalDiscount) < 0 || num(d.globalDiscount) > 100)) pb.push('mettre une remise globale entre 0 et 100 %');
+  return pb;
+}
+let changingStatut = false;
+async function setStatut(next, action){
+  if(!current || changingStatut) return;
+  if(['envoye', 'accepte'].includes(next)){
+    const pb = validationProblems(current);
+    if(pb.length){ alert('Avant de continuer : ' + pb.join(', ') + '.'); return; }
+  }
+  changingStatut = true;
+  const before = { statut: current.statut, numero: current.numero, n: (current.historique || []).length };
+  try{
+    if(next !== 'brouillon' && next !== 'annule' && !current.numero){
+      if(!(await assignNumber())) return;
+    }
+    current.statut = next;
+    if(next === 'accepte'){
+      current.acceptedAt = new Date().toISOString();
+      // Sans adresse de livraison saisie, la commande part à l'adresse du devis.
+      if(!current.livraison || !(current.livraison.adresse || current.livraison.nomSoc)){
+        const a = current.address || clientMainAddress();
+        current.livraison = Object.assign({}, current.livraison || {}, { nomSoc: a.company || a.name || '', contact: a.contact || '', adresse: a.street || '', cp: a.zip || '', ville: a.city || '', pays: a.country || 'France' });
+      }
+    }
+    addHisto(action);
+    await saveCurrent();
+    if(['annule', 'refuse'].includes(next) && current.suivi && current.suivi.token){
+      suiviApi('/api/devis/' + current.suivi.token + '/close', { method:'POST', body: JSON.stringify({ reason: next === 'annule' ? 'devis annulé' : 'devis refusé' }) }).catch(() => {});
+    }
+    renderEditor();
+  }catch(e){
+    current.statut = before.statut;
+    current.historique = (current.historique || []).slice(0, before.n + (current.numero !== before.numero ? 1 : 0));
+    alert('Changement impossible : ' + e.message);
+    renderEditor();
+  }finally{
+    changingStatut = false;
+  }
+}
+
+function setSaveState(text, isErr){
+  saveState = text;
+  const el = document.getElementById('saveStatus');
+  if(el){ el.textContent = text; el.className = 'status' + (isErr ? ' err' : ''); }
+}
+
+// ================== Calculs ==================
+function lineHT(l){
+  const gross = num(l.quantity) * num(l.price);
+  return round2(gross * (1 - num(l.discountPercent) / 100));
+}
+function computeTotals(d){
+  const items = d.lines.filter(l => l.type !== 'section');
+  const htBeforeGlobal = round2(items.reduce((s,l) => s + lineHT(l), 0));
+  const gd = num(d.globalDiscount);
+  const globalAmount = gd ? round2(d.globalDiscountIsPercent ? htBeforeGlobal * gd / 100 : Math.min(gd, htBeforeGlobal)) : 0;
+  const ratio = htBeforeGlobal ? (htBeforeGlobal - globalAmount) / htBeforeGlobal : 1;
+  const byRate = {};
+  items.forEach(l => {
+    const r = num(l.taxRate);
+    byRate[r] = (byRate[r] || 0) + lineHT(l) * ratio;
+  });
+  const ht = round2(htBeforeGlobal - globalAmount);
+  const taxes = Object.keys(byRate).map(r => ({ rate: Number(r), base: round2(byRate[r]), amount: round2(byRate[r] * Number(r) / 100) }))
+    .filter(t => t.base || t.amount).sort((a,b) => b.rate - a.rate);
+  const tva = round2(taxes.reduce((s,t) => s + t.amount, 0));
+  const cost = items.reduce((s,l) => s + num(l.quantity) * num(l.cost), 0);
+  return { htBeforeGlobal, globalAmount, ht, taxes, tva, ttc: round2(ht + tva), cost: round2(cost), margin: round2(ht - cost) };
+}
+
+// ================== Liste des devis ==================
+const LIST_FILTERS = [
+  { id:'actifs', label:'En cours', test: st => ['brouillon','envoye','accepte'].includes(st) },
+  { id:'brouillon', label:'Brouillons', test: st => st === 'brouillon' },
+  { id:'envoye', label:'Envoyés', test: st => st === 'envoye' },
+  { id:'accepte', label:'Commandes', test: st => st === 'accepte' },
+  { id:'facture', label:'Facturés', test: st => st === 'facture' },
+  { id:'clos', label:'Refusés / annulés', test: st => st === 'refuse' || st === 'annule' },
+  { id:'tous', label:'Tous', test: () => true }
+];
+function renderListFilters(){
+  const box = document.getElementById('listFilters');
+  box.innerHTML = LIST_FILTERS.map(f => {
+    const n = drafts.filter(x => f.test(x.draft.statut)).length;
+    return `<button class="chip ${listFilter === f.id ? 'on' : ''}" data-f="${f.id}">${escapeHtml(f.label)} ${n}</button>`;
+  }).join('');
+  box.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { listFilter = b.dataset.f; renderDraftList(); }));
+}
+function renderDraftList(){
+  renderListFilters();
+  const list = document.getElementById('draftList');
+  const f = LIST_FILTERS.find(x => x.id === listFilter) || LIST_FILTERS[0];
+  const q = norm(listSearch);
+  const items = drafts.map(x => x.draft).filter(d => f.test(d.statut))
+    .filter(d => !q || norm([d.numero, d.client && d.client.name].join(' ')).includes(q));
+  if(!items.length){ list.innerHTML = '<div class="hint" style="padding:6px;">Aucun devis ici.</div>'; return; }
+  list.innerHTML = items.map(d => {
+    const t = computeTotals(d);
+    const when = new Date(d.updatedAt).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    return `<div class="draft-item ${current && current.id === d.id ? 'active' : ''}" data-id="${escapeHtml(d.id)}">
+      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}${suiviOpens(d) ? `<span class="eye" title="Ouvert ${suiviOpens(d)} fois par le client">👁 ${suiviOpens(d)}</span>` : ''}</span>${statutChip(d.statut)}</div>
+      <div class="m" style="color:var(--ink);">${escapeHtml(d.client ? d.client.name : 'Client à choisir')}</div>
+      <div class="m">${eur(t.ht)} HT · modifié le ${escapeHtml(when)}${d.updatedBy ? ' par ' + escapeHtml(d.updatedBy) : ''}</div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.draft-item').forEach(el => el.addEventListener('click', () => {
+    const entry = drafts.find(x => x.draft.id === el.dataset.id);
+    if(entry) openDraft(JSON.parse(JSON.stringify(entry.draft)), entry.recId, entry.updated);
+  }));
+}
+
+// ================== Éditeur ==================
+function closeEditor(){
+  current = null; currentRecId = null; currentUpdated = '';
+  document.getElementById('editor').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'block';
+}
+function openDraft(d, recId, updated){
+  current = d; currentRecId = recId; currentUpdated = updated || '';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('editor').style.display = 'block';
+  renderEditor();
+  renderDraftList();
+}
+
+function renderEditor(){
+  const d = current;
+  const ed = document.getElementById('editor');
+  ed.innerHTML = `
+    <div class="topbar">
+      <h2>${escapeHtml(d.numero ? 'Devis ' + d.numero : 'Nouveau devis')}${d.client ? ' — ' + escapeHtml(d.client.name) : ''}</h2>
+      ${statutChip(d.statut)}
+      <span class="status" id="saveStatus">${escapeHtml(saveState)}</span>
+    </div>
+    <div class="actions-bar" id="actionsBar"></div>
+    <div id="axBanner"></div>
+
+    <div class="card">
+      <h2>Client</h2>
+      <div id="clientArea"></div>
+      <div class="field" style="margin-top:12px;"><label>Objet du devis (facultatif, imprimé sous le numéro)</label><input type="text" id="fTitle" value="${escapeHtml(d.title || '')}" placeholder="ex. Casaques et tapis — saison 2027"></div>
+    </div>
+
+    <div class="card">
+      <h2>Livraison (pour la commande)</h2>
+      <div class="row" id="livraisonFields"></div>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="btn small" id="livCopyBtn">Reprendre l'adresse du devis</button>
+        <select id="livPick" style="border:1px solid var(--line); border-radius:8px; padding:4px 8px; display:none;"></select>
+        <span class="hint">Utilisée par Gestion Commande (bon de livraison, étiquettes) une fois le devis validé.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Lignes du devis</h2>
+      <div class="lines-wrap">
+        <table class="lines">
+          <thead><tr>
+            <th>Description</th>
+            <th class="num" style="width:120px;">Prix unitaire</th>
+            <th class="num" style="width:100px;">Quantité</th>
+            <th class="num" style="width:130px;">Montant HT</th>
+          </tr></thead>
+          <tbody id="linesBody"></tbody>
+        </table>
+        <div class="tva-col" id="tvaCol"></div>
+      </div>
+      <div class="add-row">
+        <div class="search-wrap">
+          <input type="text" id="productSearch" placeholder="🔎 Ajouter un produit Axonaut (nom ou code)…" autocomplete="off">
+          <div class="suggestions" id="productSuggest"></div>
+        </div>
+        <button class="btn" id="addFreeLineBtn">＋ Ligne libre</button>
+        <button class="btn" id="addSectionBtn">＋ Titre de section</button>
+      </div>
+      <div class="hint" id="productsHint" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>Conditions et totaux</h2>
+      <div class="row">
+        <div class="field" style="max-width:170px;"><label>Date du devis</label><input type="date" id="fDate" value="${escapeHtml(d.date)}"></div>
+        <div class="field" style="max-width:170px;"><label>Valable jusqu'au</label><input type="date" id="fExpiry" value="${escapeHtml(d.expiryDate)}"></div>
+        <div class="field"><label>Modèle de mise en page Axonaut</label><select id="fTheme"><option value="">Par défaut</option></select></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="field"><label>Conditions de paiement</label><textarea id="fPayment" rows="2">${escapeHtml(d.paymentTerms)}</textarea></div>
+        <div class="field"><label>Mentions obligatoires</label><textarea id="fMentions" rows="2">${escapeHtml(d.mandatoryMentions)}</textarea></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="field"><label>Commentaire (affiché sur le devis)</label><textarea id="fComments" rows="3">${escapeHtml(d.comments)}</textarea></div>
+      </div>
+      <div class="row" style="margin-top:14px; align-items:flex-end;">
+        <div class="field" style="max-width:260px;">
+          <label>Remise globale</label>
+          <div style="display:flex; gap:6px;">
+            <input type="text" id="fGlobalDiscount" value="${d.globalDiscount ? escapeHtml(d.globalDiscount) : ''}" placeholder="0" style="flex:1; text-align:right;">
+            <select id="fGlobalDiscountUnit"><option value="pct" ${d.globalDiscountIsPercent ? 'selected' : ''}>%</option><option value="eur" ${d.globalDiscountIsPercent ? '' : 'selected'}>€ HT</option></select>
+          </div>
+        </div>
+        <div class="totals" id="totalsBox"></div>
+      </div>
+    </div>
+
+    <div class="card" id="suiviCard" style="display:none;">
+      <h2 style="display:flex; align-items:center; gap:10px;">Suivi client <button class="btn small" id="suiviRefresh">↻ Actualiser</button></h2>
+      <div id="suiviBox"></div>
+    </div>
+
+    <div class="card">
+      <h2>Historique</h2>
+      <div class="histo" id="histoBox"></div>
+    </div>
+  `;
+
+  renderClientArea();
+  renderLivraison();
+  document.getElementById('fTitle').addEventListener('input', e => { current.title = e.target.value; changed(); });
+  renderLines();
+  renderTotals();
+  wireProductSearch();
+  wireConditions();
+  renderActionsBar();
+  renderHisto();
+  renderSuivi();
+  if(d.suivi && d.suivi.token) refreshSuivi(d).then(() => { if(current === d) renderSuivi(); });
+  document.getElementById('suiviRefresh').addEventListener('click', async () => { await refreshSuivi(current, true); renderSuivi(); });
+  if(isLocked(d)) applyReadOnly();
+}
+
+function renderHisto(){
+  const box = document.getElementById('histoBox');
+  const h = (current.historique || []).slice().reverse();
+  box.innerHTML = h.length ? h.map(e => {
+    const when = new Date(e.date).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    return `<div>${escapeHtml(when)} — <b>${escapeHtml(e.action)}</b>${e.user ? ' (' + escapeHtml(e.user) + ')' : ''}</div>`;
+  }).join('') : '<div>Aucun évènement.</div>';
+}
+
+// Boutons selon l'étape du devis : brouillon → envoyé → accepté (= commande) → facturé.
+function renderActionsBar(){
+  const bar = document.getElementById('actionsBar');
+  const d = current;
+  const canEdit = CSBAuth.can('devis', 'creer');
+  const canValider = CSBAuth.can('devis', 'valider');
+  const b = (id, label, cls, title) => `<button class="btn small ${cls || ''}" id="${id}" ${title ? `title="${escapeHtml(title)}"` : ''}>${label}</button>`;
+  let html = '';
+  if(canEdit){
+    if(['brouillon','envoye'].includes(d.statut) && CSBAuth.can('devis', 'envoyer')) html += b('aEmail', d.envois && d.envois.length ? '📨 Renvoyer par email' : '📨 Envoyer par email', d.statut === 'brouillon' ? 'primary' : '');
+    if(d.statut === 'brouillon') html += b('aSend', 'Marquer comme envoyé', '', "Attribue un numéro et passe à l'état « Envoyé » sans envoyer d'email (devis remis en main propre, envoyé autrement…)");
+    if(['brouillon','envoye'].includes(d.statut) && canValider) html += b('aAccept', '✔ Valider — accepté par le client', 'primary', 'Le devis devient une commande');
+    if(d.statut === 'envoye') html += b('aRefuse', '✕ Refusé par le client');
+    if(d.statut === 'accepte' && canValider) html += b('aUnaccept', '↩ Annuler la validation', '', "Repasse le devis à l'état « Envoyé »");
+    if(d.statut === 'accepte' && CSBAuth.can('devis', 'facturer')) html += b('aInvoice', '🧾 Facturer dans Axonaut', 'primary', 'Crée la facture dans Axonaut avec les lignes de ce devis');
+    if(['refuse','annule'].includes(d.statut)) html += b('aReopen', '↺ Rouvrir');
+  }
+  html += '<span class="spacer"></span>';
+  html += b('pdfView', '📄 Aperçu PDF');
+  html += b('pdfSave', '💾 Enregistrer le PDF');
+  html += b('dupBtn', '⧉ Dupliquer', '', 'Nouveau brouillon à partir de ce devis');
+  if(canEdit && ['brouillon','envoye','accepte'].includes(d.statut)){
+    html += d.numero ? b('aCancel', '⊘ Annuler le devis', 'danger') : b('delBtn', '🗑 Supprimer', 'danger');
+  }
+  bar.innerHTML = html;
+  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  on('aSend', () => setStatut('envoye', 'Marqué comme envoyé'));
+  on('aEmail', openSendModal);
+  on('aAccept', () => { if(confirm('Valider ce devis ? Il devient une commande.')) setStatut('accepte', 'Validé — accepté par le client'); });
+  on('aRefuse', () => setStatut('refuse', 'Refusé par le client'));
+  on('aUnaccept', () => { if(confirm('Annuler la validation ? Le devis repasse à « Envoyé ».')) setStatut('envoye', 'Validation annulée'); });
+  on('aReopen', () => setStatut(current.numero ? 'envoye' : 'brouillon', 'Devis rouvert'));
+  on('aCancel', () => { if(confirm('Annuler ce devis ? Il reste dans la liste « Refusés / annulés » et peut être rouvert.')) setStatut('annule', 'Devis annulé'); });
+  on('dupBtn', duplicateCurrent);
+  on('pdfView', () => exportPdf(false));
+  on('pdfSave', () => exportPdf(true));
+  on('delBtn', deleteCurrent);
+  on('aInvoice', invoiceInAxonaut);
+}
+
+// Devis facturé (ou compte sans droit de modification) : écran figé.
+function applyReadOnly(){
+  const ed = document.getElementById('editor');
+  ed.classList.add('readonly');
+  ed.querySelectorAll('.card input, .card select, .card textarea').forEach(el => el.disabled = true);
+  ed.querySelectorAll('[contenteditable]').forEach(el => el.setAttribute('contenteditable', 'false'));
+  ed.querySelectorAll('.iconbtn, #addFreeLineBtn, #addSectionBtn, #changeClientBtn, #newClientBtn').forEach(el => el.style.display = 'none');
+  const addRow = ed.querySelector('.add-row'); if(addRow) addRow.style.display = 'none';
+  const f = current.facture || {};
+  const t = computeTotals(current);
+  const diff = f.total != null ? Math.abs(Number(f.total) - t.ttc) : 0;
+  document.getElementById('axBanner').innerHTML = current.statut === 'facture'
+    ? `<div class="banner ok">✔ Facturé${f.numero ? ' — facture <b>' + escapeHtml(f.numero) + '</b> créée dans Axonaut' : ''}${f.date ? ' le ' + escapeHtml(new Date(f.date).toLocaleDateString('fr-FR')) : ''} : le devis ne peut plus être modifié.
+        ${f.publicPath ? `<a href="#" id="openInvoicePdf" style="margin-left:8px;">📄 PDF de la facture</a>` : ''}
+        <div class="hint" style="margin-top:4px;">Paiements, relances et avoirs se gèrent dans Axonaut.</div></div>
+      ${diff > 0.02 ? `<div class="banner">⚠ Le total TTC de la facture Axonaut (${eur(f.total)}) diffère de celui du devis (${eur(t.ttc)}) — vérifie la facture dans Axonaut.</div>` : ''}`
+    : `<div class="banner">Lecture seule : tu n'as pas le droit de modifier les devis.</div>`;
+  const lk = document.getElementById('openInvoicePdf');
+  if(lk) lk.addEventListener('click', e => { e.preventDefault(); openExternal(f.publicPath); });
+}
+
+// ================== PDF du devis ==================
+// Mise en page proche du devis Axonaut : logo, coordonnées, tableau à en-tête bleu foncé,
+// descriptions riches, totaux, conditions et « Bon pour accord ». Imprimé par Chromium (main.js).
+function fmtDateFr(iso){ if(!iso) return ''; const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}/${m}/${y}`; }
+function pdfRate(r){ return num(r).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %'; }
+function pdfQty(q){ return num(q).toLocaleString('fr-FR', { maximumFractionDigits: 3 }); }
+async function buildQuotePdfHtml(d){
+  const at = await atelierInfos();
+  const t = computeTotals(d);
+  const a = d.address || clientMainAddress();
+  const e = escapeHtml;
+  const numero = d.numero || 'BROUILLON';
+  let rows = '';
+  d.lines.forEach(l => {
+    if(l.type === 'section'){ rows += `<tr class="sec"><td colspan="6">${e(l.name)}</td></tr>`; return; }
+    rows += `<tr>
+      <td class="desc"><div class="nm">${e(l.name)}</div>${l.description ? `<div class="ds">${descToHtml(l.description)}</div>` : ''}</td>
+      <td class="r">${eur(l.price)}</td>
+      <td class="r">${pdfQty(l.quantity)}${l.unit ? ' ' + e(l.unit) : ''}</td>
+      <td class="r">${num(l.discountPercent) ? pdfRate(l.discountPercent) : ''}</td>
+      <td class="r">${pdfRate(l.taxRate)}</td>
+      <td class="r">${eur(lineHT(l))}</td>
+    </tr>`;
+  });
+  const hasDiscount = d.lines.some(l => l.type !== 'section' && num(l.discountPercent));
+  const coords = [at.adresse, at.cpVille, at.tel ? 'Tél. ' + at.tel : '', at.email, at.site].filter(Boolean).map(e).join('<br>');
+  const clientLines = [a.company || (d.client && d.client.name), a.contact, a.name && a.name !== a.company ? a.name : '', a.street, [a.zip, a.city].filter(Boolean).join(' '), a.country && !/^france$/i.test(a.country) ? a.country : '']
+    .filter(Boolean).map(e).join('<br>');
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><style>
+    @page{ size:A4; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Segoe UI', Arial, sans-serif; font-size:10.5px; color:#2b2b2b; }
+    .head{ display:flex; justify-content:space-between; align-items:flex-start; }
+    .logo{ width:170px; }
+    .doc{ text-align:right; }
+    .doc h1{ margin:0; font-size:26px; letter-spacing:2px; color:#1F3A66; }
+    .doc .n{ font-size:13px; font-weight:700; margin-top:2px; }
+    .doc .dt{ color:#555; margin-top:4px; line-height:1.5; }
+    .parties{ display:flex; justify-content:space-between; gap:24px; margin-top:18px; }
+    .from{ line-height:1.5; }
+    .from b{ font-size:12px; }
+    .to{ width:46%; border:1px solid #D5DCE6; border-radius:6px; padding:10px 12px; line-height:1.5; }
+    .to .lb{ font-size:9px; text-transform:uppercase; color:#888; letter-spacing:.06em; }
+    .to .cl{ font-size:12px; }
+    .obj{ margin-top:14px; font-size:11.5px; }
+    table{ width:100%; border-collapse:collapse; margin-top:14px; }
+    thead{ display:table-header-group; }
+    th{ background:#1F3A66; color:#fff; font-weight:700; padding:7px 8px; text-align:left; font-size:10.5px; }
+    th.r, td.r{ text-align:right; white-space:nowrap; }
+    td{ padding:7px 8px; border-bottom:1px solid #E3E7EE; vertical-align:top; }
+    tr{ page-break-inside:avoid; }
+    tr.sec td{ background:#F2F5FA; font-weight:700; color:#1F3A66; }
+    .nm{ font-weight:700; color:#3a3a3a; }
+    .ds{ margin-top:3px; color:#444; line-height:1.4; }
+    .ds img{ max-width:70px; max-height:70px; float:left; margin:0 8px 4px 0; }
+    .ds ul, .ds ol{ margin:2px 0; padding-left:16px; }
+    .ds p{ margin:0; }
+    .bottom{ display:flex; justify-content:space-between; gap:24px; margin-top:16px; page-break-inside:avoid; }
+    .notes{ flex:1; line-height:1.5; }
+    .notes h4{ margin:0 0 3px; font-size:10px; text-transform:uppercase; color:#1F3A66; letter-spacing:.05em; }
+    .notes .blk{ margin-bottom:10px; white-space:pre-line; }
+    .tot{ width:260px; }
+    .tot div{ display:flex; justify-content:space-between; padding:3px 0; }
+    .tot .ttc{ background:#1F3A66; color:#fff; font-weight:700; font-size:12.5px; padding:7px 8px; margin-top:4px; border-radius:4px; }
+    .sign{ margin-top:18px; display:flex; justify-content:flex-end; page-break-inside:avoid; }
+    .sign div{ width:260px; height:95px; border:1px solid #D5DCE6; border-radius:6px; padding:8px 10px; color:#666; line-height:1.5; }
+    .draft{ position:fixed; top:40%; left:0; right:0; text-align:center; font-size:90px; color:rgba(181,69,47,.08); transform:rotate(-25deg); font-weight:800; }
+  </style></head><body>
+    ${d.numero ? '' : '<div class="draft">BROUILLON</div>'}
+    <div class="head">
+      <img class="logo" src="__CSB_LOGO__" alt="">
+      <div class="doc">
+        <h1>DEVIS</h1>
+        <div class="n">N° ${e(numero)}</div>
+        <div class="dt">Date : ${fmtDateFr(d.date)}${d.expiryDate ? '<br>Valable jusqu\'au : ' + fmtDateFr(d.expiryDate) : ''}</div>
+      </div>
+    </div>
+    <div class="parties">
+      <div class="from"><b>${e(at.nom || "L'Atelier CSB")}</b><br>${coords}</div>
+      <div class="to"><div class="lb">Client</div><div class="cl">${clientLines}</div></div>
+    </div>
+    ${d.title ? `<div class="obj"><b>Objet :</b> ${e(d.title)}</div>` : ''}
+    <table>
+      <thead><tr><th>Description</th><th class="r">Prix unitaire HT</th><th class="r">Quantité</th><th class="r">${hasDiscount ? 'Remise' : ''}</th><th class="r">TVA</th><th class="r">Montant HT</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="bottom">
+      <div class="notes">
+        ${d.comments ? `<div class="blk"><h4>Commentaire</h4>${e(d.comments)}</div>` : ''}
+        ${d.paymentTerms ? `<div class="blk"><h4>Conditions de paiement</h4>${e(d.paymentTerms)}</div>` : ''}
+        ${d.mandatoryMentions ? `<div class="blk"><h4>Mentions</h4>${e(d.mandatoryMentions)}</div>` : ''}
+      </div>
+      <div class="tot">
+        ${t.globalAmount ? `<div><span>Total HT avant remise</span><span>${eur(t.htBeforeGlobal)}</span></div><div><span>Remise${d.globalDiscountIsPercent ? ' ' + pdfRate(d.globalDiscount) : ''}</span><span>− ${eur(t.globalAmount)}</span></div>` : ''}
+        <div><span>Total HT</span><span>${eur(t.ht)}</span></div>
+        ${t.taxes.map(x => `<div><span>TVA ${pdfRate(x.rate)}</span><span>${eur(x.amount)}</span></div>`).join('')}
+        <div class="ttc"><span>Total TTC</span><span>${eur(t.ttc)}</span></div>
+      </div>
+    </div>
+    <div class="sign"><div><b>Bon pour accord</b><br>Date, signature et cachet :</div></div>
+  </body></html>`;
+}
+function buildQuotePdfFooter(at){
+  const legal = [at.nom, at.siret ? 'SIRET ' + at.siret : '', at.tva ? 'TVA ' + at.tva : '', at.mentions].filter(Boolean).map(escapeHtml).join(' · ');
+  return `<div style="width:100%; font-family:Arial, sans-serif; font-size:7.5px; color:#888; padding:0 28px; display:flex; justify-content:space-between;">
+    <span>${legal}</span><span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`;
+}
+let exportingPdf = false;
+async function exportPdf(save){
+  if(!current || exportingPdf) return;
+  if(!window.csbHost || !window.csbHost.htmlToPdf){ alert("Le PDF n'est disponible que dans l'application installée (version à jour)."); return; }
+  exportingPdf = true;
+  const btn = document.getElementById(save ? 'pdfSave' : 'pdfView');
+  const label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'PDF en cours…'; }
+  try{
+    const html = await buildQuotePdfHtml(current);
+    const base64 = await window.csbHost.htmlToPdf(html, buildQuotePdfFooter(await atelierInfos()));
+    const client = current.client ? current.client.name : 'client';
+    const name = `Devis ${current.numero || 'brouillon'} - ${client}.pdf`;
+    if(save){
+      const path = await window.csbHost.savePdf(base64, name);
+      if(path) setSaveState('✔ PDF enregistré : ' + path);
+    }else{
+      await window.csbHost.openTempPdf(base64, name);
+    }
+  }catch(e){
+    alert('Impossible de créer le PDF : ' + e.message);
+  }finally{
+    exportingPdf = false;
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+// ================== Envoi par email et suivi client (étape E) ==================
+// Le suivi est hébergé par le relais Axonaut (même adresse), sauf si une autre adresse est réglée.
+function suiviConfigured(){ return !!moduleSettings.suiviKey; }
+async function suiviBaseUrl(){ return (moduleSettings.suiviUrl || await getProxyUrl()).replace(/\/+$/, ''); }
+async function suiviApi(path, init){
+  const res = await fetch((await suiviBaseUrl()) + path, Object.assign({}, init, {
+    headers: Object.assign({ 'content-type': 'application/json', 'x-api-key': moduleSettings.suiviKey }, (init && init.headers) || {})
+  }));
+  const j = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(j.error || ('serveur de suivi : HTTP ' + res.status));
+  return j;
+}
+// Empreinte du contenu qui figure sur le PDF : sert à signaler un devis modifié après envoi.
+function contentHash(d){
+  const str = JSON.stringify([d.client && d.client.id, d.address, d.title, d.lines, d.date, d.expiryDate, d.globalDiscount, d.globalDiscountIsPercent, d.paymentTerms, d.mandatoryMentions, d.comments]);
+  let h = 0; for(let i = 0; i < str.length; i++){ h = (h * 31 + str.charCodeAt(i)) | 0; }
+  return String(h);
+}
+function fillTemplate(tpl, d, link){
+  const t = computeTotals(d);
+  return String(tpl || '')
+    .replace(/\{numero\}/g, d.numero || '')
+    .replace(/\{client\}/g, d.client ? d.client.name : '')
+    .replace(/\{montant_ttc\}/g, eur(t.ttc))
+    .replace(/\{validite\}/g, d.expiryDate ? fmtDateFr(d.expiryDate) : '')
+    .replace(/\{lien\}/g, link || '(devis en pièce jointe)');
+}
+function textToEmailHtml(text, link){
+  let h = escapeHtml(text).replace(/\n/g, '<br>');
+  if(link) h = h.split(escapeHtml(link)).join(`<a href="${escapeHtml(link)}">${escapeHtml(link)}</a>`);
+  return `<div style="font-family:Arial, sans-serif; font-size:14px; color:#222;">${h}</div>`;
+}
+function splitEmails(v){ return String(v || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)); }
+
+async function openSendModal(){
+  if(!current) return;
+  const pb = validationProblems(current);
+  if(pb.length){ alert("Avant d'envoyer : " + pb.join(', ') + '.'); return; }
+  if(!window.csbHost || !window.csbHost.emailSend){ alert("L'envoi d'email n'est disponible que dans l'application installée (version à jour)."); return; }
+  await loadModuleSettings();
+  const d = current;
+  const st = await window.csbHost.emailStatus().catch(() => ({}));
+  document.getElementById('sendFrom').textContent = st && st.connected ? 'Envoyé depuis : ' + st.email : "⚠ Aucun compte email configuré sur ce poste : connecte-le d'abord dans le module Email.";
+  document.getElementById('sendTitle').textContent = (d.envois && d.envois.length ? 'Renvoyer' : 'Envoyer') + ' le devis ' + (d.numero || '(un numéro sera attribué)');
+  const lastTo = d.envois && d.envois.length ? d.envois[d.envois.length - 1].to : '';
+  document.getElementById('sendTo').value = lastTo || '';
+  document.getElementById('sendCc').value = '';
+  // Les champs gardent les repères {numero}, {lien}… : ils sont remplacés au moment de l'envoi
+  // (le numéro n'est attribué qu'à ce moment-là pour un brouillon).
+  document.getElementById('sendSubject').value = moduleSettings.mailSubject || DEFAULT_MAIL_SUBJECT;
+  document.getElementById('sendBody').value = (moduleSettings.mailBody || DEFAULT_MAIL_BODY);
+  const withLink = document.getElementById('sendWithLink');
+  withLink.checked = suiviConfigured(); withLink.disabled = !suiviConfigured();
+  withLink.parentElement.title = suiviConfigured() ? '' : 'Clé du suivi non renseignée (⚙︎ Réglages du module)';
+  document.getElementById('sendWithPdf').checked = !suiviConfigured();
+  document.getElementById('sendBccAxonaut').checked = moduleSettings.mailBccAxonaut !== false;
+  document.getElementById('sendStatus').textContent = '';
+  document.getElementById('sendGo').disabled = !(st && st.connected);
+  document.getElementById('sendModal').classList.add('show');
+  // Contacts du client dans Axonaut (adresses email) à ajouter d'un clic.
+  const chips = document.getElementById('sendContacts');
+  chips.innerHTML = '<span class="hint">Chargement des contacts Axonaut…</span>';
+  try{
+    const emps = asArray(await axonaut('/companies/' + d.client.id + '/employees')).filter(e => e.email);
+    chips.innerHTML = emps.length ? emps.map(e => `<button type="button" data-mail="${escapeHtml(e.email)}">＋ ${escapeHtml([e.firstname, e.lastname].filter(Boolean).join(' ') || e.email)} &lt;${escapeHtml(e.email)}&gt;</button>`).join('')
+      : `<span class="hint">Aucun contact avec email dans la fiche Axonaut de ce client.</span>`;
+    chips.querySelectorAll('[data-mail]').forEach(bt => bt.addEventListener('click', () => {
+      const input = document.getElementById('sendTo');
+      const list = splitEmails(input.value);
+      if(!list.includes(bt.dataset.mail)) list.push(bt.dataset.mail);
+      input.value = list.join(', ');
+    }));
+    if(!document.getElementById('sendTo').value){
+      const billing = emps.find(e => e.is_billing_contact) || emps[0];
+      if(billing) document.getElementById('sendTo').value = billing.email;
+    }
+  }catch(e){ chips.innerHTML = `<span class="hint">Contacts Axonaut indisponibles (${escapeHtml(e.message.slice(0, 80))}).</span>`; }
+}
+document.getElementById('sendCancel').addEventListener('click', () => document.getElementById('sendModal').classList.remove('show'));
+document.getElementById('sendGo').addEventListener('click', sendQuote);
+
+let sending = false;
+async function sendQuote(){
+  if(!current || sending) return;
+  const d = current;
+  const status = document.getElementById('sendStatus');
+  const to = splitEmails(document.getElementById('sendTo').value);
+  const cc = splitEmails(document.getElementById('sendCc').value);
+  const withLink = document.getElementById('sendWithLink').checked && suiviConfigured();
+  const withPdf = document.getElementById('sendWithPdf').checked;
+  if(!to.length){ status.className = 'status err'; status.textContent = 'Indique au moins une adresse email valide.'; return; }
+  if(!withLink && !withPdf){ status.className = 'status err'; status.textContent = 'Coche le lien en ligne, le PDF joint, ou les deux.'; return; }
+  sending = true;
+  const btn = document.getElementById('sendGo');
+  btn.disabled = true;
+  status.className = 'status';
+  try{
+    if(!d.numero){
+      status.textContent = 'Attribution du numéro…';
+      if(!(await assignNumber())){ return; }
+      await saveCurrent();
+    }
+    status.textContent = 'Création du PDF…';
+    const pdfBase64 = await window.csbHost.htmlToPdf(await buildQuotePdfHtml(d), buildQuotePdfFooter(await atelierInfos()));
+    let link = '';
+    if(withLink){
+      status.textContent = 'Mise en ligne du devis…';
+      const t = computeTotals(d);
+      const at = await atelierInfos();
+      const body = { token: d.suivi && d.suivi.token, numero: d.numero, client: d.client.name, totalHt: t.ht, totalTtc: t.ttc,
+        expiry: d.expiryDate || '', atelier: { nom: at.nom, tel: at.tel, email: at.email }, pdfBase64 };
+      if(!moduleSettings.logoUploaded && window.csbHost.logoDataUrl) body.logoDataUrl = await window.csbHost.logoDataUrl();
+      const up = await suiviApi('/api/devis', { method:'POST', body: JSON.stringify(body) });
+      if(body.logoDataUrl){ moduleSettings.logoUploaded = true; saveSharedSetting(MODULE_SETTINGS_KEY, moduleSettings).catch(() => {}); }
+      d.suivi = Object.assign({}, d.suivi, { token: up.token, url: up.url, hash: contentHash(d), uploadedAt: new Date().toISOString() });
+      link = up.url;
+    }
+    status.textContent = "Envoi de l'email…";
+    const subject = fillTemplate(document.getElementById('sendSubject').value, d, link);
+    const text = fillTemplate(document.getElementById('sendBody').value, d, link);
+    const bcc = document.getElementById('sendBccAxonaut').checked ? ['in@axonaut.com'] : [];
+    const sent = await window.csbHost.emailSend({
+      to: to.join(', '), cc: cc.join(', '), bcc: bcc.join(', '), subject, text, html: textToEmailHtml(text, link),
+      attachments: withPdf ? [{ filename: `Devis ${d.numero}.pdf`, base64: pdfBase64 }] : []
+    });
+    d.envois = d.envois || [];
+    d.envois.push({ date: new Date().toISOString(), to: to.join(', '), cc: cc.join(', '), by: userName(), from: sent && sent.from, withLink: !!link, withPdf });
+    if(!d.suivi && withPdf) d.suivi = { hash: contentHash(d) };
+    else if(d.suivi) d.suivi.hash = contentHash(d);
+    if(d.statut === 'brouillon') d.statut = 'envoye';
+    addHisto('Envoyé par email à ' + to.join(', ') + (link ? ' (lien en ligne)' : '') + (withPdf ? ' (PDF joint)' : ''));
+    await saveCurrent();
+    document.getElementById('sendModal').classList.remove('show');
+    renderEditor();
+  }catch(e){
+    status.className = 'status err';
+    status.textContent = "Échec : " + e.message;
+    // le jeton du lien a pu être créé : on le garde pour ne pas en générer un nouveau au prochain essai
+    if(d.suivi && d.suivi.token) saveCurrent().catch(() => {});
+  }finally{
+    sending = false;
+    btn.disabled = false;
+  }
+}
+
+// ---------- Suivi des ouvertures / acceptation en ligne ----------
+const suiviCache = {}; // token -> { events, accepted, closed, fetchedAt }
+function suiviOpens(d){
+  const c = d.suivi && d.suivi.token && suiviCache[d.suivi.token];
+  return c ? c.events.filter(e => e.type === 'open').length : 0;
+}
+async function refreshSuivi(d, force){
+  if(!d || !d.suivi || !d.suivi.token || !suiviConfigured()) return null;
+  const c = suiviCache[d.suivi.token];
+  if(c && !force && Date.now() - c.fetchedAt < 60000) return c;
+  try{
+    const j = await suiviApi('/api/devis/' + d.suivi.token + '/events');
+    suiviCache[d.suivi.token] = { events: j.events || [], accepted: j.accepted, closed: j.closed, fetchedAt: Date.now() };
+    if(j.accepted) await applyOnlineAcceptance(d, j.accepted);
+    return suiviCache[d.suivi.token];
+  }catch(e){
+    console.warn('Suivi indisponible', e);
+    return null;
+  }
+}
+// Le client a cliqué « J'accepte » sur la page en ligne : le devis devient une commande.
+// Écrit directement sur la fiche relue (pas de question « modifié ailleurs » : plusieurs postes
+// peuvent constater l'acceptation en même temps, un seul la consigne).
+async function applyOnlineAcceptance(d, acc){
+  const entry = drafts.find(x => x.draft.id === d.id);
+  const recId = entry ? entry.recId : (current === d ? currentRecId : null);
+  if(!recId) return;
+  const res = await CSBAuth.authedFetch(devisBase() + '/' + recId);
+  if(!res.ok) return;
+  const rec = await res.json();
+  if(rec.statut !== 'envoye' && rec.statut !== 'brouillon') return;
+  const fresh = recordToDraft(rec);
+  fresh.statut = 'accepte';
+  fresh.acceptedAt = acc.at;
+  fresh.acceptedOnline = acc;
+  if(!fresh.livraison || !(fresh.livraison.adresse || fresh.livraison.nomSoc)){
+    const a = fresh.address || {};
+    fresh.livraison = Object.assign({}, fresh.livraison || {}, { nomSoc: a.company || a.name || (fresh.client && fresh.client.name) || '', contact: a.contact || '', adresse: a.street || '', cp: a.zip || '', ville: a.city || '', pays: a.country || 'France' });
+  }
+  fresh.historique = (fresh.historique || []).concat([{ date: new Date().toISOString(), user: 'en ligne', action: `Accepté en ligne par ${acc.name} le ${new Date(acc.at).toLocaleString('fr-FR')}` }]);
+  const body = draftToBody(fresh);
+  body.modifie_par = 'acceptation en ligne';
+  const up = await CSBAuth.authedFetch(devisBase() + '/' + recId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if(!up.ok) return;
+  const saved = await up.json();
+  const i = drafts.findIndex(x => x.recId === recId);
+  if(i >= 0) drafts[i] = { recId, updated: saved.updated, draft: recordToDraft(saved) };
+  renderDraftList();
+  if(current && current.id === d.id) openDraft(recordToDraft(saved), recId, saved.updated);
+}
+function renderSuivi(){
+  const card = document.getElementById('suiviCard');
+  const d = current;
+  if(!card || !d) return;
+  const envois = d.envois || [];
+  if(!envois.length && !(d.suivi && d.suivi.token)){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  const c = d.suivi && d.suivi.token ? suiviCache[d.suivi.token] : null;
+  const fmt = iso => new Date(iso).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  let rows = envois.slice().reverse().map(e => `<div class="suivi-row"><span class="ic">📨</span><span>Envoyé le ${escapeHtml(fmt(e.date))} à <b>${escapeHtml(e.to)}</b>${e.by ? ' par ' + escapeHtml(e.by) : ''}${e.withLink ? ' · lien en ligne' : ''}${e.withPdf ? ' · PDF joint' : ''}</span></div>`).join('');
+  if(d.suivi && d.suivi.token){
+    if(!suiviConfigured()){
+      rows += `<div class="suivi-row"><span class="ic">⚠</span><span>Clé du suivi non renseignée (⚙︎ Réglages du module).</span></div>`;
+    }else if(!c){
+      rows += `<div class="suivi-row"><span class="ic">…</span><span>Lecture du suivi…</span></div>`;
+    }else{
+      const opens = c.events.filter(e => e.type === 'open');
+      const dls = c.events.filter(e => e.type === 'download');
+      rows += `<div class="suivi-row"><span class="ic">👁</span><span>${opens.length ? `Ouvert <b>${opens.length} fois</b> — dernière ouverture le ${escapeHtml(fmt(opens[opens.length - 1].at))}` : 'Pas encore ouvert par le client'}</span></div>`;
+      if(dls.length) rows += `<div class="suivi-row"><span class="ic">⬇</span><span>PDF téléchargé ${dls.length} fois — dernier téléchargement le ${escapeHtml(fmt(dls[dls.length - 1].at))}</span></div>`;
+      if(c.accepted) rows += `<div class="suivi-row"><span class="ic">✍️</span><span><b>Accepté en ligne</b> par ${escapeHtml(c.accepted.name)} le ${escapeHtml(fmt(c.accepted.at))}</span></div>`;
+    }
+    rows += `<div class="suivi-row"><span class="ic">🔗</span><span><a href="#" id="openClientPage">Voir la page client</a></span></div>`;
+  }
+  if(d.suivi && d.suivi.hash && d.suivi.hash !== contentHash(d) && ['envoye', 'brouillon'].includes(d.statut)){
+    rows += `<div class="banner" style="margin:8px 0 0;">⚠ Le devis a été modifié depuis le dernier envoi : renvoie-le pour que le client ait la bonne version${d.suivi.token ? ' (le lien reste le même)' : ''}.</div>`;
+  }
+  document.getElementById('suiviBox').innerHTML = rows;
+  const lk = document.getElementById('openClientPage');
+  if(lk) lk.addEventListener('click', e => { e.preventDefault(); openExternal(d.suivi.url); });
+}
+// Relève régulière des devis envoyés (ouvertures, acceptations en ligne).
+async function pollSuivi(){
+  if(!suiviConfigured()) return;
+  const list = drafts.map(x => x.draft).filter(d => d.statut === 'envoye' && d.suivi && d.suivi.token).slice(0, 40);
+  for(const d of list){ await refreshSuivi(d, true); }
+  renderDraftList();
+  if(current) renderSuivi();
+}
+
+// ================== Facturation dans Axonaut (étape D) ==================
+function openExternal(url){
+  if(window.csbHost && window.csbHost.openExternal) window.csbHost.openExternal(url);
+  else window.open(url, '_blank');
+}
+function buildInvoicePayload(d){
+  const payload = { company_id: d.client.id, order_number: d.numero || '', products: buildAxonautProducts(d) };
+  if(d.addressId) payload.company_address_id = d.addressId;
+  if(d.themeId) payload.theme_id = d.themeId;
+  if((d.paymentTerms || '').trim()) payload.payment_terms = d.paymentTerms;
+  if((d.mandatoryMentions || '').trim()) payload.mandatory_mentions = d.mandatoryMentions;
+  if(num(d.globalDiscount)){
+    if(d.globalDiscountIsPercent) payload.global_discount_percent = num(d.globalDiscount);
+    else payload.global_discount_flat = num(d.globalDiscount);
+  }
+  const liv = d.livraison || {};
+  if(liv.adresse || liv.nomSoc){
+    payload.delivery_address = { company_name: liv.nomSoc || '', contact_name: liv.contact || '', street: liv.adresse || '', zip_code: liv.cp || '', city: liv.ville || '', country: liv.pays || '' };
+  }
+  return payload;
+}
+let invoicing = false;
+async function invoiceInAxonaut(){
+  if(!current || invoicing || current.statut !== 'accepte') return;
+  const d = current;
+  const pb = validationProblems(d);
+  if(pb.length){ alert('Avant de facturer : ' + pb.join(', ') + '.'); return; }
+  if(d.facturationEnCours){
+    const ok = confirm(`Une facturation de ce devis a déjà été lancée le ${new Date(d.facturationEnCours).toLocaleString('fr-FR')} sans que la réponse d'Axonaut soit enregistrée.\n\nVérifie d'abord dans Axonaut qu'aucune facture n'a été créée pour ${d.numero}, sinon tu créeras un doublon.\n\nOK = je l'ai vérifié, créer la facture`);
+    if(!ok) return;
+  }
+  await loadModuleSettings();
+  const t = computeTotals(d);
+  const freeLines = d.lines.filter(l => l.type !== 'section' && !l.productId).length;
+  let msg = `Créer la facture dans Axonaut pour « ${d.client.name} » ?\n\nDevis ${d.numero} — ${eur(t.ht)} HT / ${eur(t.ttc)} TTC.\n\nLa facture sera définitive dans Axonaut et le devis ne sera plus modifiable.`;
+  if(freeLines && !moduleSettings.genericProductId){
+    msg += `\n\n⚠ ${freeLines} ligne(s) libre(s) : Axonaut va créer un NOUVEAU PRODUIT pour chacune. Pour l'éviter, choisis un produit générique dans « ⚙︎ Réglages du module ».`;
+  }
+  if(!confirm(msg)) return;
+  invoicing = true;
+  const btn = document.getElementById('aInvoice');
+  if(btn){ btn.disabled = true; btn.textContent = 'Facturation en cours…'; }
+  try{
+    d.facturationEnCours = new Date().toISOString();
+    await saveCurrent();
+    const created = await axonaut('/invoices', 'POST', buildInvoicePayload(d));
+    if(!created || !created.id) throw new Error("réponse d'Axonaut inattendue");
+    let inv = created;
+    try{ inv = (await axonaut('/invoices/' + created.id)) || created; }catch(e){}
+    d.facture = { id: inv.id, numero: inv.number || '', date: new Date().toISOString(), publicPath: inv.public_path || '', total: inv.total != null ? inv.total : null };
+    delete d.facturationEnCours;
+    d.statut = 'facture';
+    addHisto('Facturé dans Axonaut' + (d.facture.numero ? ' — facture ' + d.facture.numero : ''));
+    await saveCurrent();
+    renderEditor();
+  }catch(e){
+    alert("La facturation a échoué : " + e.message + "\n\nAvant de réessayer, vérifie dans Axonaut qu'aucune facture n'a été créée malgré l'erreur.");
+    renderEditor();
+  }finally{
+    invoicing = false;
+  }
+}
+
+// ================== Lignes envoyées à Axonaut (servira à la facture, étape D) ==================
+// Une ligne sans produit (ni id ni internal_id) fait créer un nouveau produit par Axonaut : les
+// lignes libres utilisent donc le produit générique choisi dans les réglages, s'il y en a un.
+function buildAxonautProducts(d){
+  let chapter = '';
+  const products = [];
+  d.lines.forEach(l => {
+    if(l.type === 'section'){ chapter = (l.name || '').trim(); return; }
+    const p = {
+      name: (l.name || '').trim(),
+      description: /<[a-z][\s\S]*>/i.test(l.description || '') ? sanitizeHtml(l.description) : (l.description || ''),
+      quantity: num(l.quantity),
+      price: num(l.price),
+      tax_rate: num(l.taxRate)
+    };
+    if(l.productId) p.id = l.productId;
+    else if(moduleSettings.genericProductId) p.id = moduleSettings.genericProductId;
+    if(l.unit) p.unit = l.unit;
+    if(num(l.discountPercent)) p.discount_percent = num(l.discountPercent);
+    if(l.cost !== '' && l.cost != null) p.unit_job_costing = num(l.cost);
+    if(chapter) p.chapter = chapter;
+    products.push(p);
+  });
+  return products;
+}
+
+// ---------- Client ----------
+function renderClientArea(){
+  const area = document.getElementById('clientArea');
+  const d = current;
+  if(!d.client){
+    area.innerHTML = `
+      <div class="search-wrap">
+        <input type="text" id="clientSearch" placeholder="🔎 Rechercher un client Axonaut (nom de la société)…" autocomplete="off" style="width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px;">
+        <div class="suggestions" id="clientSuggest"></div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn small" id="newClientBtn">＋ Nouveau client</button></div>`;
+    wireClientSearch();
+    document.getElementById('newClientBtn').addEventListener('click', () => openClientModal(document.getElementById('clientSearch').value.trim()));
+    return;
+  }
+  const c = d.client;
+  area.innerHTML = `
+    <div class="client-box">
+      <div>
+        <div style="font-weight:700;">${escapeHtml(c.name)}</div>
+        <div class="hint">${escapeHtml([c.street, [c.zip, c.city].filter(Boolean).join(' '), c.country].filter(Boolean).join(' · '))}</div>
+      </div>
+      <button class="btn small" id="changeClientBtn">Changer</button>
+    </div>
+    <div class="field" style="margin-top:10px;">
+      <label>Adresse utilisée sur le devis</label>
+      <select id="addrSelect"><option value="">Chargement des adresses…</option></select>
+    </div>`;
+  document.getElementById('changeClientBtn').addEventListener('click', () => {
+    current.client = null; current.addressId = null; current.address = null; clientAddresses = [];
+    renderClientArea(); renderLivPick(); changed();
+    document.querySelector('.topbar h2').textContent = current.numero ? 'Devis ' + current.numero : 'Nouveau devis';
+  });
+  loadAddresses(c.id);
+}
+// Adresses Axonaut du client ouvert (pour l'adresse du devis et le choix de l'adresse de livraison).
+let clientAddresses = [];
+function addressSnapshot(a){
+  return { company: a.company_name || (current.client && current.client.name) || '', contact: a.contact_name || '', name: a.name || '',
+    street: a.address_street || '', zip: a.address_zip_code || '', city: a.address_city || '', country: a.address_country || '' };
+}
+function clientMainAddress(){
+  const c = current.client || {};
+  return { company: c.name || '', contact: '', name: '', street: c.street || '', zip: c.zip || '', city: c.city || '', country: c.country || '' };
+}
+async function loadAddresses(companyId){
+  const sel = document.getElementById('addrSelect');
+  try{
+    const arr = asArray(await axonaut('/companies/' + companyId + '/addresses'));
+    if(!current || !current.client || current.client.id !== companyId) return;
+    clientAddresses = arr;
+    renderLivPick();
+    if(!arr.length){
+      sel.innerHTML = '<option value="">Adresse principale de la fiche client</option>';
+      if(!current.address) { current.address = clientMainAddress(); changed(); }
+      return;
+    }
+    if(!current.addressId){
+      const pref = arr.find(a => a.is_for_quotation) || arr.find(a => a.is_for_invoice) || arr[0];
+      current.addressId = pref.id; current.address = addressSnapshot(pref); changed();
+    }else if(!current.address){
+      const a = arr.find(x => String(x.id) === String(current.addressId));
+      if(a){ current.address = addressSnapshot(a); changed(); }
+    }
+    sel.innerHTML = arr.map(a => {
+      const label = [a.name || a.company_name, a.address_street, [a.address_zip_code, a.address_city].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
+      const tags = [a.is_for_quotation ? 'devis' : '', a.is_for_invoice ? 'facturation' : '', a.is_for_delivery ? 'livraison' : ''].filter(Boolean).join(', ');
+      return `<option value="${a.id}" ${String(a.id) === String(current.addressId) ? 'selected' : ''}>${escapeHtml(label)}${tags ? ' (' + tags + ')' : ''}</option>`;
+    }).join('');
+    sel.onchange = () => {
+      current.addressId = sel.value ? Number(sel.value) : null;
+      const a = arr.find(x => String(x.id) === sel.value);
+      current.address = a ? addressSnapshot(a) : clientMainAddress();
+      changed();
+    };
+  }catch(e){
+    sel.innerHTML = `<option value="">Adresses indisponibles (${escapeHtml(e.message.slice(0,60))})</option>`;
+  }
+}
+function wireClientSearch(){
+  const input = document.getElementById('clientSearch');
+  const box = document.getElementById('clientSuggest');
+  let reqId = 0;
+  const run = debounce(async () => {
+    const q = input.value.trim();
+    if(q.length < 2){ box.classList.remove('show'); return; }
+    const my = ++reqId;
+    box.innerHTML = '<div class="suggestion"><span class="s2">Recherche…</span></div>'; box.classList.add('show');
+    try{
+      const arr = asArray(await axonaut('/companies?search=' + encodeURIComponent(q)));
+      if(my !== reqId) return;
+      const list = arr.filter(c => !c.is_disabled).slice(0, 30);
+      if(!list.length){ box.innerHTML = '<div class="suggestion"><span class="s2">Aucun client trouvé.</span></div>'; return; }
+      box.innerHTML = list.map((c, i) => `<div class="suggestion" data-i="${i}">
+        <div class="s1">${escapeHtml(c.name)}</div>
+        <div class="s2">${escapeHtml([c.address_zip_code, c.address_city].filter(Boolean).join(' '))}${c.is_prospect && !c.is_customer ? ' · prospect' : ''}</div>
+      </div>`).join('');
+      box.querySelectorAll('.suggestion[data-i]').forEach(el => el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const c = list[Number(el.dataset.i)];
+        current.client = { id: c.id, name: c.name, street: c.address_street || '', zip: c.address_zip_code || '', city: c.address_city || '', country: c.address_country || '' };
+        current.addressId = null;
+        box.classList.remove('show');
+        document.querySelector('.topbar h2').textContent = (current.numero ? 'Devis ' + current.numero : 'Nouveau devis') + ' — ' + c.name;
+        renderClientArea(); changed();
+      }));
+    }catch(e){
+      if(my === reqId) box.innerHTML = `<div class="suggestion"><span class="s2">Erreur : ${escapeHtml(e.message)}</span></div>`;
+    }
+  }, 300);
+  input.addEventListener('input', run);
+  input.addEventListener('blur', () => setTimeout(() => box.classList.remove('show'), 150));
+  input.focus();
+}
+
+// ---------- Livraison (champs repris par Gestion Commande) ----------
+const LIV_FIELDS = [
+  ['nomSoc', 'Société / nom', ''], ['contact', 'Contact', ''], ['adresse', 'Adresse', 'min-width:100%;'],
+  ['cp', 'Code postal', 'max-width:130px;'], ['ville', 'Ville', ''], ['pays', 'Pays', 'max-width:160px;'], ['tel', 'Téléphone', 'max-width:180px;']
+];
+function renderLivraison(){
+  const liv = current.livraison || {};
+  document.getElementById('livraisonFields').innerHTML = LIV_FIELDS.map(([k, label, st]) =>
+    `<div class="field" style="${st}"><label>${label}</label><input type="text" data-liv="${k}" value="${escapeHtml(liv[k] || '')}"></div>`).join('');
+  document.querySelectorAll('[data-liv]').forEach(el => el.addEventListener('input', () => {
+    current.livraison = current.livraison || {};
+    current.livraison[el.dataset.liv] = el.value;
+    changed();
+  }));
+  document.getElementById('livCopyBtn').onclick = () => fillLivraison(current.address || clientMainAddress());
+  renderLivPick();
+}
+function fillLivraison(a){
+  if(!a) return;
+  current.livraison = Object.assign({}, current.livraison || {}, {
+    nomSoc: a.company || a.name || '', contact: a.contact || '', adresse: a.street || '',
+    cp: a.zip || '', ville: a.city || '', pays: a.country || 'France'
+  });
+  renderLivraison(); changed();
+}
+function renderLivPick(){
+  const sel = document.getElementById('livPick');
+  if(!sel) return;
+  const list = clientAddresses.filter(a => a.is_for_delivery);
+  if(!list.length || isLocked(current)){ sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  sel.innerHTML = '<option value="">Adresse de livraison Axonaut…</option>' + list.map(a =>
+    `<option value="${a.id}">${escapeHtml([a.name || a.company_name, a.address_street, [a.address_zip_code, a.address_city].filter(Boolean).join(' ')].filter(Boolean).join(' — '))}</option>`).join('');
+  sel.onchange = () => { const a = list.find(x => String(x.id) === sel.value); if(a) fillLivraison(addressSnapshot(a)); sel.value = ''; };
+}
+
+// ---------- Lignes ----------
+// Les descriptions produits d'Axonaut sont en HTML (gras, listes, image) : on les affiche
+// telles quelles, en ne gardant que des balises de mise en forme sûres.
+const SAFE_TAGS = new Set(['B','STRONG','I','EM','U','BR','P','DIV','SPAN','UL','OL','LI','IMG']);
+function sanitizeHtml(html){
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(html || '');
+  const walk = (node) => {
+    [...node.childNodes].forEach(ch => {
+      if(ch.nodeType === 1){
+        if(!SAFE_TAGS.has(ch.tagName)){
+          if(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED'].includes(ch.tagName)){ ch.remove(); return; }
+          walk(ch);
+          ch.replaceWith(...ch.childNodes);
+          return;
+        }
+        [...ch.attributes].forEach(a => {
+          const keep = ch.tagName === 'IMG' && a.name === 'src' && /^(https:|data:image\/)/i.test(a.value);
+          if(!keep) ch.removeAttribute(a.name);
+        });
+        walk(ch);
+      }else if(ch.nodeType !== 3){
+        ch.remove();
+      }
+    });
+  };
+  walk(tpl.content);
+  return tpl.innerHTML;
+}
+function descToHtml(desc){
+  const d = String(desc || '');
+  return /<[a-z][\s\S]*>/i.test(d) ? sanitizeHtml(d) : escapeHtml(d).replace(/\n/g, '<br>');
+}
+function productStock(l){
+  if(!l.productId || !productsCache) return l.stock;
+  const p = productsCache.find(x => x.id === l.productId);
+  return p && p.stock != null ? p.stock : l.stock;
+}
+function lineMarginHtml(l){
+  if(l.cost === '' || l.cost == null) return '';
+  const ht = lineHT(l);
+  const m = round2(ht - num(l.quantity) * num(l.cost));
+  const pct = ht ? Math.round(m / ht * 100) : 0;
+  return `↗ ${eur(m)} (${pct} %)`;
+}
+// Montant affiché dans un champ, à la française (9 -> « 9,00 ») ; num() relit la virgule.
+function fmtMoneyInput(v){
+  if(v === '' || v == null) return '';
+  return num(v).toLocaleString('fr-FR', { minimumFractionDigits:2, maximumFractionDigits:4, useGrouping:false });
+}
+function renderLines(){
+  const body = document.getElementById('linesBody');
+  const tvaCol = document.getElementById('tvaCol');
+  const marge = canMarge();
+  const locked = isLocked(current);
+  if(!current.lines.length){
+    body.innerHTML = `<tr><td colspan="4" class="hint" style="padding:14px 10px;">Aucune ligne — ajoute un produit Axonaut, une ligne libre ou un titre de section.</td></tr>`;
+    tvaCol.innerHTML = '';
+    return;
+  }
+  const rates = taxRates || [20, 10, 5.5, 0];
+  body.innerHTML = current.lines.map((l, i) => {
+    const actions = locked ? '' : `<div class="l-actions"><button class="iconbtn" data-act="up" data-i="${i}" title="Monter">▲</button><button class="iconbtn" data-act="down" data-i="${i}" title="Descendre">▼</button><button class="iconbtn" data-act="del" data-i="${i}" title="Supprimer la ligne">✕</button></div>`;
+    if(l.type === 'section'){
+      return `<tr class="section" data-row="${i}"><td colspan="4"><div style="display:flex; align-items:center; gap:8px;"><input type="text" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Titre de section (ex. Casaques)">${actions.replace('l-actions', 'l-actions" style="margin-top:0;')}</div></td></tr>`;
+    }
+    const stock = productStock(l);
+    const meta = [l.productCode ? 'Réf. ' + escapeHtml(l.productCode) : (l.productId ? '' : 'Ligne libre')].filter(Boolean).join(' · ');
+    return `<tr data-row="${i}">
+      <td>
+        <input type="text" class="l-name" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Désignation">
+        <div class="l-desc" data-desc="${i}" contenteditable="${locked ? 'false' : 'true'}" data-placeholder="Description (facultatif)">${descToHtml(l.description)}</div>
+        <div class="l-sub l-disc">Remise <input type="text" data-f="discountPercent" data-i="${i}" value="${l.discountPercent ? escapeHtml(l.discountPercent) : ''}" placeholder="0" style="width:44px !important;"> %${meta ? ` <span style="margin-left:8px;">${meta}</span>` : ''}</div>
+        ${actions}
+      </td>
+      <td class="num">
+        <div style="display:flex; align-items:center; justify-content:flex-end; gap:2px;"><input class="n" type="text" data-f="price" data-i="${i}" value="${escapeHtml(fmtMoneyInput(l.price))}" style="max-width:86px;"> €</div>
+        ${marge ? `<div class="l-sub l-cost" title="Prix d'achat unitaire">⤓ <input type="text" data-f="cost" data-i="${i}" value="${escapeHtml(fmtMoneyInput(l.cost))}" placeholder="—"> €</div>` : ''}
+      </td>
+      <td class="num">
+        <input class="n" type="text" data-f="quantity" data-i="${i}" value="${escapeHtml(l.quantity)}">
+        ${stock != null && stock !== '' ? `<div class="l-sub l-stock ${num(stock) <= 0 ? 'neg' : ''}" title="Stock Axonaut">📦 ${escapeHtml(String(stock).replace('.', ','))}</div>` : ''}
+      </td>
+      <td class="num">
+        <div class="l-amount" id="lt-${i}">${eur(lineHT(l))}</div>
+        ${marge ? `<div class="l-sub l-margin" id="lm-${i}" title="Marge sur la ligne">${lineMarginHtml(l)}</div>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Colonne TVA à droite du tableau, alignée sur chaque ligne (comme dans Axonaut).
+  tvaCol.innerHTML = current.lines.map((l, i) => {
+    if(l.type === 'section') return `<div data-tva="${i}"></div>`;
+    const opts = [...new Set([...rates, num(l.taxRate)])].sort((a,b) => b-a)
+      .map(r => `<option value="${r}" ${num(l.taxRate) === r ? 'selected' : ''}>${r.toLocaleString('fr-FR', { minimumFractionDigits:2 })} %</option>`).join('');
+    return `<div data-tva="${i}"><div class="tva-pill"><span class="tag">TVA</span><select data-f="taxRate" data-i="${i}" ${locked ? 'disabled' : ''}>${opts}</select></div></div>`;
+  }).join('');
+  alignTvaPills();
+
+  const refreshLine = (i) => {
+    const l = current.lines[i];
+    if(!l || l.type === 'section') return;
+    const cell = document.getElementById('lt-' + i); if(cell) cell.textContent = eur(lineHT(l));
+    const m = document.getElementById('lm-' + i); if(m) m.textContent = lineMarginHtml(l);
+  };
+  document.querySelectorAll('#linesBody [data-f], #tvaCol [data-f]').forEach(el => {
+    el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+      const i = Number(el.dataset.i);
+      current.lines[i][el.dataset.f] = el.value;
+      refreshLine(i); renderTotals(); changed();
+    });
+  });
+  body.querySelectorAll('[data-desc]').forEach(el => {
+    el.addEventListener('input', () => {
+      current.lines[Number(el.dataset.desc)].description = sanitizeHtml(el.innerHTML);
+      alignTvaPills(); changed();
+    });
+  });
+  if(locked){
+    body.querySelectorAll('input').forEach(el => el.disabled = true);
+    return;
+  }
+  body.querySelectorAll('[data-act]').forEach(btn => btn.addEventListener('click', () => {
+    const i = Number(btn.dataset.i);
+    const lines = current.lines;
+    if(btn.dataset.act === 'del') lines.splice(i, 1);
+    else if(btn.dataset.act === 'up' && i > 0) [lines[i-1], lines[i]] = [lines[i], lines[i-1]];
+    else if(btn.dataset.act === 'down' && i < lines.length - 1) [lines[i+1], lines[i]] = [lines[i], lines[i+1]];
+    else return;
+    renderLines(); renderTotals(); changed();
+  }));
+}
+// Chaque pastille TVA suit la hauteur de sa ligne (les descriptions sont de longueur variable).
+function alignTvaPills(){
+  const col = document.getElementById('tvaCol');
+  const table = document.querySelector('table.lines');
+  if(!col || !table) return;
+  col.style.paddingTop = (table.tHead.getBoundingClientRect().height + 1) + 'px'; // +1 : bordure du tableau
+  document.querySelectorAll('#linesBody tr[data-row]').forEach(tr => {
+    const pill = col.querySelector(`[data-tva="${tr.dataset.row}"]`);
+    if(pill){ pill.style.height = tr.getBoundingClientRect().height + 'px'; pill.style.paddingTop = '4px'; }
+  });
+}
+window.addEventListener('resize', () => { if(current) alignTvaPills(); });
+function addLine(line){
+  current.lines.push(line);
+  renderLines(); renderTotals(); changed();
+}
+function lineFromProduct(p){
+  return {
+    type: 'product', productId: p.id, productCode: p.product_code || '', internalId: p.internal_id || '',
+    name: p.name || '', description: p.description || '', quantity: 1,
+    price: p.price != null ? p.price : 0, taxRate: p.tax_rate != null ? Number(p.tax_rate) : 20,
+    unit: p.unit || '', discountPercent: 0, cost: p.job_costing != null ? p.job_costing : '',
+    stock: p.stock != null ? p.stock : null
+  };
+}
+function wireProductSearch(){
+  const input = document.getElementById('productSearch');
+  const box = document.getElementById('productSuggest');
+  const hint = document.getElementById('productsHint');
+  let matches = [], hl = 0;
+  hint.textContent = 'Chargement de la base produits Axonaut…';
+  Promise.all([loadProducts(), loadTaxRates()]).then(([prods]) => {
+    hint.textContent = `${prods.length} produits Axonaut disponibles.`;
+    renderLines();
+  }).catch(e => {
+    hint.textContent = 'Base produits indisponible : ' + e.message;
+    document.getElementById('axBanner').innerHTML = `<div class="banner err">Impossible de joindre Axonaut : ${escapeHtml(e.message)}</div>`;
+  });
+  const show = () => {
+    const q = norm(input.value.trim());
+    if(!q || !productsCache){ box.classList.remove('show'); return; }
+    const words = q.split(/\s+/);
+    matches = productsCache.filter(p => {
+      const hay = norm([p.name, p.product_code, p.internal_id, p.category].join(' '));
+      return words.every(w => hay.includes(w));
+    }).slice(0, 40);
+    hl = 0;
+    if(!matches.length){ box.innerHTML = '<div class="suggestion"><span class="s2">Aucun produit — utilise « Ligne libre ».</span></div>'; box.classList.add('show'); return; }
+    box.innerHTML = matches.map((p, i) => `<div class="suggestion ${i === hl ? 'hl' : ''}" data-i="${i}">
+      <div class="s1">${escapeHtml(p.name)}</div>
+      <div class="s2">${p.product_code ? 'Réf. ' + escapeHtml(p.product_code) + ' · ' : ''}${eur(p.price)} HT${p.tax_rate != null ? ' · TVA ' + String(p.tax_rate).replace('.', ',') + ' %' : ''}</div>
+    </div>`).join('');
+    box.classList.add('show');
+    box.querySelectorAll('.suggestion[data-i]').forEach(el => el.addEventListener('mousedown', e => { e.preventDefault(); pick(Number(el.dataset.i)); }));
+  };
+  const pick = (i) => {
+    const p = matches[i]; if(!p) return;
+    addLine(lineFromProduct(p));
+    input.value = ''; box.classList.remove('show');
+    input.focus();
+  };
+  input.addEventListener('input', show);
+  input.addEventListener('keydown', e => {
+    if(!box.classList.contains('show') || !matches.length) return;
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      hl = (hl + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length;
+      box.querySelectorAll('.suggestion[data-i]').forEach((el, i) => el.classList.toggle('hl', i === hl));
+      const el = box.querySelector('.suggestion.hl'); if(el) el.scrollIntoView({ block:'nearest' });
+    }else if(e.key === 'Enter'){ e.preventDefault(); pick(hl); }
+    else if(e.key === 'Escape'){ box.classList.remove('show'); }
+  });
+  input.addEventListener('blur', () => setTimeout(() => box.classList.remove('show'), 150));
+  document.getElementById('addFreeLineBtn').addEventListener('click', () => addLine({
+    type:'free', productId:null, productCode:'', name:'', description:'', quantity:1, price:0,
+    taxRate: (taxRates && taxRates.includes(20)) ? 20 : ((taxRates && taxRates[0]) || 20), unit:'', discountPercent:0, cost:''
+  }));
+  document.getElementById('addSectionBtn').addEventListener('click', () => addLine({ type:'section', name:'' }));
+}
+
+// ---------- Conditions & totaux ----------
+function wireConditions(){
+  const bind = (id, key, transform) => {
+    const el = document.getElementById(id);
+    el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+      current[key] = transform ? transform(el.value) : el.value;
+      renderTotals(); changed();
+    });
+  };
+  bind('fDate', 'date');
+  bind('fExpiry', 'expiryDate');
+  bind('fPayment', 'paymentTerms');
+  bind('fMentions', 'mandatoryMentions');
+  bind('fComments', 'comments');
+  bind('fGlobalDiscount', 'globalDiscount');
+  bind('fGlobalDiscountUnit', 'globalDiscountIsPercent', v => v === 'pct');
+
+  const themeSel = document.getElementById('fTheme');
+  loadThemes().then(list => {
+    if(!current) return;
+    themeSel.innerHTML = '<option value="">Par défaut</option>' + list.map(t => `<option value="${t.id}" ${String(t.id) === String(current.themeId) ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+  });
+  themeSel.addEventListener('change', () => {
+    current.themeId = themeSel.value ? Number(themeSel.value) : null;
+    // Reprend les conditions du modèle choisi si les champs sont encore vides.
+    const t = (themes || []).find(x => String(x.id) === themeSel.value);
+    if(t){
+      if(!current.paymentTerms && t.payment_terms){ current.paymentTerms = t.payment_terms; document.getElementById('fPayment').value = t.payment_terms; }
+      if(!current.mandatoryMentions && t.mandatory_mentions){ current.mandatoryMentions = t.mandatory_mentions; document.getElementById('fMentions').value = t.mandatory_mentions; }
+    }
+    changed();
+  });
+}
+function renderTotals(){
+  const t = computeTotals(current);
+  const box = document.getElementById('totalsBox');
+  box.innerHTML = `
+    ${t.globalAmount ? `<div class="tr"><span>Total HT avant remise</span><span class="v">${eur(t.htBeforeGlobal)}</span></div>
+    <div class="tr"><span>Remise globale</span><span class="v">− ${eur(t.globalAmount)}</span></div>` : ''}
+    <div class="tr"><span>Total HT</span><span class="v">${eur(t.ht)}</span></div>
+    ${t.taxes.map(x => `<div class="tr"><span>TVA ${String(x.rate).replace('.', ',')} %</span><span class="v">${eur(x.amount)}</span></div>`).join('')}
+    <div class="tr big"><span>Total TTC</span><span class="v">${eur(t.ttc)}</span></div>
+    ${canMarge() ? `<div class="margin-box">Coût d'achat ${eur(t.cost)} · Marge ${eur(t.margin)}${t.ht ? ' (' + Math.round(t.margin / t.ht * 100) + ' %)' : ''}</div>` : ''}
+    <div class="hint" style="text-align:right; margin-top:4px;">Calcul indicatif — Axonaut recalcule les montants à la création.</div>`;
+}
+
+// ================== Nouveau client ==================
+function openClientModal(prefillName){
+  ['ncName','ncFirst','ncLast','ncEmail','ncPhone','ncStreet','ncZip','ncCity'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ncCountry').value = 'France';
+  document.getElementById('ncB2C').checked = false;
+  document.getElementById('ncName').value = prefillName || '';
+  document.getElementById('ncStatus').textContent = '';
+  document.getElementById('ncSave').disabled = false;
+  document.getElementById('clientModal').classList.add('show');
+  document.getElementById('ncName').focus();
+}
+document.getElementById('ncCancel').addEventListener('click', () => document.getElementById('clientModal').classList.remove('show'));
+document.getElementById('ncSave').addEventListener('click', async () => {
+  const v = id => document.getElementById(id).value.trim();
+  const status = document.getElementById('ncStatus');
+  if(!v('ncName')){ status.textContent = 'Le nom est obligatoire.'; status.className = 'status err'; return; }
+  const body = {
+    name: v('ncName'), is_prospect: true, is_customer: false, isB2C: document.getElementById('ncB2C').checked,
+    address_street: v('ncStreet'), address_zip_code: v('ncZip'), address_city: v('ncCity'), address_country: v('ncCountry') || 'France',
+    currency: 'EUR', language: 'fr'
+  };
+  const contactName = [v('ncFirst'), v('ncLast')].filter(Boolean).join(' ');
+  if(contactName) body.address_contact_name = contactName;
+  if(v('ncFirst') || v('ncLast') || v('ncEmail') || v('ncPhone')){
+    body.employees = [{ firstname: v('ncFirst'), lastname: v('ncLast') || v('ncName'), email: v('ncEmail'), phoneNumber: v('ncPhone'), is_billing_contact: true }];
+  }
+  const btn = document.getElementById('ncSave');
+  btn.disabled = true; status.className = 'status'; status.textContent = 'Création dans Axonaut…';
+  try{
+    const c = await axonaut('/companies', 'POST', body);
+    if(!c || !c.id) throw new Error("réponse d'Axonaut inattendue");
+    document.getElementById('clientModal').classList.remove('show');
+    if(current && !isLocked(current)){
+      current.client = { id: c.id, name: c.name || body.name, street: c.address_street || body.address_street, zip: c.address_zip_code || body.address_zip_code, city: c.address_city || body.address_city, country: c.address_country || body.address_country };
+      current.addressId = null;
+      document.querySelector('.topbar h2').textContent = (current.numero ? 'Devis ' + current.numero : 'Nouveau devis') + ' — ' + current.client.name;
+      renderClientArea(); changed();
+    }
+  }catch(e){
+    btn.disabled = false; status.className = 'status err'; status.textContent = 'Échec : ' + e.message;
+  }
+});
+
+// ================== Réglages du module ==================
+function renderGenericCurrent(){
+  document.getElementById('genericCurrent').textContent = moduleSettings.genericProductId
+    ? `Produit générique actuel : ${moduleSettings.genericProductName || '#' + moduleSettings.genericProductId}`
+    : 'Aucun produit générique : chaque ligne libre crée un nouveau produit dans Axonaut.';
+}
+async function saveModuleSettings(){
+  const st = document.getElementById('settingsStatus');
+  st.className = 'status'; st.textContent = 'Enregistrement…';
+  try{ await saveSharedSetting(MODULE_SETTINGS_KEY, moduleSettings); st.textContent = '✔ Enregistré pour tous les postes'; }
+  catch(e){ st.className = 'status err'; st.textContent = "Échec de l'enregistrement : " + e.message; }
+  renderGenericCurrent();
+}
+function updateNumPreview(){
+  const n = parseInt(document.getElementById('numNext').value, 10);
+  document.getElementById('numPreview').textContent = n ? formatNumero(document.getElementById('numFormat').value || 'DE{AAAA}{MM}-{N}', n) : '— (indique le prochain numéro)';
+}
+async function openSettings(){
+  document.getElementById('settingsStatus').textContent = '';
+  await loadModuleSettings();
+  const at = await atelierInfos();
+  document.getElementById('atelierFields').innerHTML = ATELIER_FIELDS.map(([k, label]) =>
+    `<div class="field" style="${k === 'mentions' ? 'min-width:100%;' : ''}"><label style="font-weight:400;">${escapeHtml(label)}</label><input type="text" data-at="${k}" value="${escapeHtml(at[k] || '')}"></div>`).join('');
+  document.getElementById('suiviUrl').value = moduleSettings.suiviUrl || '';
+  document.getElementById('suiviKey').value = moduleSettings.suiviKey || '';
+  document.getElementById('mailSubject').value = moduleSettings.mailSubject || DEFAULT_MAIL_SUBJECT;
+  document.getElementById('mailBody').value = moduleSettings.mailBody || DEFAULT_MAIL_BODY;
+  document.getElementById('mailBccAxonaut').checked = moduleSettings.mailBccAxonaut !== false;
+  document.getElementById('numFormat').value = moduleSettings.numFormat || 'DE{AAAA}{MM}-{N}';
+  document.getElementById('numNext').value = moduleSettings.nextNumber || '';
+  updateNumPreview();
+  renderGenericCurrent();
+  document.getElementById('settingsModal').classList.add('show');
+  loadProducts().catch(e => { document.getElementById('settingsStatus').textContent = 'Base produits indisponible : ' + e.message; });
+}
+document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('mailSave').addEventListener('click', async () => {
+  await loadModuleSettings();
+  moduleSettings.suiviUrl = document.getElementById('suiviUrl').value.trim().replace(/\/+$/, '');
+  moduleSettings.suiviKey = document.getElementById('suiviKey').value.trim();
+  moduleSettings.mailSubject = document.getElementById('mailSubject').value;
+  moduleSettings.mailBody = document.getElementById('mailBody').value;
+  moduleSettings.mailBccAxonaut = document.getElementById('mailBccAxonaut').checked;
+  saveModuleSettings();
+});
+document.getElementById('suiviTest').addEventListener('click', async () => {
+  const st = document.getElementById('settingsStatus');
+  const url = (document.getElementById('suiviUrl').value.trim() || await getProxyUrl()).replace(/\/+$/, '');
+  const key = document.getElementById('suiviKey').value.trim();
+  st.className = 'status'; st.textContent = 'Test en cours…';
+  try{
+    const res = await fetch(url + '/api/devis/' + 'x'.repeat(24) + '/events', { headers: { 'x-api-key': key } });
+    if(res.status === 404){ st.textContent = '✔ Connexion réussie (pense à enregistrer).'; return; }
+    if(res.status === 401) throw new Error('clé secrète refusée');
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error || ('HTTP ' + res.status));
+  }catch(e){ st.className = 'status err'; st.textContent = 'Échec : ' + e.message; }
+});
+document.getElementById('atelierSave').addEventListener('click', async () => {
+  await loadModuleSettings();
+  const at = {};
+  document.querySelectorAll('#atelierFields [data-at]').forEach(el => at[el.dataset.at] = el.value.trim());
+  moduleSettings.atelier = at;
+  saveModuleSettings();
+});
+document.getElementById('numFormat').addEventListener('input', updateNumPreview);
+document.getElementById('numNext').addEventListener('input', updateNumPreview);
+document.getElementById('numSave').addEventListener('click', async () => {
+  const fmt = document.getElementById('numFormat').value.trim() || 'DE{AAAA}{MM}-{N}';
+  const n = parseInt(document.getElementById('numNext').value, 10);
+  const st = document.getElementById('settingsStatus');
+  if(!fmt.includes('{N}')){ st.className = 'status err'; st.textContent = 'Le format doit contenir {N} (le compteur).'; return; }
+  if(!n || n < 1){ st.className = 'status err'; st.textContent = 'Indique un prochain numéro (nombre entier).'; return; }
+  await loadModuleSettings(); // ne pas écraser le produit générique réglé entre-temps ailleurs
+  moduleSettings.numFormat = fmt; moduleSettings.nextNumber = n;
+  saveModuleSettings();
+});
+document.getElementById('settingsClose').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('show'));
+document.getElementById('genericClear').addEventListener('click', () => {
+  moduleSettings.genericProductId = null; moduleSettings.genericProductName = '';
+  saveModuleSettings();
+});
+(function wireGenericSearch(){
+  const input = document.getElementById('genericSearch');
+  const box = document.getElementById('genericSuggest');
+  input.addEventListener('input', () => {
+    const q = norm(input.value.trim());
+    if(!q || !productsCache){ box.classList.remove('show'); return; }
+    const list = productsCache.filter(p => norm([p.name, p.product_code].join(' ')).includes(q)).slice(0, 30);
+    box.innerHTML = list.length ? list.map((p, i) => `<div class="suggestion" data-i="${i}"><div class="s1">${escapeHtml(p.name)}</div><div class="s2">${p.product_code ? 'Réf. ' + escapeHtml(p.product_code) : ''}</div></div>`).join('')
+      : '<div class="suggestion"><span class="s2">Aucun produit.</span></div>';
+    box.classList.add('show');
+    box.querySelectorAll('.suggestion[data-i]').forEach(el => el.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const p = list[Number(el.dataset.i)];
+      moduleSettings.genericProductId = p.id; moduleSettings.genericProductName = p.name;
+      input.value = ''; box.classList.remove('show');
+      saveModuleSettings();
+    }));
+  });
+  input.addEventListener('blur', () => setTimeout(() => box.classList.remove('show'), 150));
+})();
+
+// ================== Démarrage ==================
+document.getElementById('listSearch').addEventListener('input', e => { listSearch = e.target.value; renderDraftList(); });
+document.getElementById('newDraftBtn').addEventListener('click', () => {
+  if(!CSBAuth.can('devis', 'creer')){ alert("Tu n'as pas le droit de créer des devis — demande à un administrateur."); return; }
+  openDraft(newDraft(), null, '');
+  setSaveState('Nouveau brouillon — il sera enregistré dès la première modification.');
+});
+
+async function init(){
+  const settingsReady = loadModuleSettings();
+  try{
+    await loadDrafts();
+    renderDraftList();
+    settingsReady.then(pollSuivi);
+    setInterval(async () => { await loadModuleSettings(); pollSuivi(); }, 5 * 60 * 1000);
+  }catch(e){
+    document.getElementById('draftList').innerHTML = `<div class="hint" style="padding:6px; color:var(--danger);">Devis indisponibles : ${escapeHtml(e.message)}</div>`;
+  }
+}
+let started = false;
+CSBAuth.onChange(() => {
+  if(!CSBAuth.currentUser()) return;
+  if(!started){ started = true; init(); }
+  else if(current) renderEditor();
+});
+</script>
+</body>
+</html>

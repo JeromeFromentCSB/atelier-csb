@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.40', items: [
+    "Nouveau module 📝 Devis : devis faits dans l'appli à partir des clients et produits Axonaut (présentation des lignes identique à Axonaut : description riche, prix d'achat, stock, marge, TVA), brouillons partagés entre les postes, numérotation à la suite d'Axonaut (réglable), historique de chaque devis",
+    "Devis : PDF au logo de l'atelier (aperçu / enregistrement), adresse de livraison, statuts Brouillon → Envoyé → Accepté (= commande) → Facturé, lignes modifiables jusqu'à la facturation",
+    "Devis : envoi par email depuis l'appli (Gmail du module Email), copie cachée à Axonaut, lien vers une page client pour consulter et accepter le devis en ligne, suivi des ouvertures",
+    "Devis : bouton « Facturer dans Axonaut » — la facture est créée dans Axonaut avec les lignes du devis (la gestion des factures reste dans Axonaut)",
+    "Gestion Commande : les commandes du module Devis apparaissent à côté des commandes Axonaut (badge « module »), avec détails, bon de fabrication, documents, photos et étiquettes",
+  ]},
   { v: '0.2.39', items: [
     "Correction : après une boîte de confirmation ou un passage par Axonaut / Fournisseurs, il arrivait qu'on ne puisse plus rien taper dans les champs (ex. Stock de Fil, en passant d'un onglet à l'autre) — le clavier est désormais rendu automatiquement au champ cliqué",
     "Stock de Fil : nouveau type de fil « ZX75 » (en plus de Polyneon 40 et Lurex), avec son propre stock et ses filtres",

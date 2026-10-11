@@ -208,6 +208,61 @@ ipcMain.handle('csb:trash-file', (_event, filePath) => shell.trashItem(filePath)
 // (Axonaut, Fournisseurs) a gardé le focus clavier, la fenêtre n'envoie plus les frappes aux
 // champs de saisie — on clique dedans mais on ne peut plus rien taper. Le preload appelle ceci
 // quand il détecte le cas ; « blur puis focus » rend réellement le clavier à la fenêtre.
+// ---------- PDF à partir d'une page HTML (devis du module Devis) ----------
+// Le moteur d'impression de Chromium rend fidèlement les descriptions produits d'Axonaut (gras,
+// listes, images), ce qu'une génération PDF « à la main » ne permet pas. Fenêtre invisible, sans
+// JavaScript ni accès Node : le HTML (déjà nettoyé par le module) n'est que mis en page.
+// Le marqueur __CSB_LOGO__ est remplacé par le logo de l'atelier (src/shell/assets/logo-full.png).
+ipcMain.handle('csb:html-to-pdf', async (_event, { html, footerHtml }) => {
+  let logo = '';
+  try { logo = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, 'src', 'shell', 'assets', 'logo-full.png')).toString('base64'); } catch (e) {}
+  const page = String(html).replace(/__CSB_LOGO__/g, logo);
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { javascript: false, sandbox: true, contextIsolation: true, nodeIntegration: false }
+  });
+  try {
+    await win.loadURL('data:text/html;charset=utf-8;base64,' + Buffer.from(page, 'utf8').toString('base64'));
+    const pdf = await win.webContents.printToPDF({
+      pageSize: 'A4',
+      printBackground: true,
+      margins: { marginType: 'custom', top: 0.4, bottom: 0.6, left: 0.4, right: 0.4 },
+      displayHeaderFooter: !!footerHtml,
+      headerTemplate: '<span></span>',
+      footerTemplate: footerHtml || '<span></span>'
+    });
+    return pdf.toString('base64');
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
+});
+// Logo de l'atelier en data URL (page client du serveur de suivi des devis).
+ipcMain.handle('csb:logo-data-url', () => {
+  try { return 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, 'src', 'shell', 'assets', 'logo-full.png')).toString('base64'); }
+  catch (e) { return ''; }
+});
+// Enregistre un PDF où l'utilisateur le choisit (renvoie le chemin, ou null si annulé).
+ipcMain.handle('csb:save-pdf', async (event, { base64, defaultName }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const safeName = String(defaultName || 'document.pdf').replace(/[\\/:*?"<>|]+/g, '-');
+  const res = await dialog.showSaveDialog(win, {
+    defaultPath: path.join(app.getPath('documents'), safeName),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+  if (res.canceled || !res.filePath) return null;
+  fs.writeFileSync(res.filePath, Buffer.from(base64, 'base64'));
+  return res.filePath;
+});
+// Ouvre un PDF dans la visionneuse par défaut, via une copie dans le dossier temporaire.
+ipcMain.handle('csb:open-temp-pdf', async (_event, { base64, name }) => {
+  const dir = path.join(os.tmpdir(), 'atelier-csb-pdf');
+  fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, String(name || 'document.pdf').replace(/[\\/:*?"<>|]+/g, '-'));
+  fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+  const err = await shell.openPath(filePath);
+  if (err) throw new Error(err);
+  return filePath;
+});
 ipcMain.handle('csb:refocus-window', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win.isDestroyed()) return false;
@@ -572,6 +627,26 @@ ipcMain.handle('csb:email-set-credentials', (_event, { email, appPassword, host,
   emailWriteCreds({ email, appPassword, host: host || undefined, port: port || undefined });
   cachedImapClient = null;
   return { ok: true };
+});
+// Envoi d'un email (devis aux clients) avec le même compte et le même mot de passe
+// d'application que la lecture IMAP. Gmail range automatiquement le message dans « Envoyés ».
+ipcMain.handle('csb:email-send', async (_event, { to, cc, bcc, subject, text, html, attachments }) => {
+  const creds = emailReadCreds();
+  if (!creds.email || !creds.appPassword) {
+    throw new Error("Compte email non configuré : connecte-le d'abord dans le module Email (adresse + mot de passe d'application).");
+  }
+  const imapHost = creds.host || 'imap.gmail.com';
+  const smtpHost = /^imap\./i.test(imapHost) ? imapHost.replace(/^imap\./i, 'smtp.') : 'smtp.gmail.com';
+  const nodemailer = require('nodemailer');
+  const transporter = nodemailer.createTransport({
+    host: smtpHost, port: 465, secure: true,
+    auth: { user: creds.email, pass: creds.appPassword }
+  });
+  const info = await transporter.sendMail({
+    from: creds.email, to, cc: cc || undefined, bcc: bcc || undefined, subject, text, html,
+    attachments: (attachments || []).map(a => ({ filename: a.filename, content: Buffer.from(a.base64, 'base64'), contentType: a.contentType || 'application/pdf' }))
+  });
+  return { messageId: info.messageId, from: creds.email, accepted: info.accepted, rejected: info.rejected };
 });
 ipcMain.handle('csb:email-status', () => {
   const creds = emailReadCreds();

@@ -1253,7 +1253,12 @@ async function syncCommandesIndex(list){
       // nouvelle ou dont on n'a encore aucune ligne enregistrée (elles ne changent presque
       // jamais après coup), pas à chaque synchro.
       let lignesJson = found ? (found.lignes_json || '') : '';
-      if(r.quotationId && (!found || !found.lignes_json)){
+      if(isModuleOrder(r)){
+        // Lignes modifiables dans le module Devis : toujours reprises telles qu'elles sont.
+        lignesJson = JSON.stringify(moduleQuotation(r).quotation_lines.map(l => ({
+          titre: l.title || '', qte: l.quantity || 0, unite: l.unit || '', ref: l.product_code || ''
+        })));
+      }else if(r.quotationId && (!found || !found.lignes_json)){
         try{
           const qRes = await callAxonaut('/quotations/' + r.quotationId);
           const qLines = (qRes.ok && qRes.parsed && qRes.parsed.quotation_lines) || [];
@@ -1681,6 +1686,81 @@ function contractToRecord(c){
     hasDeliveryInfo: !!(f.nomSoc || f.adresse),
     _pbId: null, tracking:'', labelGenerated:false, pbLabelPdf:'', blReady:false
   };
+}
+// ---------- Commandes du module Devis (collection PocketBase "devis") ----------
+// Un devis accepté dans le module Devis est une commande gérée hors d'Axonaut (seule sa facture
+// y sera créée). On la convertit dans le même format que les commandes Axonaut pour que tout
+// Gestion Commande (détails, bon de fabrication, documents, photos, étiquettes…) fonctionne
+// pareil. Identifiant préfixé "D-" pour ne jamais se confondre avec un id de contrat Axonaut.
+const MODULE_ORDER_PREFIX = 'D-';
+function isModuleOrder(r){ return !!(r && r.source === 'module'); }
+function devisRecordsBase(){ return getConfig().url.replace(/\/+$/,'') + '/api/collections/devis/records'; }
+async function fetchModuleOrders(){
+  try{
+    const filter = encodeURIComponent(`statut='accepte' || statut='facture'`);
+    let page = 1, all = [];
+    while(page <= 20){
+      const res = await CSBAuth.authedFetch(devisRecordsBase() + `?perPage=200&page=${page}&filter=(${filter})`);
+      if(!res.ok) return all; // collection absente ou PocketBase indisponible : on garde Axonaut seul
+      const json = await res.json();
+      all = all.concat(json.items || []);
+      if(page >= (json.totalPages || 1)) break;
+      page++;
+    }
+    return all;
+  }catch(e){ console.warn('Commandes du module Devis indisponibles', e); return []; }
+}
+function moduleRecordToRecord(rec){
+  const d = rec.data || {};
+  const liv = d.livraison || {};
+  const client = d.client || {};
+  const id = MODULE_ORDER_PREFIX + rec.id;
+  return {
+    source: 'module', moduleRec: rec,
+    contractId: id,
+    numeroCommande: rec.numero || id,
+    clientCompany: client.name || rec.client_nom || '',
+    companyId: client.id || rec.client_id || null,
+    nomSoc: liv.nomSoc || '', adresse: liv.adresse || '', cp: liv.cp || '', ville: liv.ville || '', pays: liv.pays || '',
+    tel: liv.tel || '', contact: liv.contact || '',
+    startDate: (d.acceptedAt || rec.date_devis || rec.created || '').slice(0, 10),
+    montant: typeof rec.total_ht === 'number' ? rec.total_ht : null,
+    quotationId: id,
+    projectNumber: '',
+    rawCustomFields: {},
+    invoicesId: rec.axonaut_facture_id ? [rec.axonaut_facture_id] : [],
+    hasDeliveryInfo: !!(liv.nomSoc || liv.adresse),
+    _pbId: null, tracking:'', labelGenerated:false, pbLabelPdf:'', blReady:false
+  };
+}
+// Équivalent d'un devis Axonaut (mêmes noms de champs que l'API) pour le panneau Détails Commande
+// et le bon de fabrication. Les titres de section du module deviennent le "chapter" des lignes.
+function moduleQuotation(r){
+  const rec = r.moduleRec, d = rec.data || {};
+  let chapter = '';
+  const lines = [];
+  (d.lines || []).forEach(l => {
+    if(l.type === 'section'){ chapter = l.name || ''; return; }
+    const q = parseFloat(String(l.quantity).replace(',', '.')) || 0;
+    const pu = parseFloat(String(l.price).replace(',', '.')) || 0;
+    const disc = parseFloat(String(l.discountPercent || 0).replace(',', '.')) || 0;
+    lines.push({
+      product_id: l.productId || null, product_code: l.productCode || '', product_name: l.name || '',
+      title: l.name || '', details: l.description || '', quantity: q, unit: l.unit || '',
+      price: pu, pre_tax_amount: Math.round(q * pu * (1 - disc / 100) * 100) / 100,
+      tax_rates: [{ rate: parseFloat(String(l.taxRate).replace(',', '.')) || 0 }], chapter
+    });
+  });
+  return {
+    id: r.quotationId, number: rec.numero || '', title: d.title || '', company_name: r.clientCompany,
+    date: rec.date_devis || '', contract_id: r.contractId, status: 'accepted', comments: d.comments || '',
+    pre_tax_amount: rec.total_ht, total_amount: rec.total_ttc, public_path: null, quotation_lines: lines
+  };
+}
+// Commandes Axonaut + commandes du module Devis, dans une seule liste.
+async function fetchAllOrders(){
+  const [rawContracts, moduleRecs] = await Promise.all([fetchAllContracts(), fetchModuleOrders()]);
+  return rawContracts.map(contractToRecord).concat(moduleRecs.map(moduleRecordToRecord));
 }
 function splitContactName(contact){
   const parts = (contact || '').trim().split(/\s+/).filter(Boolean);
@@ -3764,7 +3844,8 @@ async function openBlModal(r){
   loadBlComment(r.contractId);
   const canViewQuotePdf = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'devis_pdf');
   const viewQuoteBtn = document.getElementById('blViewQuoteBtn');
-  viewQuoteBtn.style.display = (canViewQuotePdf && r.quotationId) ? 'inline-flex' : 'none';
+  // Le PDF d'un devis du module se produit depuis le module Devis (pas de lien public Axonaut).
+  viewQuoteBtn.style.display = (canViewQuotePdf && r.quotationId && !isModuleOrder(r)) ? 'inline-flex' : 'none';
   viewQuoteBtn.onclick = () => viewQuotePdf(r);
   currentBlQuotation = null;
   const fabricationBtn = document.getElementById('blFabricationBtn');
@@ -3788,6 +3869,7 @@ async function openBlModal(r){
 
   renderBlShipments(r);
 
+  if(isModuleOrder(r)){ await openModuleOrderLines(r); return; }
   try{
     // On relit le contrat en direct pour être sûr d'avoir l'id du devis lié (pas garanti présent
     // dans la liste initiale), puis on va chercher les lignes du devis lui-même.
@@ -3826,6 +3908,36 @@ async function openBlModal(r){
   }catch(e){
     document.getElementById('blLinesList').innerHTML = `<div class="hint" style="color:var(--silk-red);">Erreur de chargement du devis : ${escapeHtml(e.message)}</div>`;
   }
+}
+// Lignes d'une commande du module Devis : relues dans PocketBase à l'ouverture (elles restent
+// modifiables dans le module jusqu'à la facturation), puis même affichage qu'une commande Axonaut.
+async function openModuleOrderLines(r){
+  try{
+    const res = await CSBAuth.authedFetch(devisRecordsBase() + '/' + r.moduleRec.id);
+    if(res.ok){
+      r.moduleRec = await res.json();
+      Object.assign(r, moduleRecordToRecord(r.moduleRec), { shipments: r.shipments, _pbId: r._pbId, tracking: r.tracking, labelGenerated: r.labelGenerated, pbLabelPdf: r.pbLabelPdf, blReady: r.blReady });
+    }
+  }catch(e){ console.warn('Relecture de la commande du module Devis impossible', e); }
+  if(currentBlRecord !== r) return;
+  const q = moduleQuotation(r);
+  currentBlQuotation = q;
+  const lines = q.quotation_lines;
+  if(!lines.length){
+    document.getElementById('blLinesList').innerHTML = renderBlNotes('', '', q.comments) + '<div class="hint">Ce devis ne contient aucune ligne.</div>';
+    loadBlFabricationDocuments(q.id);
+    return;
+  }
+  let saved = null;
+  try{ saved = await blFetchByContract(r.contractId); }
+  catch(e){ console.warn('BL PocketBase indisponible', e); }
+  currentBlPbRecord = saved;
+  renderBlLines(lines, (saved && saved.lines_state) || {}, '', '', q.comments);
+  if(saved && saved.etat_valide){
+    document.getElementById('blResult').className = 'col-result ok';
+    document.getElementById('blResult').textContent = '✔ Toutes les lignes étaient déjà cochées — prêt à facturer.';
+  }
+  loadBlFabricationDocuments(q.id);
 }
 /* ---------- Programmes à utiliser pour une commande ----------
    Liste de fichiers/dossiers (chemins locaux ou réseau) choisie par un admin ; tout le monde peut
@@ -4250,7 +4362,9 @@ function updateSortArrows(){
 // ---------- Colonnes configurables (ordre, largeur, visibilité) ----------
 const ADMIN_ONLY_COLUMNS = new Set(['montant']);
 const COLUMN_DEFS = {
-  commande: { label:'Commande', defaultWidth:170, cellClass:'name', required:true, render:r => r.quotationId
+  commande: { label:'Commande', defaultWidth:170, cellClass:'name', required:true, render:r => isModuleOrder(r)
+    ? `${escapeHtml(r.numeroCommande)} <span title="Devis et commande gérés dans le module Devis" style="font-size:.65rem; font-weight:700; color:#2D5B9A; background:#E3ECF8; border-radius:999px; padding:1px 6px; margin-left:4px;">module</span>`
+    : r.quotationId
     ? `<span class="commande-devis-link" data-quotation-id="${r.quotationId}" title="Voir le devis correspondant" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(r.numeroCommande)}</span>`
     : escapeHtml(r.numeroCommande) },
   date: { label:'Date commande', defaultWidth:110, sortable:'date', render:r => formatDateFR(r.startDate) },
@@ -4436,8 +4550,8 @@ async function refreshAll(){
   btn.disabled = true;
   setSyncStatus('pending', 'Récupération des commandes Axonaut…');
   try{
-    const rawContracts = await fetchAllContracts();
-    contracts = rawContracts.map(contractToRecord);
+    contracts = await fetchAllOrders();
+    const nbModule = contracts.filter(isModuleOrder).length;
 
     setSyncStatus('pending', 'Récupération des envois déjà enregistrés (PocketBase)…');
     let shipments = [];
@@ -4476,9 +4590,9 @@ async function refreshAll(){
 
     contracts.sort((a,b) => (b.startDate || '').localeCompare(a.startDate || ''));
     if(shipmentsError){
-      setSyncStatus('off', `${contracts.length} commande(s) chargée(s) depuis Axonaut — ⚠ échec de récupération des envois PocketBase (${shipmentsError.message}), statuts potentiellement obsolètes.`);
+      setSyncStatus('off', `${contracts.length - nbModule} commande(s) Axonaut + ${nbModule} du module Devis — ⚠ échec de récupération des envois PocketBase (${shipmentsError.message}), statuts potentiellement obsolètes.`);
     }else{
-      setSyncStatus('on', `${contracts.length} commande(s) chargée(s) depuis Axonaut, ${shipments.length} envoi(s) trouvé(s) dans PocketBase.`);
+      setSyncStatus('on', `${contracts.length - nbModule} commande(s) Axonaut + ${nbModule} du module Devis, ${shipments.length} envoi(s) trouvé(s) dans PocketBase.`);
     }
     syncCommandesIndex(contracts); // tâche de fond, pour la page mobile de prise de photo
   }catch(e){
@@ -4598,7 +4712,7 @@ function render(){
   tbody.querySelectorAll('tr[data-id]').forEach(row => {
     row.addEventListener('click', (e) => {
       if(e.target.closest('button') || e.target.closest('.commande-devis-link')) return;
-      const r = contracts.find(c => c.contractId === parseInt(row.dataset.id, 10));
+      const r = contracts.find(c => String(c.contractId) === row.dataset.id); // id Axonaut (nombre) ou « D-… » (module Devis)
       if(r) openBlModal(r);
     });
   });
@@ -4612,7 +4726,7 @@ function render(){
   tbody.querySelectorAll('[data-action="copy-addr"]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const r = contracts.find(c => c.contractId === parseInt(btn.dataset.id, 10));
+      const r = contracts.find(c => String(c.contractId) === btn.dataset.id);
       if(!r) return;
       const text = [r.nomSoc, r.adresse, [r.cp, r.ville].filter(Boolean).join(' '), r.pays].filter(Boolean).join('\n');
       try{
@@ -5102,7 +5216,9 @@ function renderFactureTab(){
   const wrap = document.getElementById('factureTableWrap');
   const empty = document.getElementById('factureEmptyState');
   const tbody = document.getElementById('factureTbody');
-  let list = contracts.filter(r => r.quotationId); // seules les commandes avec devis sont facturables ici
+  // Seules les commandes Axonaut avec devis sont facturables ici ; celles du module Devis se
+  // facturent depuis le module lui-même.
+  let list = contracts.filter(r => r.quotationId && !isModuleOrder(r));
   const st = factureSearch;
   if(st){
     list = list.filter(r => (r.numeroCommande||'').toLowerCase().includes(st) || (r.clientCompany||'').toLowerCase().includes(st) || (r.nomSoc||'').toLowerCase().includes(st));
@@ -5374,9 +5490,9 @@ async function refreshQuotations(){
   btn.disabled = true;
   btn.textContent = '↻ Chargement…';
   try{
-    const [q, rawContracts] = await Promise.all([fetchAllQuotations(), fetchAllContracts()]);
+    const [q, orders] = await Promise.all([fetchAllQuotations(), fetchAllOrders()]);
     quotations = q;
-    contracts = rawContracts.map(contractToRecord);
+    contracts = orders;
   }catch(e){
     document.getElementById('devisTbody').innerHTML = `<tr><td class="hint" style="padding:16px; color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</td></tr>`;
   }
