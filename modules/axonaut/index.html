@@ -784,6 +784,7 @@
         <div id="blProgramsAdminBar" style="display:none; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
           <button class="btn ghost" id="blProgramsAddFilesBtn">➕ Fichier(s)…</button>
           <button class="btn ghost" id="blProgramsAddFoldersBtn">📁 Dossier(s)…</button>
+          <button class="btn ghost" id="blProgramsPasteBtn" title="Coller un chemin copié (Dropbox, Explorateur, Recherche / Éditeur)">📋 Coller un chemin</button>
         </div>
         <div id="blProgramsList"></div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents de fabrication</div>
@@ -4096,6 +4097,8 @@ async function addBlPrograms(kind){
   let picked = [];
   try{ picked = await window.csbHost.pickPaths(kind); }catch(e){ alert('Erreur : ' + e.message); return; }
   if(!picked || !picked.length) return;
+  // Chemins Dropbox enregistrés sous une forme valable sur tous les postes (%USERPROFILE%\\Dropbox\\…).
+  if(window.csbHost.portablePath) picked = await Promise.all(picked.map(p => window.csbHost.portablePath(p).catch(() => p)));
   const known = new Set(blProgramsCurrent.map(it => it.path.toLowerCase()));
   const added = picked.filter(p => !known.has(p.toLowerCase())).map(p => ({ path: p, type: kind === 'folders' ? 'folder' : 'file' }));
   if(!added.length) return;
@@ -4139,6 +4142,38 @@ async function saveBlComment(){
 document.getElementById('blCommentInput').addEventListener('blur', saveBlComment);
 document.getElementById('blProgramsAddFilesBtn').addEventListener('click', () => addBlPrograms('files'));
 document.getElementById('blProgramsAddFoldersBtn').addEventListener('click', () => addBlPrograms('folders'));
+document.getElementById('blProgramsPasteBtn').addEventListener('click', async () => {
+  if(!isAdminUser() || !currentBlRecord) return;
+  const found = await readPastedProgramPaths();
+  if(!found || !found.length) return;
+  const known = new Set(blProgramsCurrent.map(it => it.path.toLowerCase()));
+  const added = found.filter(it => !known.has(it.path.toLowerCase()));
+  if(added.length) await saveBlPrograms([...blProgramsCurrent, ...added]);
+});
+// « 📋 Coller un chemin » : chemins copiés (Recherche / Éditeur, Explorateur…), un par ligne.
+// Chaque chemin est vérifié sur ce poste (Dropbox d'un autre poste comprise), puis enregistré sous
+// une forme valable sur tous les postes (%USERPROFILE%\Dropbox\…).
+async function readPastedProgramPaths(){
+  if(!(window.csbHost && window.csbHost.resolvePath && window.csbHost.listDir)){ alert("Disponible uniquement dans l'application Atelier CSB (version à jour)."); return null; }
+  let text = '';
+  try{ text = await navigator.clipboard.readText(); }
+  catch(e){ alert("Impossible de lire le presse-papiers : " + e.message); return null; }
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim().replace(/^"(.*)"$/, '$1')).filter(Boolean);
+  if(!lines.length){ alert("Le presse-papiers est vide : copie d'abord un chemin (bouton « 📋 Copier le chemin » de Recherche / Éditeur, ou barre d'adresse de l'Explorateur)."); return null; }
+  const found = [], missing = [];
+  for(const line of lines.slice(0, 50)){
+    try{
+      const r = await window.csbHost.resolvePath(line);
+      if(!r || !r.exists){ missing.push(line); continue; }
+      const ls = await window.csbHost.listDir(r.path);
+      const shared = window.csbHost.portablePath ? await window.csbHost.portablePath(r.path) : r.path;
+      found.push({ path: shared, type: ls && !ls.error ? 'folder' : 'file' });
+    }catch(e){ missing.push(line); }
+  }
+  if(missing.length) alert('Chemin(s) introuvable(s) sur ce poste, non ajouté(s) :\n' + missing.join('\n') + "\n\n(Copie bien un chemin de dossier ou de fichier ; pour Dropbox, il doit être synchronisé sur ce poste.)");
+  return found;
+}
+
 
 async function loadBlFabricationDocuments(quotationId){
   const box = document.getElementById('blFabricationDocs');

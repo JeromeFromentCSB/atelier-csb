@@ -99,7 +99,11 @@
   .tva-pill select{ border:none; background:transparent; text-align:right; font-size:13px; color:#3A3A3A; }
   table.lines tr.section td{ background:#F2F5FA; }
   table.lines tr.section input{ font-weight:700; color:#1F3A66; }
-  .l-actions{ display:flex; gap:0; justify-content:flex-start; margin-top:6px; }
+  .l-actions{ display:flex; gap:0; justify-content:flex-start; align-items:center; margin-top:6px; }
+  .l-sel{ width:15px !important; height:15px; margin:0 6px 0 2px; cursor:pointer; }
+  table.lines tr.selected td{ background:#FFF8E6; }
+  .sel-bar{ display:none; align-items:center; gap:8px; flex-wrap:wrap; background:#FFF8E6; border:1px solid #EBD59A; border-radius:8px; padding:6px 10px; margin-bottom:10px; font-size:13px; }
+  .sel-bar.show{ display:flex; }
   .line-total{ font-family:"SF Mono", Consolas, monospace; white-space:nowrap; padding-top:11px !important; }
   .line-actions{ white-space:nowrap; }
   .iconbtn{ border:none; background:none; padding:4px 5px; border-radius:6px; color:var(--muted); }
@@ -153,6 +157,22 @@
   .ed-tab:hover{ color:var(--ink); }
   .ed-tab.on{ color:var(--ink); border-bottom-color:var(--accent); }
   .ed-tab-sum{ font-weight:400; font-size:12px; color:var(--muted); }
+  .prod-title{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 8px; }
+  .prod-title:first-child{ margin-top:0; }
+  .prod-zones{ display:flex; gap:10px; flex-wrap:wrap; }
+  .dropzone{ flex:1; min-width:220px; border:2px dashed var(--line); border-radius:10px; padding:12px; text-align:center; font-size:13px; color:var(--muted); cursor:pointer; transition:.15s; }
+  .dropzone.dragover{ border-color:var(--accent); background:var(--accent-light); color:var(--ink); }
+  .doc-thumbs{ display:flex; flex-wrap:wrap; gap:10px; }
+  .doc-thumb{ position:relative; width:120px; cursor:pointer; }
+  .doc-thumb-box{ width:120px; height:120px; border:1px solid var(--line); border-radius:8px; background:#FBF9F5; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:32px; color:var(--muted); }
+  .doc-thumb:hover .doc-thumb-box{ border-color:var(--accent); }
+  .doc-thumb-box img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .doc-thumb-box iframe{ width:240px; height:240px; border:none; transform:scale(.5); transform-origin:0 0; pointer-events:none; background:#fff; }
+  .doc-thumb-name{ font-size:11px; margin-top:3px; overflow-wrap:anywhere; max-height:2.6em; overflow:hidden; }
+  .doc-thumb-del{ position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--danger); color:#fff; border:2px solid #fff; font-size:12px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; }
+  .doc-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; margin-bottom:6px; font-size:13px; cursor:pointer; }
+  .doc-row:hover{ background:#FBF9F5; }
+  #prodComment{ width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; resize:vertical; background:#fff; }
   .pane{ display:none; }
   .pane.on{ display:block; }
   .contact-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
@@ -262,6 +282,16 @@
       <button class="btn" id="genericClear">Ne pas utiliser de produit générique</button>
       <button class="btn primary" id="settingsClose">Fermer</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="docViewer">
+  <div class="modal" style="width:min(900px,100%); height:min(85vh,900px); display:flex; flex-direction:column; padding:14px 16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+      <h3 id="docViewerTitle" style="margin:0; font-size:15px; word-break:break-word;"></h3>
+      <button class="btn small" id="docViewerClose">✕</button>
+    </div>
+    <div id="docViewerBody" style="flex:1; overflow:hidden; display:flex;"></div>
   </div>
 </div>
 
@@ -561,7 +591,9 @@ async function saveCurrent(){
         : await CSBAuth.authedFetch(devisBase(), { method:'POST', headers:{'Content-Type':'application/json'}, body });
       if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 150));
       const rec = await res.json();
+      const firstSave = current === d && !currentRecId;
       if(current === d){ currentRecId = rec.id; currentUpdated = rec.updated; }
+      if(firstSave) renderProduction();
       const entry = { recId: rec.id, updated: rec.updated, draft: recordToDraft(rec) };
       const idx = drafts.findIndex(x => x.recId === rec.id || x.draft.id === d.id);
       if(idx >= 0) drafts[idx] = entry; else drafts.unshift(entry);
@@ -858,6 +890,7 @@ function closeEditor(){
 }
 function openDraft(d, recId, updated){
   editSession = null;
+  selectedLines = new Set();
   current = d; currentRecId = recId; currentUpdated = updated || '';
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('editor').style.display = 'block';
@@ -906,6 +939,11 @@ function renderEditor(){
       </div>
     </div>
 
+    <div class="card" id="prodCard">
+      <h2>Production <span class="hint" style="font-family:inherit; font-weight:400;">— partagé avec Détails Commande, toujours modifiable</span></h2>
+      <div id="prodBox"></div>
+    </div>
+
     <div class="card" id="suiviCard" style="display:none;">
       <h2 style="display:flex; align-items:center; gap:10px;">Suivi client <button class="btn small" id="suiviRefresh">↻ Actualiser</button></h2>
       <div id="suiviBox"></div>
@@ -920,6 +958,7 @@ function renderEditor(){
     <div class="pane ${editorTab === 'lignes' ? 'on' : ''}" data-pane="lignes">
     <div class="card">
       <h2>Lignes du devis</h2>
+      <div class="sel-bar" id="selBar"></div>
       <div class="lines-wrap">
         <table class="lines">
           <thead><tr>
@@ -939,6 +978,7 @@ function renderEditor(){
         </div>
         <button class="btn" id="addFreeLineBtn">＋ Ligne libre</button>
         <button class="btn" id="addSectionBtn">＋ Titre de section</button>
+        <button class="btn" id="pasteLinesBtn" style="display:none;"></button>
       </div>
       <div class="hint" id="productsHint" style="margin-top:6px;"></div>
     </div>
@@ -982,11 +1022,13 @@ function renderEditor(){
   renderActionsBar();
   renderHisto();
   renderSuivi();
+  renderProduction();
   if(d.suivi && d.suivi.token) refreshSuivi(d).then(() => { if(current === d) renderSuivi(); });
   document.getElementById('suiviRefresh').addEventListener('click', async () => { await refreshSuivi(current, true); renderSuivi(); });
   if(isLocked(d)) applyReadOnly();
 }
 
+window.addEventListener('storage', e => { if(e.key === COPIED_LINES_KEY && current) renderSelectionBar(); });
 // Deux onglets : informations (client, livraison, suivi, historique) / lignes, conditions, totaux.
 let editorTab = 'infos';
 function showEditorTab(tab){
@@ -1142,9 +1184,11 @@ function orderVersionBanner(){
 function applyReadOnly(){
   const ed = document.getElementById('editor');
   ed.classList.add('readonly');
-  ed.querySelectorAll('.card input, .card select, .card textarea').forEach(el => el.disabled = true);
+  // La carte Production (programmes, documents, commentaire de commande) reste toujours modifiable.
+  const notProd = el => !el.closest('#prodCard') && !el.classList.contains('l-sel');
+  ed.querySelectorAll('.card input, .card select, .card textarea').forEach(el => { if(notProd(el)) el.disabled = true; });
   ed.querySelectorAll('[contenteditable]').forEach(el => el.setAttribute('contenteditable', 'false'));
-  ed.querySelectorAll('.iconbtn, #addFreeLineBtn, #addSectionBtn, #changeClientBtn, #newClientBtn').forEach(el => el.style.display = 'none');
+  ed.querySelectorAll('.iconbtn, #addFreeLineBtn, #addSectionBtn, #changeClientBtn, #newClientBtn').forEach(el => { if(notProd(el)) el.style.display = 'none'; });
   const addRow = ed.querySelector('.add-row'); if(addRow) addRow.style.display = 'none';
   if(current.statut !== 'facture' && CSBAuth.can('devis', 'creer')){
     document.getElementById('axBanner').innerHTML = orderVersionBanner() +
@@ -1341,6 +1385,368 @@ async function exportPdf(save){
     if(btn){ btn.disabled = false; btn.textContent = label; }
   }
 }
+
+// ================== Production : programmes, documents, commentaire de la commande ==================
+// Mêmes données que le panneau Détails Commande de Gestion Commande (une commande du module y porte
+// l'identifiant « D-<id PocketBase> ») : ce qui est ajouté ici apparaît là-bas, et inversement.
+//  - programmes et commentaire : réglages partagés « programmes_commande_D-… » / « commentaire_commande_D-… » ;
+//  - documents : collection « devis_documents » (quotation_id « D-… »), fichiers dans les dossiers
+//    réseau Fabrication / Demande de prix autorisés sur ce poste (autorisations partagées avec
+//    Gestion Commande, même application).
+function prodKey(){ return currentRecId ? 'D-' + currentRecId : null; }
+function isAdmin(){ return CSBAuth.isAdmin(); }
+function renderProduction(){
+  const box = document.getElementById('prodBox');
+  if(!box || !current) return;
+  if(!prodKey()){
+    box.innerHTML = '<div class="hint">Disponible dès que le devis est enregistré (choisis le client ou ajoute une ligne).</div>';
+    return;
+  }
+  const admin = isAdmin();
+  box.innerHTML = `
+    <div class="prod-title">🧵 Programmes à utiliser</div>
+    ${admin ? `<div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;"><button class="btn small" id="progAddFiles">➕ Fichier(s)…</button><button class="btn small" id="progAddFolders">📁 Dossier(s)…</button><button class="btn small" id="progPaste" title="Coller un chemin copié (Dropbox, Explorateur, Recherche / Éditeur)">📋 Coller un chemin</button></div>` : ''}
+    <div id="progList"><div class="hint">Chargement…</div></div>
+
+    <div class="prod-title">Documents de fabrication</div>
+    <div class="prod-zones">
+      <div class="dropzone" data-category="fabrication">📥 Déposer ici (fichier ou e-mail) — <b>Fabrication</b>
+        <button type="button" class="btn small paste-btn" data-category="fabrication" style="margin-left:6px;">📋 Coller</button></div>
+      ${admin ? `<div class="dropzone" data-category="demande_prix">📥 Déposer ici — <b>Demande de prix</b> (admins)
+        <button type="button" class="btn small paste-btn" data-category="demande_prix" style="margin-left:6px;">📋 Coller</button></div>` : ''}
+    </div>
+    <div class="hint" id="docsMsg" style="margin:6px 0;"></div>
+    <div id="docsFab"></div>
+    ${admin ? `<div class="prod-title">Documents demande de prix</div><div id="docsDp"></div>` : ''}
+
+    <div class="prod-title">💬 Commentaire de la commande <span id="prodCommentStatus" style="font-weight:400; text-transform:none; letter-spacing:0;"></span></div>
+    <textarea id="prodComment" rows="3" placeholder="Ajouter un commentaire (affiché aussi sur le bon de fabrication)…"></textarea>`;
+  if(admin){
+    document.getElementById('progAddFiles').addEventListener('click', () => addPrograms('files'));
+    document.getElementById('progAddFolders').addEventListener('click', () => addPrograms('folders'));
+    document.getElementById('progPaste').addEventListener('click', async () => {
+      const found = await readPastedProgramPaths();
+      if(!found || !found.length) return;
+      const known = new Set(programs.map(it => it.path.toLowerCase()));
+      const added = found.filter(it => !known.has(it.path.toLowerCase()));
+      if(added.length) await savePrograms([...programs, ...added]);
+    });
+  }
+  document.getElementById('prodComment').addEventListener('blur', saveProdComment);
+  setupDropzones();
+  loadPrograms(); loadDocuments(); loadProdComment();
+}
+
+// ---------- Programmes ----------
+let programs = [];
+// « 📋 Coller un chemin » : chemins copiés (Recherche / Éditeur, Explorateur…), un par ligne.
+// Chaque chemin est vérifié sur ce poste (Dropbox d'un autre poste comprise), puis enregistré sous
+// une forme valable sur tous les postes (%USERPROFILE%\Dropbox\…).
+async function readPastedProgramPaths(){
+  if(!(window.csbHost && window.csbHost.resolvePath && window.csbHost.listDir)){ alert("Disponible uniquement dans l'application Atelier CSB (version à jour)."); return null; }
+  let text = '';
+  try{ text = await navigator.clipboard.readText(); }
+  catch(e){ alert("Impossible de lire le presse-papiers : " + e.message); return null; }
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim().replace(/^"(.*)"$/, '$1')).filter(Boolean);
+  if(!lines.length){ alert("Le presse-papiers est vide : copie d'abord un chemin (bouton « 📋 Copier le chemin » de Recherche / Éditeur, ou barre d'adresse de l'Explorateur)."); return null; }
+  const found = [], missing = [];
+  for(const line of lines.slice(0, 50)){
+    try{
+      const r = await window.csbHost.resolvePath(line);
+      if(!r || !r.exists){ missing.push(line); continue; }
+      const ls = await window.csbHost.listDir(r.path);
+      const shared = window.csbHost.portablePath ? await window.csbHost.portablePath(r.path) : r.path;
+      found.push({ path: shared, type: ls && !ls.error ? 'folder' : 'file' });
+    }catch(e){ missing.push(line); }
+  }
+  if(missing.length) alert('Chemin(s) introuvable(s) sur ce poste, non ajouté(s) :\n' + missing.join('\n') + "\n\n(Copie bien un chemin de dossier ou de fichier ; pour Dropbox, il doit être synchronisé sur ce poste.)");
+  return found;
+}
+
+const progBaseName = p => String(p).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
+async function loadPrograms(){
+  const key = prodKey();
+  try{
+    const saved = await fetchSharedSetting('programmes_commande_' + key);
+    if(prodKey() !== key) return;
+    programs = Array.isArray(saved) ? saved : [];
+    renderPrograms();
+  }catch(e){ const el = document.getElementById('progList'); if(el) el.innerHTML = `<div class="hint" style="color:var(--danger);">Erreur : ${escapeHtml(e.message)}</div>`; }
+}
+function renderPrograms(){
+  const box = document.getElementById('progList');
+  if(!box) return;
+  const admin = isAdmin();
+  if(!programs.length){ box.innerHTML = '<div class="hint">Aucun programme indiqué pour cette commande.</div>'; return; }
+  box.innerHTML = programs.map((it, i) => `<div class="doc-row" data-i="${i}" title="${it.type === 'folder' ? "Ouvrir ce dossier dans l'Explorateur" : 'Ouvrir ce fichier avec le programme par défaut'}">
+      <span style="min-width:0;">${it.type === 'folder' ? '📁' : '📄'} <b>${escapeHtml(progBaseName(it.path))}</b><span style="display:block; font-size:11px; color:var(--muted); overflow-wrap:anywhere;">${escapeHtml(it.path)}</span></span>
+      ${admin ? `<button class="iconbtn" data-del="${i}" title="Retirer de la liste">🗑</button>` : ''}</div>`).join('');
+  box.querySelectorAll('.doc-row').forEach(row => row.addEventListener('click', async e => {
+    if(e.target.closest('[data-del]')) return;
+    const it = programs[Number(row.dataset.i)];
+    if(!(window.csbHost && window.csbHost.openPath)){ alert("L'ouverture de fichiers n'est possible que dans l'application Atelier CSB."); return; }
+    let err = ''; try{ err = await window.csbHost.openPath(it.path); }catch(x){ err = x.message || String(x); }
+    if(err) alert(`Impossible d'ouvrir « ${it.path} » :\n${err}\n\n(Le fichier ou le dossier a peut-être été déplacé, ou le lecteur réseau n'est pas accessible.)`);
+  }));
+  box.querySelectorAll('[data-del]').forEach(bt => bt.addEventListener('click', async e => {
+    e.stopPropagation();
+    const i = Number(bt.dataset.del);
+    if(!confirm(`Retirer « ${progBaseName(programs[i].path)} » de la liste des programmes de cette commande ?\n(Le fichier lui-même n'est pas supprimé.)`)) return;
+    await savePrograms(programs.filter((_, j) => j !== i));
+  }));
+}
+async function savePrograms(list){
+  const key = prodKey();
+  try{ await saveSharedSetting('programmes_commande_' + key, list); if(prodKey() === key){ programs = list; renderPrograms(); } }
+  catch(e){ alert("Impossible d'enregistrer la liste des programmes : " + e.message); }
+}
+async function addPrograms(kind){
+  if(!isAdmin()) return;
+  if(!(window.csbHost && window.csbHost.pickPaths)){ alert("La sélection de fichiers n'est possible que dans l'application Atelier CSB."); return; }
+  let picked = [];
+  try{ picked = await window.csbHost.pickPaths(kind); }catch(e){ alert('Erreur : ' + e.message); return; }
+  if(!picked || !picked.length) return;
+  // Chemins Dropbox enregistrés sous une forme valable sur tous les postes (%USERPROFILE%\\Dropbox\\…).
+  if(window.csbHost.portablePath) picked = await Promise.all(picked.map(p => window.csbHost.portablePath(p).catch(() => p)));
+  const known = new Set(programs.map(it => it.path.toLowerCase()));
+  const added = picked.filter(x => !known.has(x.toLowerCase())).map(x => ({ path: x, type: kind === 'folders' ? 'folder' : 'file' }));
+  if(added.length) await savePrograms([...programs, ...added]);
+}
+
+// ---------- Commentaire de la commande ----------
+let prodCommentSaved = '';
+async function loadProdComment(){
+  const key = prodKey();
+  const input = document.getElementById('prodComment'), st = document.getElementById('prodCommentStatus');
+  input.value = ''; prodCommentSaved = ''; st.textContent = 'Chargement…';
+  try{
+    const saved = await fetchSharedSetting('commentaire_commande_' + key);
+    if(prodKey() !== key) return;
+    prodCommentSaved = typeof saved === 'string' ? saved : '';
+    input.value = prodCommentSaved; st.textContent = '';
+  }catch(e){ st.textContent = 'Erreur de chargement : ' + e.message; }
+}
+async function saveProdComment(){
+  const key = prodKey();
+  const input = document.getElementById('prodComment'), st = document.getElementById('prodCommentStatus');
+  if(!key || !input) return;
+  const text = input.value.trim();
+  if(text === prodCommentSaved) return;
+  st.style.color = 'var(--muted)'; st.textContent = 'Enregistrement…';
+  try{
+    await saveSharedSetting('commentaire_commande_' + key, text);
+    prodCommentSaved = text;
+    st.style.color = 'var(--ok)'; st.textContent = '✔ Enregistré';
+    setTimeout(() => { if(st.textContent === '✔ Enregistré') st.textContent = ''; }, 1500);
+  }catch(e){ st.style.color = 'var(--danger)'; st.textContent = "Échec de l'enregistrement : " + e.message; }
+}
+
+// ---------- Documents (fichiers dans les dossiers réseau + références PocketBase) ----------
+const FS_DB_NAME = 'csb_envoi_axonaut_fs', FS_STORE = 'handles'; // mêmes autorisations que Gestion Commande
+const docsHandles = { fabrication: null, demande_prix: null };
+const CATEGORY_LABELS = { fabrication: 'Fabrication', demande_prix: 'Demande de prix' };
+function openFsDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(FS_DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(FS_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function fsLoadHandle(key){
+  try{
+    const db = await openFsDB();
+    return await new Promise((resolve, reject) => {
+      const r = db.transaction(FS_STORE, 'readonly').objectStore(FS_STORE).get(key);
+      r.onsuccess = () => resolve(r.result || null); r.onerror = () => reject(r.error);
+    });
+  }catch(e){ return null; }
+}
+async function fsSaveHandle(key, handle){
+  const db = await openFsDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(FS_STORE, 'readwrite');
+    tx.objectStore(FS_STORE).put(handle, key);
+    tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+  });
+}
+async function ensureDocsFolderAccess(category, promptIfNeeded){
+  if(!('showDirectoryPicker' in window)){ if(promptIfNeeded) alert("L'accès aux dossiers n'est pas disponible ici."); return false; }
+  if(!docsHandles[category]) docsHandles[category] = await fsLoadHandle(category);
+  if(docsHandles[category]){
+    try{
+      if(await docsHandles[category].queryPermission({ mode: 'readwrite' }) === 'granted') return true;
+      if(promptIfNeeded && await docsHandles[category].requestPermission({ mode: 'readwrite' }) === 'granted') return true;
+    }catch(e){}
+  }
+  if(promptIfNeeded){
+    try{
+      alert(`Choisis le dossier réseau « ${CATEGORY_LABELS[category]} » (le même que dans Gestion Commande → Réglages).`);
+      docsHandles[category] = await window.showDirectoryPicker({ mode: 'readwrite' });
+      await fsSaveHandle(category, docsHandles[category]);
+      return true;
+    }catch(e){ return false; }
+  }
+  return false;
+}
+function docsCollection(){
+  try{ const c = JSON.parse(localStorage.getItem('csb_envoi_axonaut_pb_config') || '{}'); if(c.docsCollection) return c.docsCollection; }catch(e){}
+  return 'devis_documents';
+}
+function docsBase(){ return CSBAuth.getPbUrl().replace(/\/+$/, '') + '/api/collections/' + encodeURIComponent(docsCollection()) + '/records'; }
+async function docsFetch(key){
+  const f = encodeURIComponent(`quotation_id='${key}'`);
+  const res = await CSBAuth.authedFetch(docsBase() + `?filter=(${f})&sort=-created&perPage=200`);
+  if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
+  return (await res.json()).items || [];
+}
+function uniqueDocFilename(numero, original){
+  const safeOriginal = (original || 'fichier').replace(/[^a-zA-Z0-9._-]+/g, '_');
+  const safeNumber = (numero || 'devis').replace(/[^a-zA-Z0-9_-]+/g, '_');
+  return `${safeNumber}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}_${safeOriginal}`;
+}
+function docsMsg(text, color){ const m = document.getElementById('docsMsg'); if(m){ m.style.color = color || 'var(--muted)'; m.textContent = text; } }
+async function uploadDocuments(files, category){
+  const key = prodKey();
+  if(!key) return;
+  if(category === 'demande_prix' && !isAdmin()){ docsMsg('Réservé aux administrateurs.', 'var(--danger)'); return; }
+  if(!(await ensureDocsFolderAccess(category, true))){ docsMsg(`Accès au dossier « ${CATEGORY_LABELS[category]} » non autorisé.`, 'var(--danger)'); return; }
+  let done = 0;
+  for(const file of files){
+    docsMsg(`Envoi de ${file.name}… (${done + 1}/${files.length})`);
+    const name = uniqueDocFilename(current.numero, file.name);
+    try{
+      const fh = await docsHandles[category].getFileHandle(name, { create: true });
+      const w = await fh.createWritable(); await w.write(file); await w.close();
+      const res = await CSBAuth.authedFetch(docsBase(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        quotation_id: key, numero_devis: current.numero || '', category, filename: name, original_filename: file.name, uploaded_by: userName() }) });
+      if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
+      done++;
+    }catch(e){ docsMsg(`Erreur sur ${file.name} : ${e.message}`, 'var(--danger)'); }
+  }
+  docsMsg(`✔ ${done} fichier(s) envoyé(s).`, 'var(--ok)');
+  loadDocuments();
+}
+async function saveHtmlAsDocument(html, text, category){
+  const page = html || `<pre>${escapeHtml(text || '')}</pre>`;
+  await uploadDocuments([new File([page], 'email_' + Date.now() + '.html', { type: 'text/html' })], category);
+}
+async function pasteDocument(category){
+  docsMsg('Lecture du presse-papier…');
+  try{
+    for(const item of await navigator.clipboard.read()){
+      if(item.types.includes('text/html')){ await saveHtmlAsDocument(await (await item.getType('text/html')).text(), null, category); return; }
+    }
+    const text = await navigator.clipboard.readText();
+    if(text) await saveHtmlAsDocument(null, text, category); else docsMsg('Le presse-papier semble vide.', 'var(--danger)');
+  }catch(e){ docsMsg('Impossible de lire le presse-papier : ' + e.message, 'var(--danger)'); }
+}
+function setupDropzones(){
+  document.querySelectorAll('#prodBox .dropzone').forEach(zone => {
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', async e => {
+      e.preventDefault(); zone.classList.remove('dragover');
+      const files = [...(e.dataTransfer.files || [])];
+      if(files.length){ await uploadDocuments(files, zone.dataset.category); return; }
+      const html = e.dataTransfer.getData('text/html'), text = e.dataTransfer.getData('text/plain');
+      if(html || text) await saveHtmlAsDocument(html, text, zone.dataset.category);
+      else docsMsg("Cet élément ne peut pas être déposé directement — copie l'e-mail puis utilise « 📋 Coller ».", 'var(--danger)');
+    });
+    zone.addEventListener('click', e => {
+      if(e.target.closest('.paste-btn')) return;
+      const input = document.createElement('input');
+      input.type = 'file'; input.multiple = true;
+      input.onchange = () => { if(input.files.length) uploadDocuments([...input.files], zone.dataset.category); };
+      input.click();
+    });
+  });
+  document.querySelectorAll('#prodBox .paste-btn').forEach(bt => bt.addEventListener('click', e => { e.stopPropagation(); pasteDocument(bt.dataset.category); }));
+}
+let docThumbUrls = [];
+async function loadDocuments(){
+  const key = prodKey();
+  const fab = document.getElementById('docsFab'), dp = document.getElementById('docsDp');
+  if(!fab) return;
+  docThumbUrls.forEach(u => URL.revokeObjectURL(u)); docThumbUrls = [];
+  fab.innerHTML = '<div class="hint">Chargement des documents…</div>';
+  try{
+    const docs = await docsFetch(key);
+    if(prodKey() !== key) return;
+    renderDocThumbs(fab, docs.filter(d => d.category === 'fabrication'), 'fabrication', 'Aucun document de fabrication.');
+    if(dp) renderDocList(dp, docs.filter(d => d.category === 'demande_prix'), 'demande_prix', 'Aucun document.');
+  }catch(e){ fab.innerHTML = `<div class="hint" style="color:var(--danger);">Erreur : ${escapeHtml(e.message)}</div>`; }
+}
+async function deleteDocument(id, filename, category){
+  if(!confirm('Supprimer définitivement ce document (fichier + référence) ?')) return;
+  try{
+    if(await ensureDocsFolderAccess(category, true)){
+      try{ await docsHandles[category].removeEntry(filename); }catch(e){ console.warn('Fichier déjà absent', e); }
+    }else alert(`Dossier « ${CATEGORY_LABELS[category]} » non autorisé — seule la référence sera supprimée.`);
+    const res = await CSBAuth.authedFetch(docsBase() + '/' + id, { method: 'DELETE' });
+    if(!res.ok && res.status !== 404) throw new Error('PocketBase HTTP ' + res.status);
+    loadDocuments();
+  }catch(e){ alert('Erreur : ' + e.message); }
+}
+function renderDocList(box, docs, category, emptyText){
+  if(!docs.length){ box.innerHTML = `<div class="hint">${emptyText}</div>`; return; }
+  box.innerHTML = docs.map(d => `<div class="doc-row" data-id="${d.id}" data-file="${escapeHtml(d.filename)}"><span>📄 ${escapeHtml(d.original_filename || d.filename)}</span><button class="iconbtn" data-del title="Supprimer">🗑</button></div>`).join('');
+  box.querySelectorAll('.doc-row').forEach(row => {
+    row.addEventListener('click', e => { if(!e.target.closest('[data-del]')) openDocument(row.dataset.file, category); });
+    row.querySelector('[data-del]').addEventListener('click', e => { e.stopPropagation(); deleteDocument(row.dataset.id, row.dataset.file, category); });
+  });
+}
+async function renderDocThumbs(box, docs, category, emptyText){
+  if(!docs.length){ box.innerHTML = `<div class="hint">${emptyText}</div>`; return; }
+  box.innerHTML = '<div class="doc-thumbs">' + docs.map(d => `<div class="doc-thumb" data-id="${d.id}" data-file="${escapeHtml(d.filename)}" title="${escapeHtml(d.original_filename || d.filename)}">
+      <div class="doc-thumb-box">📄</div><div class="doc-thumb-name">${escapeHtml(d.original_filename || d.filename)}</div>
+      <button type="button" class="doc-thumb-del" title="Supprimer">✕</button></div>`).join('') + '</div>';
+  box.querySelectorAll('.doc-thumb').forEach(card => {
+    card.addEventListener('click', e => { if(!e.target.closest('.doc-thumb-del')) openDocument(card.dataset.file, category); });
+    card.querySelector('.doc-thumb-del').addEventListener('click', e => { e.stopPropagation(); deleteDocument(card.dataset.id, card.dataset.file, category); });
+  });
+  let access = false;
+  try{ access = await ensureDocsFolderAccess(category, false); }catch(e){}
+  if(!access){
+    const bar = document.createElement('div');
+    bar.style.marginBottom = '8px';
+    bar.innerHTML = `<button type="button" class="btn small">🔓 Autoriser le dossier « ${CATEGORY_LABELS[category]} » pour voir les aperçus</button>`;
+    bar.firstChild.addEventListener('click', async () => { if(await ensureDocsFolderAccess(category, true)) loadDocuments(); });
+    box.insertBefore(bar, box.firstChild);
+    return;
+  }
+  for(const card of box.querySelectorAll('.doc-thumb')){
+    try{
+      const file = await (await docsHandles[category].getFileHandle(card.dataset.file)).getFile();
+      const slot = card.querySelector('.doc-thumb-box');
+      const name = card.dataset.file.toLowerCase();
+      if(file.type.startsWith('image/')){ const u = URL.createObjectURL(file); docThumbUrls.push(u); slot.innerHTML = `<img src="${u}" alt="">`; }
+      else if(file.type === 'application/pdf'){ const u = URL.createObjectURL(file); docThumbUrls.push(u); slot.innerHTML = `<iframe src="${u}#toolbar=0&navpanes=0&view=Fit" tabindex="-1"></iframe>`; }
+      else if(/\.html?$/.test(name)) slot.textContent = '✉️';
+      else slot.innerHTML = `<span style="font-size:14px; font-weight:700;">${escapeHtml((name.split('.').pop() || '').toUpperCase().slice(0, 5))}</span>`;
+    }catch(e){}
+  }
+}
+let docViewerUrl = null;
+async function openDocument(filename, category){
+  if(!(await ensureDocsFolderAccess(category, true))){ alert(`Accès au dossier « ${CATEGORY_LABELS[category]} » non autorisé sur ce poste.`); return; }
+  try{
+    const file = await (await docsHandles[category].getFileHandle(filename)).getFile();
+    if(docViewerUrl) URL.revokeObjectURL(docViewerUrl);
+    const url = docViewerUrl = URL.createObjectURL(file);
+    const body = document.getElementById('docViewerBody');
+    document.getElementById('docViewerTitle').textContent = filename;
+    if(file.type === 'application/pdf' || file.type === 'text/html' || /\.html?$/i.test(filename)) body.innerHTML = `<iframe src="${url}" style="width:100%; height:100%; border:none; background:#fff;"></iframe>`;
+    else if(file.type.startsWith('image/')) body.innerHTML = `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#222; overflow:auto;"><img src="${url}" style="max-width:100%; max-height:100%; object-fit:contain;"></div>`;
+    else body.innerHTML = `<div style="width:100%; padding:30px; text-align:center;"><p class="hint">Aperçu non disponible pour ce type de fichier.</p><a href="${url}" download="${escapeHtml(file.name)}" class="btn primary">⭳ Télécharger</a></div>`;
+    document.getElementById('docViewer').classList.add('show');
+  }catch(e){ alert("Impossible d'ouvrir ce fichier : " + e.message); }
+}
+document.getElementById('docViewerClose').addEventListener('click', () => {
+  document.getElementById('docViewer').classList.remove('show');
+  document.getElementById('docViewerBody').innerHTML = '';
+  if(docViewerUrl){ URL.revokeObjectURL(docViewerUrl); docViewerUrl = null; }
+});
 
 // ================== Envoi par email et suivi client (étape E) ==================
 // Le suivi est hébergé par le relais Axonaut (même adresse), sauf si une autre adresse est réglée.
@@ -1911,13 +2317,14 @@ function renderLines(){
   }
   const rates = taxRates || [20, 10, 5.5, 0];
   body.innerHTML = current.lines.map((l, i) => {
-    const actions = locked ? '' : `<div class="l-actions"><button class="iconbtn" data-act="up" data-i="${i}" title="Monter">▲</button><button class="iconbtn" data-act="down" data-i="${i}" title="Descendre">▼</button><button class="iconbtn" data-act="del" data-i="${i}" title="Supprimer la ligne">✕</button></div>`;
+    const selBox = `<input type="checkbox" class="l-sel" data-sel="${i}" ${selectedLines.has(l) ? 'checked' : ''} title="Sélectionner pour copier">`;
+    const actions = locked ? `<div class="l-actions">${selBox}</div>` : `<div class="l-actions"><input type="checkbox" class="l-sel" data-sel="${i}" ${selectedLines.has(l) ? 'checked' : ''} title="Sélectionner (copier, dupliquer, supprimer plusieurs lignes)"><button class="iconbtn" data-act="dup" data-i="${i}" title="Dupliquer la ligne">⧉</button><button class="iconbtn" data-act="up" data-i="${i}" title="Monter">▲</button><button class="iconbtn" data-act="down" data-i="${i}" title="Descendre">▼</button><button class="iconbtn" data-act="del" data-i="${i}" title="Supprimer la ligne">✕</button></div>`;
     if(l.type === 'section'){
-      return `<tr class="section" data-row="${i}"><td colspan="4"><div style="display:flex; align-items:center; gap:8px;"><input type="text" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Titre de section (ex. Casaques)">${actions.replace('l-actions', 'l-actions" style="margin-top:0;')}</div></td></tr>`;
+      return `<tr class="section ${selectedLines.has(l) ? 'selected' : ''}" data-row="${i}"><td colspan="4"><div style="display:flex; align-items:center; gap:8px;"><input type="text" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Titre de section (ex. Casaques)">${actions.replace('l-actions', 'l-actions" style="margin-top:0;')}</div></td></tr>`;
     }
     const stock = productStock(l);
     const meta = [l.productCode ? 'Réf. ' + escapeHtml(l.productCode) : (l.productId ? '' : 'Ligne libre')].filter(Boolean).join(' · ');
-    return `<tr data-row="${i}">
+    return `<tr data-row="${i}" class="${selectedLines.has(l) ? 'selected' : ''}">
       <td>
         <input type="text" class="l-name" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Désignation">
         <div class="l-desc" data-desc="${i}" contenteditable="${locked ? 'false' : 'true'}" data-placeholder="Description (facultatif)">${descToHtml(l.description)}</div>
@@ -1967,19 +2374,100 @@ function renderLines(){
       alignTvaPills(); changed();
     });
   });
+  const bindSelection = () => {
+    body.querySelectorAll('[data-sel]').forEach(cb => cb.addEventListener('change', () => {
+      const l = current.lines[Number(cb.dataset.sel)];
+      if(cb.checked) selectedLines.add(l); else selectedLines.delete(l);
+      cb.closest('tr').classList.toggle('selected', cb.checked);
+      renderSelectionBar();
+    }));
+    renderSelectionBar();
+  };
   if(locked){
-    body.querySelectorAll('input').forEach(el => el.disabled = true);
+    body.querySelectorAll('input:not(.l-sel)').forEach(el => el.disabled = true);
+    bindSelection();
     return;
   }
   body.querySelectorAll('[data-act]').forEach(btn => btn.addEventListener('click', () => {
     const i = Number(btn.dataset.i);
     const lines = current.lines;
-    if(btn.dataset.act === 'del') lines.splice(i, 1);
+    if(btn.dataset.act === 'del'){ selectedLines.delete(lines[i]); lines.splice(i, 1); }
+    else if(btn.dataset.act === 'dup') lines.splice(i + 1, 0, cloneLine(lines[i]));
     else if(btn.dataset.act === 'up' && i > 0) [lines[i-1], lines[i]] = [lines[i], lines[i-1]];
     else if(btn.dataset.act === 'down' && i < lines.length - 1) [lines[i+1], lines[i]] = [lines[i], lines[i+1]];
     else return;
     renderLines(); renderTotals(); changed();
   }));
+  bindSelection();
+}
+
+// ---------- Copie de lignes ----------
+// Sélection par cases à cocher, puis : dupliquer dans ce devis, copier (pour coller dans ce devis ou
+// dans un autre — copie gardée sur ce poste), supprimer. Un titre de section se copie comme une ligne.
+let selectedLines = new Set();
+const COPIED_LINES_KEY = 'csb_devis_lignes_copiees';
+function cloneLine(l){ return JSON.parse(JSON.stringify(l)); }
+function selectedInOrder(){ return current.lines.filter(l => selectedLines.has(l)); }
+function readCopiedLines(){
+  try{ const c = JSON.parse(localStorage.getItem(COPIED_LINES_KEY) || 'null'); return c && Array.isArray(c.lines) && c.lines.length ? c : null; }
+  catch(e){ return null; }
+}
+function renderSelectionBar(){
+  const bar = document.getElementById('selBar');
+  if(bar){
+    const n = current ? selectedInOrder().length : 0;
+    const ro = !current || isLocked(current);
+    bar.classList.toggle('show', n > 0);
+    bar.innerHTML = n ? `<b>${n} ligne${n > 1 ? 's' : ''} sélectionnée${n > 1 ? 's' : ''}</b>
+      ${ro ? '' : '<button class="btn small" id="selDup">⧉ Dupliquer</button>'}
+      <button class="btn small" id="selCopy" title="Copier pour coller dans ce devis ou dans un autre">📋 Copier</button>
+      ${ro ? '' : '<button class="btn small danger" id="selDel">🗑 Supprimer</button>'}
+      <button class="btn small" id="selNone">Tout désélectionner</button>` : '';
+    if(n){
+      if(!ro) document.getElementById('selDup').onclick = () => {
+        const sel = selectedInOrder();
+        const last = current.lines.lastIndexOf(sel[sel.length - 1]);
+        const copies = sel.map(cloneLine);
+        current.lines.splice(last + 1, 0, ...copies);
+        selectedLines.clear(); // après duplication, plus rien n'est sélectionné
+        renderLines(); renderTotals(); changed();
+      };
+      document.getElementById('selCopy').onclick = () => {
+        const sel = selectedInOrder();
+        try{ localStorage.setItem(COPIED_LINES_KEY, JSON.stringify({ at: new Date().toISOString(), from: current.numero || 'brouillon', lines: sel.map(cloneLine) })); }
+        catch(e){ alert('Copie impossible : ' + e.message); return; }
+        selectedLines.clear();
+        renderLines();
+        setSaveState(`${sel.length} ligne${sel.length > 1 ? 's' : ''} copiée${sel.length > 1 ? 's' : ''} — « 📥 Coller » dans ce devis ou dans un autre`);
+      };
+      if(!ro) document.getElementById('selDel').onclick = () => {
+        const sel = selectedInOrder();
+        if(!confirm(`Supprimer ${sel.length} ligne${sel.length > 1 ? 's' : ''} du devis ?`)) return;
+        current.lines = current.lines.filter(l => !selectedLines.has(l));
+        selectedLines.clear();
+        renderLines(); renderTotals(); changed();
+      };
+      document.getElementById('selNone').onclick = () => { selectedLines.clear(); renderLines(); };
+    }
+  }
+  const paste = document.getElementById('pasteLinesBtn');
+  if(paste){
+    const c = readCopiedLines();
+    const show = !!c && !!current && !isLocked(current);
+    paste.style.display = show ? '' : 'none';
+    if(show){
+      const n = c.lines.length;
+      paste.textContent = `📥 Coller ${n} ligne${n > 1 ? 's' : ''}`;
+      paste.title = `Copiée${n > 1 ? 's' : ''} depuis ${c.from === 'brouillon' ? 'un brouillon' : 'le devis ' + c.from} le ${new Date(c.at).toLocaleString('fr-FR')} — ajoutée${n > 1 ? 's' : ''} à la fin`;
+      paste.onclick = () => {
+        const cc = readCopiedLines(); if(!cc) return;
+        const copies = cc.lines.map(cloneLine);
+        current.lines.push(...copies);
+        selectedLines.clear();
+        renderLines(); renderTotals(); changed();
+      };
+    }
+  }
 }
 // Chaque pastille TVA suit la hauteur de sa ligne (les descriptions sont de longueur variable).
 function alignTvaPills(){

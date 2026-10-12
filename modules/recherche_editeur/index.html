@@ -87,7 +87,10 @@
   .view-mode-btn{font-size:15px; padding:4px 8px;}
   .view-mode-btn.active{background:var(--paper-2); color:var(--ink); border-color:var(--line);}
   .current-dir-path-row{padding:0 14px 8px; border-bottom:1px solid var(--line);}
-  .current-dir-path{font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;}
+  .current-dir-path{font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; flex:1; min-width:0;}
+  .current-dir-path-row{display:flex; align-items:center; gap:8px;}
+  .path-copy-btn{font-size:11px; padding:2px 8px; white-space:nowrap;}
+  .path-copy-msg{font-size:11px; color:#2e7d32; white-space:nowrap;}
 
   .explorer-body{flex:1; min-height:0; overflow:auto; padding:14px;}
   .explorer-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:10px;}
@@ -181,6 +184,7 @@
     <div class="tree-panel">
       <div class="tree-panel-header">
         <span>Arborescence</span>
+        <button type="button" class="ghost icon" id="btnGoToPath" title="Aller à un chemin (collé depuis un autre poste, Dropbox…)">↪</button>
         <button type="button" class="ghost icon" id="btnPickFolder" title="Ouvrir un dossier précis…">📁</button>
       </div>
       <div class="tree-body" id="treeBody"><span class="muted" style="font-size:12px;">Chargement…</span></div>
@@ -205,6 +209,8 @@
     </div>
     <div class="current-dir-path-row" id="currentDirPathRow">
       <span class="current-dir-path" id="currentDirPath"></span>
+      <span class="path-copy-msg" id="pathCopyMsg"></span>
+      <button type="button" class="ghost path-copy-btn" id="btnCopyPath" style="display:none;" title="Copie un chemin valable sur tous les postes (Dropbox compris)">📋 Copier le chemin</button>
     </div>
     <div class="explorer-body" id="explorerBody">
       <div class="explorer-empty">Choisis un dossier dans l'arborescence pour parcourir ses programmes de broderie.</div>
@@ -537,7 +543,43 @@ async function loadDir(dirPath){
   document.getElementById('btnRefreshDir').disabled = false;
   document.getElementById('currentDirPath').textContent = currentDirPath;
   document.getElementById('currentDirPath').title = currentDirPath;
+  document.getElementById('btnCopyPath').style.display = '';
+  document.getElementById('pathCopyMsg').textContent = '';
   refreshView();
+}
+
+// ---------- Chemins partageables entre postes ----------
+// Dans une Dropbox, le chemin local (C:\Users\<nom>\Dropbox\…) change d'un poste à l'autre : on
+// copie donc la forme %USERPROFILE%\Dropbox\… (comprise par l'Explorateur Windows et par l'appli),
+// et « Aller à un chemin » retrouve le bon dossier même à partir d'un chemin pris sur un autre poste.
+async function copyCurrentPath(){
+  if (!currentDirPath) return;
+  let shared = currentDirPath;
+  try { if (window.csbHost.portablePath) shared = await window.csbHost.portablePath(currentDirPath); } catch (e) {}
+  const msg = document.getElementById('pathCopyMsg');
+  try {
+    await navigator.clipboard.writeText(shared);
+    msg.textContent = shared !== currentDirPath ? '✔ Copié (valable sur tous les postes)' : '✔ Copié';
+    msg.title = shared;
+  } catch (e) {
+    await customPrompt('Copie ce chemin (Ctrl + C) :', shared);
+  }
+  setTimeout(() => { if (msg.textContent.startsWith('✔')) msg.textContent = ''; }, 4000);
+}
+async function goToPath(){
+  const input = await customPrompt('Chemin du dossier ou du fichier (copié sur ce poste ou sur un autre, Dropbox compris) :', '');
+  if (!input || !input.trim()) return;
+  let target = input.trim().replace(/^"(.*)"$/, '$1');
+  let exists = true;
+  try {
+    if (window.csbHost.resolvePath) { const r = await window.csbHost.resolvePath(target); target = r.path; exists = r.exists; }
+  } catch (e) {}
+  if (!exists) { alert('Chemin introuvable sur ce poste :\n' + target + '\n\n(Dossier déplacé, Dropbox pas encore synchronisée, ou lecteur réseau inaccessible.)'); return; }
+  // Un fichier : on ouvre son dossier.
+  const res = await window.csbHost.listDir(target);
+  const dir = (res && !res.error) ? target : target.replace(/[\\/][^\\/]+$/, '');
+  if (!findTreeNode(dir)) driveRoots.push({ name: dir, path: dir, kind: 'dir', expanded: false, loaded: false, children: [] });
+  await selectTreeNode(dir);
 }
 
 // Appelé quand le DOSSIER ou le TEXTE recherché change : relance une
@@ -899,6 +941,8 @@ document.getElementById('fileContextMenu').addEventListener('click', async (e) =
 });
 
 document.getElementById('btnPickFolder').addEventListener('click', pickFolder);
+document.getElementById('btnGoToPath').addEventListener('click', goToPath);
+document.getElementById('btnCopyPath').addEventListener('click', copyCurrentPath);
 document.getElementById('btnRefreshDir').addEventListener('click', () => { if (currentDirPath) loadDir(currentDirPath); });
 document.getElementById('searchInput').addEventListener('input', () => {
   clearTimeout(searchDebounceTimer);

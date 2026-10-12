@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('csbHost', {
     return () => ipcRenderer.removeListener('csb:search-files-done', listener);
   },
   openPath: (filePath) => ipcRenderer.invoke('csb:open-path', filePath),
+  resolvePath: (p) => ipcRenderer.invoke('csb:resolve-path', p),
+  portablePath: (p) => ipcRenderer.invoke('csb:portable-path', p),
   showInFolder: (filePath) => ipcRenderer.invoke('csb:show-in-folder', filePath),
   htmlToPdf: (html, footerHtml, headerHtml) => ipcRenderer.invoke('csb:html-to-pdf', { html, footerHtml, headerHtml }),
   savePdf: (base64, defaultName) => ipcRenderer.invoke('csb:save-pdf', { base64, defaultName }),

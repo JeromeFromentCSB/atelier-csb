@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.44', items: [
+    "Devis : carte « Production » dans l'onglet Informations — programmes à utiliser, documents de fabrication et de demande de prix, commentaire de la commande (mêmes données que Détails Commande dans Gestion Commande)",
+    "Devis : copie de lignes — ⧉ dupliquer une ligne, sélection de plusieurs lignes pour les dupliquer, les supprimer ou les copier puis les coller dans un autre devis (copie possible aussi depuis un devis verrouillé)",
+    "Chemins Dropbox valables sur tous les postes : « 📋 Copier le chemin » et « ↪ Aller à un chemin » dans Recherche / Éditeur ; les chemins Dropbox d'un autre poste (programmes des commandes compris) s'ouvrent sur la Dropbox du poste utilisé",
+    "Programmes à utiliser (Gestion Commande et Devis) : bouton « 📋 Coller un chemin »",
+  ]},
   { v: '0.2.43', items: [
     "Devis : suppression des devis et des commandes (sauf facturés), avec confirmation — nouveau droit « Supprimer des devis et commandes » (un brouillon sans numéro reste supprimable par ceux qui créent les devis)",
     "Gestion Commande : bouton « Supprimer la commande » dans Détails Commande pour les commandes du module Devis ; la commande disparaît aussi de la page photo du téléphone et le lien client est désactivé",

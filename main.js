@@ -199,11 +199,76 @@ ipcMain.handle('csb:set-config', (_event, partial) => writeConfig(partial));
 ipcMain.handle('csb:open-external', (_event, url) => shell.openExternal(url));
 // shell.openPath ne lève jamais d'exception : il résout une chaîne vide en cas de succès,
 // ou un message d'erreur sinon (ex. aucune appli associée à l'extension).
-ipcMain.handle('csb:open-path', (_event, filePath) => shell.openPath(filePath));
+// ---------- Chemins Dropbox valables sur tous les postes ----------
+// Dropbox est installé dans le dossier de chaque utilisateur Windows (C:\Users\<nom>\Dropbox) :
+// un chemin copié sur un poste n'existe pas tel quel sur un autre. On sait donc :
+//  - écrire un chemin Dropbox sous une forme partageable : %USERPROFILE%\Dropbox\… (que
+//    l'Explorateur Windows comprend aussi), ou Dropbox\… si Dropbox est installé ailleurs ;
+//  - retrouver, sur ce poste, le bon dossier à partir de n'importe laquelle de ces formes, et même
+//    à partir d'un chemin complet pris sur un autre poste (…\Dropbox\… ou …\Dropbox (Équipe)\…).
+let dropboxRootsCache = { at: 0, roots: [] };
+function localDropboxRoots() {
+  if (Date.now() - dropboxRootsCache.at < 30000) return dropboxRootsCache.roots;
+  const roots = [];
+  for (const infoPath of [path.join(app.getPath('appData'), 'Dropbox', 'info.json'), path.join(os.homedir(), 'AppData', 'Local', 'Dropbox', 'info.json')]) {
+    try {
+      if (!fs.existsSync(infoPath)) continue;
+      const info = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+      for (const key of ['personal', 'business']) {
+        const entry = info[key];
+        if (entry && entry.path && fs.existsSync(entry.path) && !roots.some(r => r.path === entry.path)) roots.push({ key, path: entry.path });
+      }
+    } catch (e) { /* fichier illisible : on essaie le suivant */ }
+  }
+  dropboxRootsCache = { at: Date.now(), roots };
+  return roots;
+}
+function pickDropboxRoot(roots, folderName) {
+  const n = String(folderName || '').toLowerCase();
+  return roots.find(r => path.basename(r.path).toLowerCase() === n) || roots[0] || null;
+}
+function resolvePortablePath(p) {
+  if (!p || typeof p !== 'string') return p;
+  let s = p.trim().replace(/%([A-Za-z0-9_]+)%/g, (m, v) => (process.env[v] !== undefined ? process.env[v] : m));
+  const roots = localDropboxRoots();
+  // Forme courte « Dropbox\… » (chemin relatif à la Dropbox)
+  const short = s.match(/^(dropbox(?: \([^\\/)]+\))?)(?:[\\/](.*))?$/i);
+  if (short && !path.isAbsolute(s)) {
+    const r = pickDropboxRoot(roots, short[1]);
+    if (r) return path.join(r.path, short[2] || '');
+  }
+  if (fs.existsSync(s)) return s;
+  // Chemin complet pris sur un autre poste : on garde ce qui suit le dossier Dropbox.
+  const seg = s.match(/[\\/](Dropbox(?: \([^\\/]+\))?)(?:[\\/](.*))?$/i);
+  if (seg && roots.length) {
+    const rest = seg[2] || '';
+    const first = pickDropboxRoot(roots, seg[1]);
+    for (const r of [first, ...roots.filter(x => x !== first)]) {
+      const cand = path.join(r.path, rest);
+      if (fs.existsSync(cand)) return cand;
+    }
+  }
+  return s;
+}
+function toPortablePath(p) {
+  if (!p || typeof p !== 'string') return p;
+  for (const r of localDropboxRoots()) {
+    const rel = path.relative(r.path, p);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
+    const fromHome = path.relative(os.homedir(), r.path);
+    const base = (!fromHome.startsWith('..') && !path.isAbsolute(fromHome)) ? path.join('%USERPROFILE%', fromHome) : path.basename(r.path);
+    return rel ? path.join(base, rel) : base;
+  }
+  return p;
+}
+ipcMain.handle('csb:resolve-path', (_event, p) => { const r = resolvePortablePath(p); return { path: r, exists: !!r && fs.existsSync(r) }; });
+ipcMain.handle('csb:portable-path', (_event, p) => toPortablePath(p));
+
+ipcMain.handle('csb:open-path', (_event, filePath) => shell.openPath(resolvePortablePath(filePath)));
 // Ouvre le dossier du fichier dans l'Explorateur (Finder sur Mac), fichier sélectionné.
-ipcMain.handle('csb:show-in-folder', (_event, filePath) => { shell.showItemInFolder(filePath); return true; });
+ipcMain.handle('csb:show-in-folder', (_event, filePath) => { shell.showItemInFolder(resolvePortablePath(filePath)); return true; });
 // Déplace vers la corbeille (récupérable), plutôt qu'une suppression définitive.
-ipcMain.handle('csb:trash-file', (_event, filePath) => shell.trashItem(filePath));
+ipcMain.handle('csb:trash-file', (_event, filePath) => shell.trashItem(resolvePortablePath(filePath)));
 // Bug connu d'Electron sous Windows : après une boîte confirm()/alert(), ou quand une <webview>
 // (Axonaut, Fournisseurs) a gardé le focus clavier, la fenêtre n'envoie plus les frappes aux
 // champs de saisie — on clique dedans mais on ne peut plus rien taper. Le preload appelle ceci
@@ -434,7 +499,8 @@ ipcMain.handle('csb:pick-folder', async (event) => {
   if (res.canceled || !res.filePaths.length) return null;
   return res.filePaths[0];
 });
-ipcMain.handle('csb:list-dir', (_event, dirPath) => {
+ipcMain.handle('csb:list-dir', (_event, requestedPath) => {
+  const dirPath = resolvePortablePath(requestedPath);
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
     const items = entries.map((e) => {
@@ -460,7 +526,7 @@ ipcMain.handle('csb:pick-paths', async (event, kind) => {
   const res = await dialog.showOpenDialog(win, { properties });
   return res.canceled ? [] : res.filePaths;
 });
-ipcMain.handle('csb:read-file-bytes', (_event, filePath) => new Uint8Array(fs.readFileSync(filePath)));
+ipcMain.handle('csb:read-file-bytes', (_event, filePath) => new Uint8Array(fs.readFileSync(resolvePortablePath(filePath))));
 
 // Recherche récursive (dossier courant + tous ses sous-dossiers), filtrée par
 // extension et par un mot dans le nom de fichier — en flux : les résultats
@@ -478,6 +544,7 @@ const SEARCH_BATCH_DELAY_MS = 120;
 let searchRequestCounter = 0;
 let activeSearchId = 0;
 ipcMain.handle('csb:search-files-start', (event, { rootPath, query, exts, includeRecycle }) => {
+  rootPath = resolvePortablePath(rootPath);
   const requestId = ++searchRequestCounter;
   activeSearchId = requestId;
   // Chaque module tourne dans sa propre <iframe> (nodeIntegrationInSubFrames),
