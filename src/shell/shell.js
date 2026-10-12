@@ -890,6 +890,25 @@
     if (e.target.id === 'versionHistoryOverlay') e.target.classList.remove('show');
   });
 
+  // ================== Navigation d'un module à l'autre ==================
+  // Un module demande à en ouvrir un autre sur un élément précis (ex. Gestion Commande → le devis
+  // d'une commande dans le module Devis) : le socle affiche ce module puis lui transmet la demande.
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (!msg || msg.type !== 'csb:open-module') return;
+    const mod = MODULES.find((m) => m.id === msg.module);
+    if (!mod) return;
+    if (!CSBAuth.hasModuleAccess(mod.id)) { alert("Tu n'as pas accès au module « " + mod.label + " » — demande à un administrateur."); return; }
+    const alreadyLoaded = !!moduleFrames[mod.id];
+    openModule(mod);
+    const frame = moduleFrames[mod.id];
+    if (!frame || !frame.contentWindow) return;
+    const forward = () => frame.contentWindow.postMessage({ type: 'csb:open-item', payload: msg.payload || {} }, '*');
+    // Module pas encore chargé : on attend la fin de son chargement (le module garde la demande
+    // en attente tant que ses données ne sont pas prêtes).
+    if (alreadyLoaded) forward(); else frame.addEventListener('load', forward, { once: true });
+  });
+
   // ================== Relais vectorisation (VTracer, moteur Node côté principal) ==================
   // Le module Vectorisation tourne dans un iframe sandboxé sans accès à Node ; le moteur VTracer,
   // lui, ne peut tourner que côté processus principal. Le socle sert donc de pont via postMessage.

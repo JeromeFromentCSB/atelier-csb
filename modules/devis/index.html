@@ -29,11 +29,12 @@
   .sidebar header{ padding:18px 16px 10px; }
   .sidebar h1{ margin:0 0 10px; font-family:var(--font-display); font-size:21px; font-weight:600; }
   .draft-list{ flex:1; overflow-y:auto; padding:0 10px 16px; }
-  .draft-item{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
-  .draft-item:hover{ border-color:#cfc5b2; }
-  .draft-item.active{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-light); }
-  .draft-item .t{ font-weight:600; }
-  .draft-item .m{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .draft-item{ background:var(--card); border-radius:8px; padding:4px 8px 4px 7px; margin-bottom:5px; cursor:pointer; line-height:1.25; }
+  .draft-item .t{ font-weight:600; font-size:13px; }
+  .draft-item .m{ font-size:12px; color:var(--muted); }
+  .draft-item .row2{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12px; }
+  .draft-item .row2 .cl{ color:var(--ink); min-width:0; overflow-wrap:anywhere; }
+  .draft-item .row2 .ht{ color:var(--muted); white-space:nowrap; }
   .main{ flex:1; overflow-y:auto; padding:22px 28px 60px; min-width:0; }
   .btn{ border:1px solid var(--line); background:var(--card); border-radius:8px; padding:7px 14px; font-weight:600; font-size:13px; }
   .btn:hover{ background:#F1ECE3; }
@@ -76,6 +77,16 @@
   table.lines input:focus{ border-color:#9DB2D3; background:#fff; outline:none; }
   table.lines input.n{ text-align:right; }
   table.lines input.l-name{ font-weight:700; color:#3A3A3A; font-size:14px; padding-left:4px; }
+  .l-head{ display:flex; gap:10px; align-items:flex-start; }
+  .l-head .l-body{ flex:1; min-width:0; }
+  .l-thumb{ width:56px; height:56px; flex-shrink:0; border-radius:6px; border:1.5px dashed #C9C1B3; background:#FBF9F5; color:#B9B2A6; font-size:15px; display:flex; align-items:center; justify-content:center; overflow:hidden; margin-top:2px; cursor:default; }
+  .l-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .l-thumb.has-img{ border:1px solid var(--line); background:#fff; cursor:zoom-in; }
+  .suggestion.with-thumb{ display:flex; gap:10px; align-items:center; }
+  .sug-thumb{ width:36px; height:36px; flex-shrink:0; border-radius:5px; overflow:hidden; background:#FBF9F5; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:#C9C1B3; font-size:12px; }
+  .sug-thumb img{ width:100%; height:100%; object-fit:cover; }
+  #thumbZoom{ position:fixed; z-index:120; display:none; pointer-events:none; background:#fff; border:1px solid var(--line); border-radius:10px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,.2); }
+  #thumbZoom img{ display:block; max-width:260px; max-height:260px; }
   .l-desc{ font-size:13px; color:#3A3A3A; line-height:1.45; margin-top:6px; padding:4px; border:1px solid transparent; border-radius:5px; min-height:22px; overflow-wrap:anywhere; }
   .l-desc:hover{ border-color:#E3E7EE; }
   .l-desc:focus{ border-color:#9DB2D3; outline:none; }
@@ -108,7 +119,9 @@
   .line-actions{ white-space:nowrap; }
   .iconbtn{ border:none; background:none; padding:4px 5px; border-radius:6px; color:var(--muted); }
   .iconbtn:hover{ background:#F1ECE3; color:var(--ink); }
-  .totals{ margin-left:auto; width:340px; max-width:100%; }
+  .cond-layout{ display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; }
+  .cond-fields{ flex:1 1 420px; min-width:0; }
+  .totals{ width:320px; max-width:100%; flex:0 0 auto; background:#FBF9F5; border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
   .totals .tr{ display:flex; justify-content:space-between; padding:4px 0; }
   .totals .tr.big{ font-weight:700; font-size:16px; border-top:1px solid var(--line); margin-top:4px; padding-top:8px; }
   .totals .v{ font-family:"SF Mono", Consolas, monospace; }
@@ -144,9 +157,16 @@
   .st-facture{ background:#EEE5F6; color:#6A3F96; }
   .st-refuse{ background:#FBE7E4; color:#B5452F; }
   .st-annule{ background:#EEEEEE; color:#777; }
-  .draft-item .row1{ display:flex; justify-content:space-between; gap:6px; align-items:center; }
-  .draft-item .row1 .t{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .draft-item .obj{ font-weight:400; color:var(--muted); }
+  /* Liste : l'état du devis se lit à la couleur du cadre (et au survol, près du curseur). */
+  .draft-item{ border:2px solid var(--st-color, var(--line)); border-left-width:6px; }
+  .draft-item:hover{ border-color:var(--st-color, #cfc5b2); filter:brightness(.98); }
+  .draft-item.active{ border-color:var(--st-color, var(--accent)); box-shadow:0 0 0 3px var(--st-light, var(--accent-light)); background:var(--st-light, #FFFDF8); }
+  .draft-item.active .t, .draft-item.active .obj-full, .draft-item.active .row2 .cl, .draft-item.active .row2 .ht{ font-weight:800; color:var(--ink); }
+  .draft-item .row1{ display:flex; justify-content:space-between; gap:6px; align-items:flex-start; }
+  .draft-item .row1 .t{ min-width:0; overflow-wrap:anywhere; }
+  .draft-item .obj-full{ font-size:12.5px; color:var(--ink); overflow-wrap:anywhere; line-height:1.25; }
+  .chip .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+  #stTip{ position:fixed; z-index:100; pointer-events:none; display:none; font-size:12px; font-weight:700; padding:3px 9px; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.15); white-space:nowrap; }
   .actions-bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-bottom:16px; }
   .actions-bar .spacer{ flex:1; }
   .histo{ font-size:12px; color:var(--muted); }
@@ -173,6 +193,13 @@
   .doc-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; margin-bottom:6px; font-size:13px; cursor:pointer; }
   .doc-row:hover{ background:#FBF9F5; }
   #prodComment{ width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; resize:vertical; background:#fff; }
+  /* Client et Livraison côte à côte (l'un sous l'autre si la fenêtre est étroite). */
+  .info-row{ display:flex; gap:16px; align-items:stretch; flex-wrap:wrap; margin-bottom:16px; }
+  .info-row > .card, .info-row > .info-col{ flex:1 1 360px; min-width:0; margin-bottom:0; }
+  /* Colonne de droite : Suivi client puis Historique, l'un sous l'autre. */
+  .info-col{ display:flex; flex-direction:column; gap:16px; }
+  .info-col > .card{ margin-bottom:0; }
+  .info-row .field{ min-width:120px; }
   .pane{ display:none; }
   .pane.on{ display:block; }
   .contact-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
@@ -501,6 +528,14 @@ const STATUTS = {
   facture:   { label:'Facturé' },
   refuse:    { label:'Refusé' },
   annule:    { label:'Annulé' }
+};
+const STATUT_COLORS = {
+  brouillon: { c:'#A89F90', light:'#EEE9E0', text:'#5F574B' },
+  envoye:    { c:'#2D5B9A', light:'#E3ECF8', text:'#2D5B9A' },
+  accepte:   { c:'#2E7D32', light:'#E3F2E4', text:'#2E7D32' },
+  facture:   { c:'#6A3F96', light:'#EEE5F6', text:'#6A3F96' },
+  refuse:    { c:'#B5452F', light:'#FBE7E4', text:'#B5452F' },
+  annule:    { c:'#9E9E9E', light:'#EEEEEE', text:'#666666' }
 };
 function statutChip(st){ return `<span class="st st-${escapeHtml(st)}">${escapeHtml((STATUTS[st] || STATUTS.brouillon).label)}</span>`; }
 function devisBase(){ return CSBAuth.getPbUrl().replace(/\/+$/,'') + '/api/collections/devis/records'; }
@@ -843,18 +878,30 @@ function computeTotals(d){
 // ================== Liste des devis ==================
 const LIST_FILTERS = [
   { id:'actifs', label:'En cours', test: st => ['brouillon','envoye','accepte'].includes(st) },
-  { id:'brouillon', label:'Brouillons', test: st => st === 'brouillon' },
-  { id:'envoye', label:'Envoyés', test: st => st === 'envoye' },
-  { id:'accepte', label:'Commandes', test: st => st === 'accepte' },
-  { id:'facture', label:'Facturés', test: st => st === 'facture' },
-  { id:'clos', label:'Refusés / annulés', test: st => st === 'refuse' || st === 'annule' },
+  { id:'brouillon', label:'Brouillons', color:'#A89F90', test: st => st === 'brouillon' },
+  { id:'envoye', label:'Envoyés', color:'#2D5B9A', test: st => st === 'envoye' },
+  { id:'accepte', label:'Commandes', color:'#2E7D32', test: st => st === 'accepte' },
+  { id:'facture', label:'Facturés', color:'#6A3F96', test: st => st === 'facture' },
+  { id:'clos', label:'Refusés / annulés', color:'#B5452F', test: st => st === 'refuse' || st === 'annule' },
   { id:'tous', label:'Tous', test: () => true }
 ];
+function showStatusTip(label, sc, x, y){
+  let tip = document.getElementById('stTip');
+  if(!tip){ tip = document.createElement('div'); tip.id = 'stTip'; document.body.appendChild(tip); }
+  tip.textContent = label;
+  tip.style.background = sc.light; tip.style.color = sc.text; tip.style.border = '1px solid ' + sc.c;
+  tip.style.display = 'block';
+  const w = tip.offsetWidth;
+  tip.style.left = Math.min(x + 14, window.innerWidth - w - 8) + 'px';
+  tip.style.top = (y + 16) + 'px';
+}
+function hideStatusTip(){ const tip = document.getElementById('stTip'); if(tip) tip.style.display = 'none'; }
 function renderListFilters(){
   const box = document.getElementById('listFilters');
   box.innerHTML = LIST_FILTERS.map(f => {
     const n = drafts.filter(x => f.test(x.draft.statut)).length;
-    return `<button class="chip ${listFilter === f.id ? 'on' : ''}" data-f="${f.id}">${escapeHtml(f.label)} ${n}</button>`;
+    const dot = f.color ? `<span class="dot" style="background:${f.color};"></span>` : '';
+    return `<button class="chip ${listFilter === f.id ? 'on' : ''}" data-f="${f.id}">${dot}${escapeHtml(f.label)} ${n}</button>`;
   }).join('');
   box.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { listFilter = b.dataset.f; renderDraftList(); }));
 }
@@ -868,14 +915,26 @@ function renderDraftList(){
   if(!items.length){ list.innerHTML = '<div class="hint" style="padding:6px;">Aucun devis ici.</div>'; return; }
   list.innerHTML = items.map(d => {
     const t = computeTotals(d);
-    const when = new Date(d.updatedAt).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    return `<div class="draft-item ${current && current.id === d.id ? 'active' : ''}" data-id="${escapeHtml(d.id)}">
-      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}${(d.title || '').trim() ? `<span class="obj"> — ${escapeHtml(d.title.trim())}</span>` : ''}${suiviOpens(d) ? `<span class="eye" title="Ouvert ${suiviOpens(d)} fois par le client">👁 ${suiviOpens(d)}</span>` : ''}</span>${statutChip(d.statut)}</div>
-      <div class="m" style="color:var(--ink);">${escapeHtml(d.client ? d.client.name : 'Client à choisir')}</div>
-      <div class="m">${eur(t.ht)} HT · modifié le ${escapeHtml(when)}${d.updatedBy ? ' par ' + escapeHtml(d.updatedBy) : ''}</div>
+    const sc = STATUT_COLORS[d.statut] || STATUT_COLORS.brouillon;
+    return `<div class="draft-item ${current && current.id === d.id ? 'active' : ''}" data-id="${escapeHtml(d.id)}" style="--st-color:${sc.c}; --st-light:${sc.light};">
+      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}</span>${suiviOpens(d) ? `<span class="eye">👁 ${suiviOpens(d)}</span>` : ''}</div>
+      ${(d.title || '').trim() ? `<div class="obj-full">${escapeHtml(d.title.trim())}</div>` : ''}
+      <div class="row2"><span class="cl">${escapeHtml(d.client ? d.client.name : 'Client à choisir')}</span><span class="ht">${eur(t.ht)} HT</span></div>
     </div>`;
   }).join('');
+  // État affiché près du curseur au survol (le cadre en donne déjà la couleur).
+  list.querySelectorAll('.draft-item').forEach(el => {
+    const entry = drafts.find(x => x.draft.id === el.dataset.id);
+    const st = entry ? entry.draft.statut : 'brouillon';
+    const sc = STATUT_COLORS[st] || STATUT_COLORS.brouillon;
+    let label = (STATUTS[st] || STATUTS.brouillon).label;
+    const opens = entry ? suiviOpens(entry.draft) : 0;
+    if(opens) label += ` · ouvert ${opens} fois par le client`;
+    el.addEventListener('mousemove', e => showStatusTip(label, sc, e.clientX, e.clientY));
+    el.addEventListener('mouseleave', hideStatusTip);
+  });
   list.querySelectorAll('.draft-item').forEach(el => el.addEventListener('click', () => {
+    hideStatusTip();
     if(!abandonEditIfNeeded()) return;
     const entry = drafts.find(x => x.draft.id === el.dataset.id);
     if(entry) openDraft(JSON.parse(JSON.stringify(entry.draft)), entry.recId, entry.updated);
@@ -923,6 +982,7 @@ function renderEditor(){
     </div>
 
     <div class="pane ${editorTab === 'infos' ? 'on' : ''}" data-pane="infos">
+    <div class="info-row">
     <div class="card">
       <h2>Client</h2>
       <div id="clientArea"></div>
@@ -938,12 +998,15 @@ function renderEditor(){
         <span class="hint">Utilisée par Gestion Commande (bon de livraison, étiquettes) une fois le devis validé.</span>
       </div>
     </div>
+    </div>
 
+    <div class="info-row">
     <div class="card" id="prodCard">
       <h2>Production <span class="hint" style="font-family:inherit; font-weight:400;">— partagé avec Détails Commande, toujours modifiable</span></h2>
       <div id="prodBox"></div>
     </div>
 
+    <div class="info-col">
     <div class="card" id="suiviCard" style="display:none;">
       <h2 style="display:flex; align-items:center; gap:10px;">Suivi client <button class="btn small" id="suiviRefresh">↻ Actualiser</button></h2>
       <div id="suiviBox"></div>
@@ -952,6 +1015,8 @@ function renderEditor(){
     <div class="card">
       <h2>Historique</h2>
       <div class="histo" id="histoBox"></div>
+    </div>
+    </div>
     </div>
     </div>
 
@@ -985,6 +1050,8 @@ function renderEditor(){
 
     <div class="card">
       <h2>Conditions et totaux</h2>
+      <div class="cond-layout">
+      <div class="cond-fields">
       <div class="row">
         <div class="field" style="max-width:170px;"><label>Date du devis</label><input type="date" id="fDate" value="${escapeHtml(d.date)}"></div>
         <div class="field" style="max-width:170px;"><label>Valable jusqu'au</label><input type="date" id="fExpiry" value="${escapeHtml(d.expiryDate)}"></div>
@@ -997,7 +1064,7 @@ function renderEditor(){
       <div class="row" style="margin-top:10px;">
         <div class="field"><label>Commentaire (affiché sur le devis)</label><textarea id="fComments" rows="3">${escapeHtml(d.comments)}</textarea></div>
       </div>
-      <div class="row" style="margin-top:14px; align-items:flex-end;">
+      <div class="row" style="margin-top:10px;">
         <div class="field" style="max-width:260px;">
           <label>Remise globale</label>
           <div style="display:flex; gap:6px;">
@@ -1005,7 +1072,9 @@ function renderEditor(){
             <select id="fGlobalDiscountUnit"><option value="pct" ${d.globalDiscountIsPercent ? 'selected' : ''}>%</option><option value="eur" ${d.globalDiscountIsPercent ? '' : 'selected'}>€ HT</option></select>
           </div>
         </div>
-        <div class="totals" id="totalsBox"></div>
+      </div>
+      </div>
+      <div class="totals" id="totalsBox"></div>
       </div>
     </div>
     </div>
@@ -1236,6 +1305,11 @@ async function buildQuotePdfHtml(d){
   const a = d.address || clientMainAddress();
   const e = escapeHtml;
   const ids = await clientLegalIds(d);
+  // Vignettes des produits (mêmes images que dans l'éditeur), récupérées avant la mise en page.
+  const thumbs = new Map();
+  await Promise.all(d.lines.filter(l => l.type !== 'section' && (l.productId || l.productCode)).map(async l => {
+    try{ const src = await productImageFor(l.productId, l.productCode, l.image); if(src) thumbs.set(l, src); }catch(err){}
+  }));
   const hasDiscount = d.lines.some(l => l.type !== 'section' && num(l.discountPercent));
   const nl2br = txt => e(txt).replace(/\n/g, '<br>');
 
@@ -1252,7 +1326,7 @@ async function buildQuotePdfHtml(d){
     ${gr.lines.length ? `<table class="lines">
       <thead><tr><th>Description</th><th class="r w-pu">Prix unitaire</th>${hasDiscount ? '<th class="r w-rm">Remise</th>' : ''}<th class="r w-qt">Quantité</th><th class="r w-mt">Montant HT</th></tr></thead>
       <tbody>${gr.lines.map(l => `<tr>
-        <td><div class="nm">${e(l.name)}</div>${l.description ? `<div class="ds">${descToHtml(l.description)}</div>` : ''}</td>
+        <td><div class="ln">${thumbs.has(l) ? `<img class="th" src="${e(thumbs.get(l))}" alt="">` : ''}<div class="lt"><div class="nm">${e(l.name)}</div>${l.description ? `<div class="ds">${descToHtml(l.description)}</div>` : ''}</div></div></td>
         <td class="r">${eur(l.price)}</td>
         ${hasDiscount ? `<td class="r">${num(l.discountPercent) ? pdfRate(l.discountPercent) : ''}</td>` : ''}
         <td class="r">${pdfQtyUnit(l)}</td>
@@ -1301,6 +1375,9 @@ async function buildQuotePdfHtml(d){
     .nm{ font-weight:700; color:#333; }
     .ds{ color:#333; }
     .ds img{ max-width:70px; max-height:70px; float:left; margin:0 8px 4px 0; }
+    .ln{ display:flex; gap:10px; align-items:flex-start; }
+    .ln .lt{ flex:1; min-width:0; }
+    .ln .th{ width:58px; height:58px; object-fit:contain; flex-shrink:0; border-radius:4px; }
     .ds ul, .ds ol{ margin:2px 0; padding-left:18px; }
     .ds p{ margin:0; }
     .bottom{ display:flex; justify-content:space-between; align-items:flex-start; gap:30px; margin-top:40px; page-break-inside:avoid; }
@@ -1409,12 +1486,12 @@ function renderProduction(){
     <div id="progList"><div class="hint">Chargement…</div></div>
 
     <div class="prod-title">Documents de fabrication</div>
-    <div class="prod-zones">
+    ${admin ? `<div class="prod-zones">
       <div class="dropzone" data-category="fabrication">📥 Déposer ici (fichier ou e-mail) — <b>Fabrication</b>
         <button type="button" class="btn small paste-btn" data-category="fabrication" style="margin-left:6px;">📋 Coller</button></div>
-      ${admin ? `<div class="dropzone" data-category="demande_prix">📥 Déposer ici — <b>Demande de prix</b> (admins)
-        <button type="button" class="btn small paste-btn" data-category="demande_prix" style="margin-left:6px;">📋 Coller</button></div>` : ''}
-    </div>
+      <div class="dropzone" data-category="demande_prix">📥 Déposer ici — <b>Demande de prix</b> (admins)
+        <button type="button" class="btn small paste-btn" data-category="demande_prix" style="margin-left:6px;">📋 Coller</button></div>
+    </div>` : ''}
     <div class="hint" id="docsMsg" style="margin:6px 0;"></div>
     <div id="docsFab"></div>
     ${admin ? `<div class="prod-title">Documents demande de prix</div><div id="docsDp"></div>` : ''}
@@ -1609,7 +1686,7 @@ function docsMsg(text, color){ const m = document.getElementById('docsMsg'); if(
 async function uploadDocuments(files, category){
   const key = prodKey();
   if(!key) return;
-  if(category === 'demande_prix' && !isAdmin()){ docsMsg('Réservé aux administrateurs.', 'var(--danger)'); return; }
+  if(!isAdmin()){ docsMsg('Dépôt de documents réservé aux administrateurs.', 'var(--danger)'); return; }
   if(!(await ensureDocsFolderAccess(category, true))){ docsMsg(`Accès au dossier « ${CATEGORY_LABELS[category]} » non autorisé.`, 'var(--danger)'); return; }
   let done = 0;
   for(const file of files){
@@ -1678,6 +1755,7 @@ async function loadDocuments(){
   }catch(e){ fab.innerHTML = `<div class="hint" style="color:var(--danger);">Erreur : ${escapeHtml(e.message)}</div>`; }
 }
 async function deleteDocument(id, filename, category){
+  if(!isAdmin()){ alert('La suppression de documents est réservée aux administrateurs.'); return; }
   if(!confirm('Supprimer définitivement ce document (fichier + référence) ?')) return;
   try{
     if(await ensureDocsFolderAccess(category, true)){
@@ -1690,20 +1768,22 @@ async function deleteDocument(id, filename, category){
 }
 function renderDocList(box, docs, category, emptyText){
   if(!docs.length){ box.innerHTML = `<div class="hint">${emptyText}</div>`; return; }
-  box.innerHTML = docs.map(d => `<div class="doc-row" data-id="${d.id}" data-file="${escapeHtml(d.filename)}"><span>📄 ${escapeHtml(d.original_filename || d.filename)}</span><button class="iconbtn" data-del title="Supprimer">🗑</button></div>`).join('');
+  box.innerHTML = docs.map(d => `<div class="doc-row" data-id="${d.id}" data-file="${escapeHtml(d.filename)}"><span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>${isAdmin() ? '<button class="iconbtn" data-del title="Supprimer">🗑</button>' : ''}</div>`).join('');
   box.querySelectorAll('.doc-row').forEach(row => {
     row.addEventListener('click', e => { if(!e.target.closest('[data-del]')) openDocument(row.dataset.file, category); });
-    row.querySelector('[data-del]').addEventListener('click', e => { e.stopPropagation(); deleteDocument(row.dataset.id, row.dataset.file, category); });
+    const del = row.querySelector('[data-del]');
+    if(del) del.addEventListener('click', e => { e.stopPropagation(); deleteDocument(row.dataset.id, row.dataset.file, category); });
   });
 }
 async function renderDocThumbs(box, docs, category, emptyText){
   if(!docs.length){ box.innerHTML = `<div class="hint">${emptyText}</div>`; return; }
   box.innerHTML = '<div class="doc-thumbs">' + docs.map(d => `<div class="doc-thumb" data-id="${d.id}" data-file="${escapeHtml(d.filename)}" title="${escapeHtml(d.original_filename || d.filename)}">
       <div class="doc-thumb-box">📄</div><div class="doc-thumb-name">${escapeHtml(d.original_filename || d.filename)}</div>
-      <button type="button" class="doc-thumb-del" title="Supprimer">✕</button></div>`).join('') + '</div>';
+      ${isAdmin() ? '<button type="button" class="doc-thumb-del" title="Supprimer">✕</button>' : ''}</div>`).join('') + '</div>';
   box.querySelectorAll('.doc-thumb').forEach(card => {
     card.addEventListener('click', e => { if(!e.target.closest('.doc-thumb-del')) openDocument(card.dataset.file, category); });
-    card.querySelector('.doc-thumb-del').addEventListener('click', e => { e.stopPropagation(); deleteDocument(card.dataset.id, card.dataset.file, category); });
+    const del = card.querySelector('.doc-thumb-del');
+    if(del) del.addEventListener('click', e => { e.stopPropagation(); deleteDocument(card.dataset.id, card.dataset.file, category); });
   });
   let access = false;
   try{ access = await ensureDocsFolderAccess(category, false); }catch(e){}
@@ -2326,8 +2406,12 @@ function renderLines(){
     const meta = [l.productCode ? 'Réf. ' + escapeHtml(l.productCode) : (l.productId ? '' : 'Ligne libre')].filter(Boolean).join(' · ');
     return `<tr data-row="${i}" class="${selectedLines.has(l) ? 'selected' : ''}">
       <td>
+        <div class="l-head">
+        ${l.productId || l.productCode ? `<div class="l-thumb" data-thumb="${i}" title="Image du produit">✕</div>` : ''}
+        <div class="l-body">
         <input type="text" class="l-name" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Désignation">
         <div class="l-desc" data-desc="${i}" contenteditable="${locked ? 'false' : 'true'}" data-placeholder="Description (facultatif)">${descToHtml(l.description)}</div>
+        </div></div>
         <div class="l-sub l-disc">Remise <input type="text" data-f="discountPercent" data-i="${i}" value="${l.discountPercent ? escapeHtml(l.discountPercent) : ''}" placeholder="0" style="width:44px !important;"> %${meta ? ` <span style="margin-left:8px;">${meta}</span>` : ''}</div>
         ${actions}
       </td>
@@ -2346,6 +2430,7 @@ function renderLines(){
     </tr>`;
   }).join('');
 
+  body.querySelectorAll('[data-thumb]').forEach(el => loadLineThumb(el, current.lines[Number(el.dataset.thumb)]));
   // Colonne TVA à droite du tableau, alignée sur chaque ligne (comme dans Axonaut).
   tvaCol.innerHTML = current.lines.map((l, i) => {
     if(l.type === 'section') return `<div data-tva="${i}"></div>`;
@@ -2491,9 +2576,53 @@ function lineFromProduct(p){
     name: p.name || '', description: p.description || '', quantity: 1,
     price: p.price != null ? p.price : 0, taxRate: p.tax_rate != null ? Number(p.tax_rate) : 20,
     unit: p.unit || '', discountPercent: 0, cost: p.job_costing != null ? p.job_costing : '',
-    stock: p.stock != null ? p.stock : null
+    stock: p.stock != null ? p.stock : null,
+    image: p.image || ''
   };
 }
+
+// ---------- Vignettes des produits ----------
+// Comme dans Gestion Commande : l'image du produit dans Axonaut, sinon celle du dossier réseau
+// des images (rangée par référence). Gardée en mémoire pour ne pas la redemander à chaque rendu.
+const productImageCache = new Map(); // clé produit -> URL / data URL ('' = pas d'image)
+async function productImageFor(productId, productCode, known){
+  const key = productId ? 'id:' + productId : 'ref:' + productCode;
+  if(productImageCache.has(key)) return productImageCache.get(key);
+  const p = (async () => {
+    if(known) return known;
+    const cached = productId && productsCache ? productsCache.find(x => x.id === productId) : null;
+    if(cached && cached.image) return cached.image;
+    if(productId){
+      try{ const prod = await axonaut('/products/' + productId); if(prod && prod.image) return prod.image; }catch(e){}
+    }
+    if(productCode && window.csbHost && window.csbHost.getAxonautImage){
+      try{ const dataUrl = await window.csbHost.getAxonautImage(productCode); if(dataUrl) return dataUrl; }catch(e){}
+    }
+    return '';
+  })();
+  productImageCache.set(key, p);
+  return p;
+}
+async function loadLineThumb(el, l){
+  if(!el || !l) return;
+  const src = await productImageFor(l.productId, l.productCode, l.image);
+  if(!src || !el.isConnected) return;
+  el.innerHTML = `<img src="${escapeHtml(src)}" alt="">`;
+  el.classList.add('has-img');
+  el.title = 'Survoler pour agrandir';
+  el.addEventListener('mouseenter', e => showThumbZoom(src, e.currentTarget));
+  el.addEventListener('mouseleave', hideThumbZoom);
+}
+function showThumbZoom(src, anchor){
+  let z = document.getElementById('thumbZoom');
+  if(!z){ z = document.createElement('div'); z.id = 'thumbZoom'; document.body.appendChild(z); }
+  z.innerHTML = `<img src="${escapeHtml(src)}" alt="">`;
+  const r = anchor.getBoundingClientRect();
+  z.style.display = 'block';
+  z.style.left = Math.min(r.right + 10, window.innerWidth - 280) + 'px';
+  z.style.top = Math.max(8, Math.min(r.top - 20, window.innerHeight - 290)) + 'px';
+}
+function hideThumbZoom(){ const z = document.getElementById('thumbZoom'); if(z) z.style.display = 'none'; }
 function wireProductSearch(){
   const input = document.getElementById('productSearch');
   const box = document.getElementById('productSuggest');
@@ -2517,10 +2646,24 @@ function wireProductSearch(){
     }).slice(0, 40);
     hl = 0;
     if(!matches.length){ box.innerHTML = '<div class="suggestion"><span class="s2">Aucun produit — utilise « Ligne libre ».</span></div>'; box.classList.add('show'); return; }
-    box.innerHTML = matches.map((p, i) => `<div class="suggestion ${i === hl ? 'hl' : ''}" data-i="${i}">
-      <div class="s1">${escapeHtml(p.name)}</div>
-      <div class="s2">${p.product_code ? 'Réf. ' + escapeHtml(p.product_code) + ' · ' : ''}${eur(p.price)} HT${p.tax_rate != null ? ' · TVA ' + String(p.tax_rate).replace('.', ',') + ' %' : ''}</div>
+    box.innerHTML = matches.map((p, i) => `<div class="suggestion with-thumb ${i === hl ? 'hl' : ''}" data-i="${i}">
+      <div class="sug-thumb" data-sug-thumb="${i}">${p.image ? `<img src="${escapeHtml(p.image)}" alt="">` : '✕'}</div>
+      <div style="min-width:0;">
+        <div class="s1">${escapeHtml(p.name)}</div>
+        <div class="s2">${p.product_code ? 'Réf. ' + escapeHtml(p.product_code) + ' · ' : ''}${eur(p.price)} HT${p.tax_rate != null ? ' · TVA ' + String(p.tax_rate).replace('.', ',') + ' %' : ''}</div>
+      </div>
     </div>`).join('');
+    // Image depuis le dossier réseau quand la base produits n'en fournit pas (au mieux, sans bloquer la liste).
+    box.querySelectorAll('[data-sug-thumb]').forEach(el => {
+      const prod = matches[Number(el.dataset.sugThumb)];
+      if(prod.image) return;
+      // Image déjà récupérée pour une ligne ? Sinon, seulement le dossier réseau (pas d'appel Axonaut
+      // par produit affiché dans la liste, pour ne pas surcharger Axonaut à chaque frappe).
+      const known = productImageCache.get('id:' + prod.id);
+      const viaNas = prod.product_code && window.csbHost && window.csbHost.getAxonautImage ? productImageFor(null, prod.product_code) : null;
+      const src$ = known || viaNas;
+      if(src$) src$.then(src => { if(src && el.isConnected) el.innerHTML = `<img src="${escapeHtml(src)}" alt="">`; });
+    });
     box.classList.add('show');
     box.querySelectorAll('.suggestion[data-i]').forEach(el => el.addEventListener('mousedown', e => { e.preventDefault(); pick(Number(el.dataset.i)); }));
   };
@@ -2593,7 +2736,7 @@ function renderTotals(){
     ${t.taxes.map(x => `<div class="tr"><span>TVA ${String(x.rate).replace('.', ',')} %</span><span class="v">${eur(x.amount)}</span></div>`).join('')}
     <div class="tr big"><span>Total TTC</span><span class="v">${eur(t.ttc)}</span></div>
     ${canMarge() ? `<div class="margin-box">Coût d'achat ${eur(t.cost)} · Marge ${eur(t.margin)}${t.ht ? ' (' + Math.round(t.margin / t.ht * 100) + ' %)' : ''}</div>` : ''}
-    <div class="hint" style="text-align:right; margin-top:4px;">Calcul indicatif — Axonaut recalcule les montants à la création.</div>`;
+    <div class="hint" style="text-align:right; margin-top:4px;">Montants repris tels quels sur le PDF ; Axonaut les recalcule à la facturation.</div>`;
 }
 
 // ================== Nouveau client ==================
@@ -2757,13 +2900,48 @@ async function init(){
   const settingsReady = loadModuleSettings();
   try{
     await loadDrafts();
+    draftsLoaded = true;
     renderDraftList();
+    if(pendingOpenRecId){ const id = pendingOpenRecId; pendingOpenRecId = null; openRecordById(id); }
     settingsReady.then(pollSuivi);
     setInterval(async () => { await loadModuleSettings(); pollSuivi(); }, 5 * 60 * 1000);
   }catch(e){
     document.getElementById('draftList').innerHTML = `<div class="hint" style="padding:6px; color:var(--danger);">Devis indisponibles : ${escapeHtml(e.message)}</div>`;
   }
 }
+// Demande venue d'un autre module (ex. clic sur une commande dans Gestion Commande) : ouvrir ce devis.
+// Gardée en attente tant que la liste des devis n'est pas chargée.
+let pendingOpenRecId = null;
+let draftsLoaded = false;
+async function openRecordById(recId){
+  if(!recId) return;
+  if(!draftsLoaded){ pendingOpenRecId = recId; return; }
+  if(current && currentRecId === recId) return;
+  if(!abandonEditIfNeeded()) return;
+  let entry = drafts.find(x => x.recId === recId);
+  if(!entry){
+    try{
+      const res = await CSBAuth.authedFetch(devisBase() + '/' + recId);
+      if(!res.ok) throw new Error(res.status === 404 ? 'devis introuvable (supprimé ?)' : 'HTTP ' + res.status);
+      const rec = await res.json();
+      entry = { recId: rec.id, updated: rec.updated, draft: recordToDraft(rec) };
+      drafts.unshift(entry);
+    }catch(e){ alert("Impossible d'ouvrir ce devis : " + e.message); return; }
+  }
+  // Le filtre de la liste ne doit pas cacher le devis ouvert.
+  const f = LIST_FILTERS.find(x => x.id === listFilter);
+  if(f && !f.test(entry.draft.statut)) listFilter = 'tous';
+  listSearch = ''; const ls = document.getElementById('listSearch'); if(ls) ls.value = '';
+  editorTab = 'infos';
+  openDraft(JSON.parse(JSON.stringify(entry.draft)), entry.recId, entry.updated);
+  const el = document.querySelector(`.draft-item[data-id="${CSS.escape(entry.draft.id)}"]`);
+  if(el) el.scrollIntoView({ block: 'nearest' });
+}
+window.addEventListener('message', (event) => {
+  const msg = event.data;
+  if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload) return;
+  openRecordById(msg.payload.recId);
+});
 let started = false;
 CSBAuth.onChange(() => {
   if(!CSBAuth.currentUser()) return;

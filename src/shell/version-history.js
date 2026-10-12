@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.45', items: [
+    "Documents de fabrication et de demande de prix : dépôt et suppression réservés aux administrateurs (Gestion Commande et module Devis)",
+    "Devis : liste plus compacte — couleur du cadre selon l'état (état affiché au survol), objet en entier, client et montant HT ; devis ouvert en gras sur fond de la couleur de son état",
+    "Gestion Commande : clic sur le numéro d'une commande du module Devis pour ouvrir son devis dans le module Devis",
+    "Devis : vignettes des produits dans les lignes, la recherche de produits et le PDF du devis",
+    "Devis : onglet Informations sur deux colonnes (Client / Livraison, Production / Suivi client et Historique) ; totaux à droite des conditions",
+  ]},
   { v: '0.2.44', items: [
     "Devis : carte « Production » dans l'onglet Informations — programmes à utiliser, documents de fabrication et de demande de prix, commentaire de la commande (mêmes données que Détails Commande dans Gestion Commande)",
     "Devis : copie de lignes — ⧉ dupliquer une ligne, sélection de plusieurs lignes pour les dupliquer, les supprimer ou les copier puis les coller dans un autre devis (copie possible aussi depuis un devis verrouillé)",

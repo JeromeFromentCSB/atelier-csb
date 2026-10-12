@@ -789,7 +789,7 @@
         <div id="blProgramsList"></div>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">Documents de fabrication</div>
         <div style="display:flex; gap:10px; margin-bottom:8px;">
-          <div class="bl-dropzone" data-category="fabrication">📥 Déposer ici (fichier ou e-mail) — <strong>Fabrication</strong>
+          <div class="bl-dropzone" id="blDropzoneFabrication" data-category="fabrication" style="display:none;">📥 Déposer ici (fichier ou e-mail) — <strong>Fabrication</strong>
             <button type="button" class="btn ghost bl-paste-btn" data-category="fabrication" style="margin-left:6px; font-size:.68rem; padding:4px 10px;">📋 Coller</button>
           </div>
           <div class="bl-dropzone" id="blDropzoneDemandePrix" data-category="demande_prix" style="display:none;">📥 Déposer ici — <strong>Demande de prix</strong> (admins)
@@ -4182,6 +4182,8 @@ async function loadBlFabricationDocuments(quotationId){
   const canDemandePrix = isAdminUser();
   dpWrap.style.display = canDemandePrix ? 'block' : 'none';
   document.getElementById('blDropzoneDemandePrix').style.display = canDemandePrix ? 'block' : 'none';
+  // Déposer des documents (fabrication comme demande de prix) : administrateurs seulement.
+  document.getElementById('blDropzoneFabrication').style.display = canDemandePrix ? 'block' : 'none';
   docThumbUrls.forEach(u => URL.revokeObjectURL(u)); docThumbUrls = [];
   box.innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement des documents…</div>';
   if(canDemandePrix) dpBox.innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement des documents…</div>';
@@ -4206,14 +4208,15 @@ function renderDocList(box, docs, category, reload, emptyText){
   box.innerHTML = docs.map(d => `
     <div class="devis-doc-row" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}">
       <span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>
-      <button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button>
+      ${isAdminUser() ? `<button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button>` : ''}
     </div>`).join('');
   box.querySelectorAll('.devis-doc-row').forEach(row => {
     row.addEventListener('click', (e) => {
       if(e.target.closest('[data-del-doc]')) return;
       openDevisDocument(row.dataset.filename, category);
     });
-    row.querySelector('[data-del-doc]').addEventListener('click', async (e) => {
+    const delDoc = row.querySelector('[data-del-doc]');
+    if(delDoc) delDoc.addEventListener('click', async (e) => {
       e.stopPropagation();
       if(!confirm('Supprimer définitivement ce document (fichier + référence) ?')) return;
       try{
@@ -4236,14 +4239,15 @@ async function renderDocThumbs(box, docs, category, reload, emptyText){
     <div class="doc-thumb" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}" title="${escapeHtml(d.original_filename || d.filename)}">
       <div class="doc-thumb-box">📄</div>
       <div class="doc-thumb-name">${escapeHtml(d.original_filename || d.filename)}</div>
-      <button type="button" class="doc-thumb-del" title="Supprimer">✕</button>
+      ${isAdminUser() ? '<button type="button" class="doc-thumb-del" title="Supprimer">✕</button>' : ''}
     </div>`).join('') + '</div>';
   box.querySelectorAll('.doc-thumb').forEach(card => {
     card.addEventListener('click', (e) => {
       if(e.target.closest('.doc-thumb-del')) return;
       openDevisDocument(card.dataset.filename, category);
     });
-    card.querySelector('.doc-thumb-del').addEventListener('click', async (e) => {
+    const delThumb = card.querySelector('.doc-thumb-del');
+    if(delThumb) delThumb.addEventListener('click', async (e) => {
       e.stopPropagation();
       if(!confirm('Supprimer définitivement ce document (fichier + référence) ?')) return;
       try{
@@ -4296,8 +4300,10 @@ async function renderDocThumbs(box, docs, category, reload, emptyText){
 function setupBlDocDropzones(){
   const canDP = isAdminUser();
   document.getElementById('blDropzoneDemandePrix').style.display = canDP ? 'block' : 'none';
+  document.getElementById('blDropzoneFabrication').style.display = canDP ? 'block' : 'none';
   const opts = () => ({ msgId: 'blDocsUploadMsg', reload: () => currentBlQuotation && loadBlFabricationDocuments(currentBlQuotation.id) });
   const needQuote = () => {
+    if(!isAdminUser()) return false; // dépôt réservé aux administrateurs
     if(currentBlQuotation) return true;
     const msg = document.getElementById('blDocsUploadMsg');
     msg.style.color = 'var(--silk-red)';
@@ -4475,7 +4481,7 @@ function updateSortArrows(){
 const ADMIN_ONLY_COLUMNS = new Set(['montant']);
 const COLUMN_DEFS = {
   commande: { label:'Commande', defaultWidth:170, cellClass:'name', required:true, render:r => isModuleOrder(r)
-    ? `${escapeHtml(r.numeroCommande)}${r.objet ? ` <span style="color:var(--muted); font-weight:400;">— ${escapeHtml(r.objet)}</span>` : ''} <span title="Devis et commande gérés dans le module Devis" style="font-size:.65rem; font-weight:700; color:#2D5B9A; background:#E3ECF8; border-radius:999px; padding:1px 6px; margin-left:4px;">module</span>`
+    ? `<span class="commande-module-link" data-rec-id="${escapeHtml(r.moduleRec.id)}" title="Ouvrir ce devis dans le module Devis" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(r.numeroCommande)}${r.objet ? ` <span style="color:var(--muted); font-weight:400;">— ${escapeHtml(r.objet)}</span>` : ''}</span> <span title="Devis et commande gérés dans le module Devis" style="font-size:.65rem; font-weight:700; color:#2D5B9A; background:#E3ECF8; border-radius:999px; padding:1px 6px; margin-left:4px;">module</span>`
     : r.quotationId
     ? `<span class="commande-devis-link" data-quotation-id="${r.quotationId}" title="Voir le devis correspondant" style="cursor:pointer; text-decoration:underline dotted;">${escapeHtml(r.numeroCommande)}</span>`
     : escapeHtml(r.numeroCommande) },
@@ -4824,7 +4830,7 @@ function render(){
 
   tbody.querySelectorAll('tr[data-id]').forEach(row => {
     row.addEventListener('click', (e) => {
-      if(e.target.closest('button') || e.target.closest('.commande-devis-link')) return;
+      if(e.target.closest('button') || e.target.closest('.commande-devis-link') || e.target.closest('.commande-module-link')) return;
       const r = contracts.find(c => String(c.contractId) === row.dataset.id); // id Axonaut (nombre) ou « D-… » (module Devis)
       if(r) openBlModal(r);
     });
@@ -4833,6 +4839,14 @@ function render(){
     link.addEventListener('click', async (e) => {
       e.stopPropagation();
       await jumpToDevis(parseInt(link.dataset.quotationId, 10));
+    });
+  });
+  // Commande du module Devis : ouvre son devis dans le module Devis (via le socle de l'appli).
+  tbody.querySelectorAll('.commande-module-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if(window.parent === window){ alert("Disponible uniquement dans l'application Atelier CSB."); return; }
+      window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { recId: link.dataset.recId } }, '*');
     });
   });
 
@@ -6094,6 +6108,7 @@ async function docCreate(body){
   return await res.json();
 }
 async function docDelete(id){
+  if(!isAdminUser()) throw new Error('suppression de documents réservée aux administrateurs');
   const cfg = getConfig();
   const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.docsCollection || 'devis_documents') + '/records/' + id;
   const res = await CSBAuth.authedFetch(url, { method:'DELETE' });
@@ -6233,7 +6248,7 @@ async function loadDevisDocuments(q){
     const renderRow = (d) => `
       <div class="devis-doc-row" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}" data-category="${escapeHtml(d.category)}">
         <span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>
-        <button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button>
+        ${isAdminUser() ? `<button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button>` : ''}
       </div>`;
     fabList.innerHTML = fab.length ? fab.map(renderRow).join('') : '<div class="hint" style="font-size:.78rem;">Aucun document.</div>';
     dpList.innerHTML = canSeeDemandePrix ? (dp.length ? dp.map(renderRow).join('') : '<div class="hint" style="font-size:.78rem;">Aucun document.</div>') : '';
