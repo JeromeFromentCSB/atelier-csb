@@ -17,6 +17,7 @@
       { key: 'valider', label: 'Valider les devis (accepté = commande)' },
       { key: 'facturer', label: 'Facturer dans Axonaut' },
       { key: 'envoyer', label: 'Envoyer des devis aux clients' },
+      { key: 'supprimer', label: 'Supprimer des devis et commandes' },
       { key: 'marge', label: "Voir prix d'achat et marge" }
     ] },
     { id: 'casaque', label: 'Gestion Casaque', icon: '🏇', path: '../../modules/casaque/index.html', perms: [

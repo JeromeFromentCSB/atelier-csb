@@ -588,22 +588,52 @@ async function reopenCurrent(){
   openDraft(recordToDraft(rec), rec.id, rec.updated);
   setSaveState('Version du serveur rechargée');
 }
+// Suppression : un brouillon sans numéro avec le droit « créer » ; tout le reste (devis numéroté,
+// commande) avec le droit « supprimer ». Jamais un devis facturé : sa facture existe dans Axonaut.
+function canDelete(d){
+  if(!d || d.statut === 'facture') return false;
+  if(!d.numero && d.statut === 'brouillon') return CSBAuth.can('devis', 'creer');
+  return CSBAuth.can('devis', 'supprimer');
+}
 async function deleteCurrent(){
   if(!current) return;
-  if(current.numero){
-    alert('Un devis numéroté ne se supprime pas (pour garder la suite des numéros) : utilise « Annuler » à la place.');
-    return;
-  }
-  if(!confirm('Supprimer définitivement ce brouillon ?')) return;
+  if(current.statut === 'facture'){ alert("Un devis facturé ne peut pas être supprimé : sa facture existe dans Axonaut."); return; }
+  if(!canDelete(current)){ alert("Tu n'as pas le droit de supprimer ce devis — demande à un administrateur."); return; }
+  const d = current;
+  const nom = d.numero ? `le devis ${d.numero}${(d.title || '').trim() ? ' — ' + d.title.trim() : ''}` : 'ce brouillon';
+  let msg = `Supprimer définitivement ${nom}${d.client ? ' (' + d.client.name + ')' : ''} ?`;
+  if(d.statut === 'accepte') msg += `\n\nC'est une COMMANDE : elle disparaîtra aussi de Gestion Commande et de la page photo du téléphone.`;
+  if(d.suivi && d.suivi.token) msg += `\n\nLe lien envoyé au client ne fonctionnera plus.`;
+  if(d.numero) msg += `\n\nLe numéro ${d.numero} ne sera pas réattribué. Cette suppression est irréversible.`;
+  if(!confirm(msg)) return;
   if(currentRecId){
     try{
-      const res = await CSBAuth.authedFetch(devisBase() + '/' + currentRecId, { method:'DELETE' });
-      if(!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
+      await deleteDevisRecord(currentRecId, d);
     }catch(e){ alert('Suppression impossible : ' + e.message); return; }
   }
-  drafts = drafts.filter(x => x.draft.id !== current.id);
+  editSession = null;
+  drafts = drafts.filter(x => x.draft.id !== d.id);
   closeEditor();
   renderDraftList();
+}
+// Supprime la fiche PocketBase, puis (au mieux) ce qui en dépend : lien client en ligne, entrée
+// de la page photo du téléphone. Les photos / documents éventuels restent dans leurs collections.
+async function deleteDevisRecord(recId, d){
+  const res = await CSBAuth.authedFetch(devisBase() + '/' + recId, { method:'DELETE' });
+  if(!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
+  if(d && d.suivi && d.suivi.token && suiviConfigured()){
+    suiviApi('/api/devis/' + d.suivi.token + '/close', { method:'POST', body: JSON.stringify({ reason: 'devis supprimé' }) }).catch(() => {});
+  }
+  try{
+    const base = CSBAuth.getPbUrl().replace(/\/+$/,'') + '/api/collections/commandes_index/records';
+    const f = encodeURIComponent(`contract_id='D-${recId}'`);
+    const r = await CSBAuth.authedFetch(base + `?perPage=50&filter=(${f})`);
+    if(r.ok){
+      for(const it of ((await r.json()).items || [])){
+        await CSBAuth.authedFetch(base + '/' + it.id, { method:'DELETE' }).catch(() => {});
+      }
+    }
+  }catch(e){ console.warn('Nettoyage de la page photo impossible', e); }
 }
 function duplicateCurrent(){
   if(!current || !abandonEditIfNeeded()) return;
@@ -1013,9 +1043,8 @@ function renderActionsBar(){
   html += b('pdfView', '📄 Aperçu PDF');
   html += b('pdfSave', '💾 Enregistrer le PDF');
   html += b('dupBtn', '⧉ Dupliquer', '', 'Nouveau brouillon à partir de ce devis');
-  if(canEdit && ['brouillon','envoye','accepte'].includes(d.statut)){
-    html += d.numero ? b('aCancel', '⊘ Annuler le devis', 'danger') : b('delBtn', '🗑 Supprimer', 'danger');
-  }
+  if(canEdit && ['brouillon','envoye','accepte'].includes(d.statut) && d.numero) html += b('aCancel', '⊘ Annuler le devis', 'danger');
+  if(canDelete(d)) html += b('delBtn', d.statut === 'accepte' ? '🗑 Supprimer la commande' : '🗑 Supprimer', 'danger');
   bar.innerHTML = html;
   const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
   on('aSend', () => setStatut('envoye', 'Marqué comme envoyé'));

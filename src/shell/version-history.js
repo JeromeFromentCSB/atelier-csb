@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.43', items: [
+    "Devis : suppression des devis et des commandes (sauf facturés), avec confirmation — nouveau droit « Supprimer des devis et commandes » (un brouillon sans numéro reste supprimable par ceux qui créent les devis)",
+    "Gestion Commande : bouton « Supprimer la commande » dans Détails Commande pour les commandes du module Devis ; la commande disparaît aussi de la page photo du téléphone et le lien client est désactivé",
+  ]},
   { v: '0.2.42', items: [
     "Devis : l'objet du devis s'affiche à côté du numéro (liste, en-tête, Gestion Commande, page photo du téléphone) et la recherche le trouve ; il est aussi ajouté à l'objet des emails d'envoi",
     "Bon de fabrication : nom du client en titre, objet du devis, bloc « Adresse de livraison » et titres de section du devis avant leurs lignes",

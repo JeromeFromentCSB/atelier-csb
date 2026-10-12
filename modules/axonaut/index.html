@@ -772,6 +772,7 @@
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn ghost" id="blViewQuoteBtn" style="display:none;">📄 Voir le devis</button>
           <button class="btn ghost" id="blFabricationBtn" style="display:none;">🏭 Bon de fabrication</button>
+          <button class="btn ghost" id="blDeleteOrderBtn" style="display:none; color:var(--silk-red,#c0392b);" title="Supprime la commande et son devis (module Devis)">🗑 Supprimer la commande</button>
         </div>
         <div id="blShipmentsBox" style="margin-bottom:14px;">
           <div id="blShipmentsList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;"></div>
@@ -3799,6 +3800,33 @@ function stripHtmlToText(html){
   div.innerHTML = withBreaks;
   return div.textContent.replace(/\n{2,}/g, '\n').trim();
 }
+async function deleteModuleOrder(r){
+  if(!isModuleOrder(r)) return;
+  const rec = r.moduleRec, data = rec.data || {};
+  if(rec.statut === 'facture'){ alert("Cette commande est facturée : elle ne peut pas être supprimée (sa facture existe dans Axonaut)."); return; }
+  const nom = `${r.numeroCommande}${r.objet ? ' — ' + r.objet : ''} (${r.clientCompany || ''})`;
+  if(!confirm(`Supprimer définitivement la commande ${nom} ?\n\nSon devis est supprimé aussi (module Devis), elle disparaît de la page photo du téléphone, et le lien envoyé au client ne fonctionnera plus.\n\nCette suppression est irréversible.`)) return;
+  try{
+    const res = await CSBAuth.authedFetch(devisRecordsBase() + '/' + rec.id, { method:'DELETE' });
+    if(!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
+  }catch(e){ alert('Suppression impossible : ' + e.message); return; }
+  // Nettoyage au mieux : entrée de la page photo, lien client en ligne.
+  try{
+    const f = encodeURIComponent(`contract_id='${r.contractId}'`);
+    const ix = await CSBAuth.authedFetch(commandesIndexBase() + `?perPage=50&filter=(${f})`);
+    if(ix.ok) for(const it of ((await ix.json()).items || [])) await CSBAuth.authedFetch(commandesIndexBase() + '/' + it.id, { method:'DELETE' }).catch(() => {});
+  }catch(e){}
+  try{
+    const reglages = await fetchSharedSetting('devis_reglages');
+    if(reglages && reglages.suiviKey && data.suivi && data.suivi.token){
+      const base = (reglages.suiviUrl || (await getColConfig()).workerUrl || '').replace(/\/+$/, '');
+      if(base) fetch(base + '/api/devis/' + data.suivi.token + '/close', { method:'POST', headers:{ 'content-type':'application/json', 'x-api-key': reglages.suiviKey }, body: JSON.stringify({ reason: 'devis supprimé' }) }).catch(() => {});
+    }
+  }catch(e){}
+  contracts = contracts.filter(c => c !== r);
+  closeBlModal();
+  render();
+}
 function closeBlModal(){
   document.getElementById('blPanelContent').style.display = 'none';
   document.getElementById('blPanelEmpty').style.display = 'block';
@@ -3876,6 +3904,12 @@ async function openBlModal(r){
   loadBlComment(r.contractId);
   const canViewQuotePdf = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'devis_pdf');
   const viewQuoteBtn = document.getElementById('blViewQuoteBtn');
+  // Suppression : seulement les commandes du module Devis (l'API Axonaut ne supprime pas ses
+  // commandes), jamais une commande déjà facturée.
+  const delBtn = document.getElementById('blDeleteOrderBtn');
+  const canDel = isModuleOrder(r) && typeof CSBAuth !== 'undefined' && CSBAuth.can('devis', 'supprimer') && r.moduleRec.statut !== 'facture';
+  delBtn.style.display = canDel ? 'inline-flex' : 'none';
+  delBtn.onclick = () => deleteModuleOrder(r);
   // Le PDF d'un devis du module se produit depuis le module Devis (pas de lien public Axonaut).
   viewQuoteBtn.style.display = (canViewQuotePdf && r.quotationId && !isModuleOrder(r)) ? 'inline-flex' : 'none';
   viewQuoteBtn.onclick = () => viewQuotePdf(r);
