@@ -209,6 +209,7 @@
   .suivi-row:last-child{ border-bottom:none; }
   .suivi-row .ic{ width:22px; text-align:center; }
   .eye{ font-size:11px; color:#2D5B9A; font-weight:700; margin-left:4px; }
+  .inv-gone{ font-size:11px; font-weight:700; color:#fff; background:var(--danger); border-radius:999px; padding:1px 7px; margin-left:4px; white-space:nowrap; }
   .modal.wide{ width:680px; }
   .modal textarea{ width:100%; min-height:190px; font-family:inherit; }
   .chk-line{ display:flex; gap:8px; align-items:center; font-size:13px; margin-top:6px; }
@@ -219,7 +220,10 @@
   <aside class="sidebar">
     <header>
       <h1>📝 Devis</h1>
-      <button class="btn primary full" id="newDraftBtn">＋ Nouveau devis</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn primary" id="newDraftBtn" style="flex:1;">＋ Nouveau devis</button>
+        <button class="btn" id="refreshListBtn" title="Recharger la liste des devis et le suivi des ouvertures">↻ Actualiser</button>
+      </div>
       <input type="text" class="list-search" id="listSearch" placeholder="🔎 N°, objet ou client…" autocomplete="off">
       <div class="filters" id="listFilters"></div>
     </header>
@@ -693,7 +697,7 @@ async function deleteDevisRecord(recId, d){
   }
   try{
     const base = CSBAuth.getPbUrl().replace(/\/+$/,'') + '/api/collections/commandes_index/records';
-    const f = encodeURIComponent(`contract_id='D-${recId}'`);
+    const f = encodeURIComponent(`contract_id='${d && d.linkedContractId ? d.linkedContractId : 'D-' + recId}'`);
     const r = await CSBAuth.authedFetch(base + `?perPage=50&filter=(${f})`);
     if(r.ok){
       for(const it of ((await r.json()).items || [])){
@@ -714,6 +718,7 @@ function duplicateCurrent(){
   });
   delete copy.facture; delete copy.suivi; delete copy.envois; delete copy.acceptedOnline; delete copy.facturationEnCours;
   delete copy.commande; delete copy.acceptedVersion; delete copy.attenteRevalidation; copy.version = 1;
+  delete copy.linkedContractId; delete copy.axonautQuotationId; delete copy.axonautOrderName; delete copy.axonautImport;
   openDraft(copy, null, '');
   changed();
 }
@@ -917,7 +922,7 @@ function renderDraftList(){
     const t = computeTotals(d);
     const sc = STATUT_COLORS[d.statut] || STATUT_COLORS.brouillon;
     return `<div class="draft-item ${current && current.id === d.id ? 'active' : ''}" data-id="${escapeHtml(d.id)}" style="--st-color:${sc.c}; --st-light:${sc.light};">
-      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}</span>${suiviOpens(d) ? `<span class="eye">👁 ${suiviOpens(d)}</span>` : ''}</div>
+      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}</span>${invoiceMissing(d) ? `<span class="inv-gone" title="La facture ${escapeHtml(d.facture.numero || '')} n'existe plus dans Axonaut : ouvre le devis pour le remettre à l'état « Commande »">⚠ facture supprimée</span>` : ''}${suiviOpens(d) ? `<span class="eye">👁 ${suiviOpens(d)}</span>` : ''}</div>
       ${(d.title || '').trim() ? `<div class="obj-full">${escapeHtml(d.title.trim())}</div>` : ''}
       <div class="row2"><span class="cl">${escapeHtml(d.client ? d.client.name : 'Client à choisir')}</span><span class="ht">${eur(t.ht)} HT</span></div>
     </div>`;
@@ -930,6 +935,7 @@ function renderDraftList(){
     let label = (STATUTS[st] || STATUTS.brouillon).label;
     const opens = entry ? suiviOpens(entry.draft) : 0;
     if(opens) label += ` · ouvert ${opens} fois par le client`;
+    if(entry && invoiceMissing(entry.draft)) label += ' · ⚠ facture supprimée dans Axonaut';
     el.addEventListener('mousemove', e => showStatusTip(label, sc, e.clientX, e.clientY));
     el.addEventListener('mouseleave', hideStatusTip);
   });
@@ -975,6 +981,7 @@ function renderEditor(){
     </div>
     <div class="actions-bar" id="actionsBar"></div>
     <div id="axBanner"></div>
+    <div id="importBanner"></div>
 
     <div class="ed-tabs">
       <button class="ed-tab ${editorTab === 'infos' ? 'on' : ''}" data-tab="infos">📋 Informations</button>
@@ -1092,9 +1099,11 @@ function renderEditor(){
   renderHisto();
   renderSuivi();
   renderProduction();
-  if(d.suivi && d.suivi.token) refreshSuivi(d).then(() => { if(current === d) renderSuivi(); });
-  document.getElementById('suiviRefresh').addEventListener('click', async () => { await refreshSuivi(current, true); renderSuivi(); });
+  renderImportBanner();
+  if(d.suivi && d.suivi.token) refreshSuivi(d).then(() => { if(current === d) renderSuivi(); renderDraftList(); });
+  document.getElementById('suiviRefresh').addEventListener('click', async () => { await refreshSuivi(current, true); renderSuivi(); renderDraftList(); });
   if(isLocked(d)) applyReadOnly();
+  if(d.statut === 'facture' && d.facture && d.facture.id) checkInvoiceStillExists(d);
 }
 
 window.addEventListener('storage', e => { if(e.key === COPIED_LINES_KEY && current) renderSelectionBar(); });
@@ -1148,6 +1157,7 @@ function renderActionsBar(){
     if(d.statut === 'envoye') html += b('aRefuse', '✕ Refusé par le client');
     if(d.statut === 'accepte' && canValider) html += b('aUnaccept', '↩ Annuler la validation', '', "Repasse le devis à l'état « Envoyé »");
     if(d.statut === 'accepte' && CSBAuth.can('devis', 'facturer')) html += b('aInvoice', '🧾 Facturer dans Axonaut', 'primary', 'Crée la facture dans Axonaut avec les lignes de ce devis');
+    if(d.statut === 'facture' && CSBAuth.isAdmin()) html += b('aUninvoice', '↩ Annuler la facturation', '', "Après un avoir dans Axonaut : le devis redevient une commande, modifiable et refacturable");
     if(['refuse','annule'].includes(d.statut)) html += b('aReopen', '↺ Rouvrir');
   }
   html += '<span class="spacer"></span>';
@@ -1170,8 +1180,22 @@ function renderActionsBar(){
   on('pdfSave', () => exportPdf(true));
   on('delBtn', deleteCurrent);
   on('aInvoice', invoiceInAxonaut);
+  on('aUninvoice', () => cancelInvoicing('avoir'));
   on('aEdit', () => { editSession = { before: JSON.stringify(current), dirty: false }; setSaveState(''); renderEditor(); });
   on('aSyncOrder', updateOrderFromQuote);
+}
+
+// Devis repris d'Axonaut : rappel de l'origine, et alerte si le total recalculé ici ne correspond pas
+// au total d'Axonaut (remise calculée autrement, ligne particulière…) tant qu'il n'a pas été modifié.
+function renderImportBanner(){
+  const box = document.getElementById('importBanner');
+  if(!box) return;
+  const imp = current && current.axonautImport;
+  if(!imp){ box.innerHTML = ''; return; }
+  const t = computeTotals(current);
+  const diff = (current.version || 1) === 1 && typeof imp.totalHt === 'number' && Math.abs(t.ht - imp.totalHt) > 0.02;
+  box.innerHTML = `<div class="banner" style="background:#F2F5FA; border-color:#D5DCE6;">Repris d'Axonaut le ${escapeHtml(new Date(imp.at).toLocaleDateString('fr-FR'))} — devis ${escapeHtml(imp.quoteNumber || '')}${imp.orderName ? ', commande ' + escapeHtml(imp.orderName) : ''}. Il se gère maintenant ici ; l'original reste inchangé dans Axonaut.</div>
+    ${diff ? `<div class="banner">⚠ Le total HT recalculé ici (${eur(t.ht)}) diffère de celui du devis Axonaut (${eur(imp.totalHt)}) : vérifie les remises et les lignes.</div>` : ''}`;
 }
 
 // ---------- Validation d'une modification ----------
@@ -1470,7 +1494,16 @@ async function exportPdf(save){
 //  - documents : collection « devis_documents » (quotation_id « D-… »), fichiers dans les dossiers
 //    réseau Fabrication / Demande de prix autorisés sur ce poste (autorisations partagées avec
 //    Gestion Commande, même application).
-function prodKey(){ return currentRecId ? 'D-' + currentRecId : null; }
+// Devis repris d'Axonaut : on garde les identifiants Axonaut (commande pour programmes et
+// commentaire, devis pour les documents), là où ces données ont été enregistrées jusqu'ici.
+function prodKey(){
+  if(!currentRecId) return null;
+  return current && current.linkedContractId ? String(current.linkedContractId) : 'D-' + currentRecId;
+}
+function prodDocsKey(){
+  if(!currentRecId) return null;
+  return current && current.axonautQuotationId ? String(current.axonautQuotationId) : 'D-' + currentRecId;
+}
 function isAdmin(){ return CSBAuth.isAdmin(); }
 function renderProduction(){
   const box = document.getElementById('prodBox');
@@ -1684,7 +1717,7 @@ function uniqueDocFilename(numero, original){
 }
 function docsMsg(text, color){ const m = document.getElementById('docsMsg'); if(m){ m.style.color = color || 'var(--muted)'; m.textContent = text; } }
 async function uploadDocuments(files, category){
-  const key = prodKey();
+  const key = prodDocsKey();
   if(!key) return;
   if(!isAdmin()){ docsMsg('Dépôt de documents réservé aux administrateurs.', 'var(--danger)'); return; }
   if(!(await ensureDocsFolderAccess(category, true))){ docsMsg(`Accès au dossier « ${CATEGORY_LABELS[category]} » non autorisé.`, 'var(--danger)'); return; }
@@ -1742,14 +1775,14 @@ function setupDropzones(){
 }
 let docThumbUrls = [];
 async function loadDocuments(){
-  const key = prodKey();
+  const key = prodDocsKey();
   const fab = document.getElementById('docsFab'), dp = document.getElementById('docsDp');
   if(!fab) return;
   docThumbUrls.forEach(u => URL.revokeObjectURL(u)); docThumbUrls = [];
   fab.innerHTML = '<div class="hint">Chargement des documents…</div>';
   try{
     const docs = await docsFetch(key);
-    if(prodKey() !== key) return;
+    if(prodDocsKey() !== key) return;
     renderDocThumbs(fab, docs.filter(d => d.category === 'fabrication'), 'fabrication', 'Aucun document de fabrication.');
     if(dp) renderDocList(dp, docs.filter(d => d.category === 'demande_prix'), 'demande_prix', 'Aucun document.');
   }catch(e){ fab.innerHTML = `<div class="hint" style="color:var(--danger);">Erreur : ${escapeHtml(e.message)}</div>`; }
@@ -2083,12 +2116,26 @@ function renderSuivi(){
   if(lk) lk.addEventListener('click', e => { e.preventDefault(); openExternal(d.suivi.url); });
 }
 // Relève régulière des devis envoyés (ouvertures, acceptations en ligne).
+// Relève des ouvertures (œil de la liste) et des acceptations en ligne. La liste est d'abord rechargée
+// pour connaître aussi les devis envoyés depuis un autre poste ; tous les devis qui ont un lien en ligne
+// sont relevés (un devis accepté ou refusé garde son œil), les plus récents d'abord.
+let pollingSuivi = false, lastPollAt = 0;
 async function pollSuivi(){
-  if(!suiviConfigured()) return;
-  const list = drafts.map(x => x.draft).filter(d => d.suivi && d.suivi.token && (d.statut === 'envoye' || (d.statut === 'accepte' && d.attenteRevalidation))).slice(0, 40);
-  for(const d of list){ await refreshSuivi(d, true); }
-  renderDraftList();
-  if(current) renderSuivi();
+  if(pollingSuivi) return;
+  pollingSuivi = true;
+  try{
+    try{ await loadDrafts(); }catch(e){ /* liste inchangée si PocketBase ne répond pas */ }
+    if(suiviConfigured()){
+      const list = drafts.map(x => x.draft).filter(d => d.suivi && d.suivi.token && d.statut !== 'brouillon').slice(0, 60);
+      for(const d of list){ await refreshSuivi(d, true); }
+    }
+    await checkInvoicesInList();
+    lastPollAt = Date.now();
+    renderDraftList();
+    if(current) renderSuivi();
+  }finally{
+    pollingSuivi = false;
+  }
 }
 
 // ================== Facturation dans Axonaut (étape D) ==================
@@ -2097,7 +2144,8 @@ function openExternal(url){
   else window.open(url, '_blank');
 }
 function buildInvoicePayload(d){
-  const payload = { company_id: d.client.id, order_number: d.numero || '', products: buildAxonautProducts(d) };
+  const payload = { company_id: d.client.id, order_number: d.axonautOrderName || d.numero || '', products: buildAxonautProducts(d) };
+  if(d.linkedContractId) payload.contract_id = Number(d.linkedContractId); // commande Axonaut reprise : la facture s'y rattache
   if(d.addressId) payload.company_address_id = d.addressId;
   if(d.themeId) payload.theme_id = d.themeId;
   if((d.paymentTerms || '').trim()) payload.payment_terms = d.paymentTerms;
@@ -2156,6 +2204,67 @@ async function invoiceInAxonaut(){
   }finally{
     invoicing = false;
   }
+}
+
+// ---------- Facture supprimée ou annulée par un avoir ----------
+// Le devis redevient une commande (modifiable, refacturable). La facture annulée est gardée dans
+// l'historique et dans « facturesAnnulees » (Gestion Commande ne la compte plus).
+async function cancelInvoicing(reason){
+  const d = current;
+  if(!d || d.statut !== 'facture') return;
+  const f = d.facture || {};
+  const num = f.numero || ('#' + (f.id || ''));
+  if(reason === 'avoir'){
+    if(!CSBAuth.isAdmin()){ alert('Réservé aux administrateurs.'); return; }
+    if(!confirm(`Annuler la facturation du devis ${d.numero} ?\n\nÀ faire après avoir établi un AVOIR dans Axonaut pour la facture ${num} (la facture et l'avoir restent dans Axonaut).\n\nLe devis redevient une commande : il pourra être modifié puis refacturé.`)) return;
+  }else{
+    if(!confirm(`La facture ${num} n'existe plus dans Axonaut.\n\nRemettre le devis ${d.numero} à l'état « Commande » ? Il pourra être modifié puis refacturé.`)) return;
+  }
+  d.facturesAnnulees = (d.facturesAnnulees || []).concat([Object.assign({}, f, { annuleeLe: new Date().toISOString(), par: userName(), motif: reason === 'avoir' ? 'avoir' : 'facture supprimée dans Axonaut' })]);
+  delete d.facture;
+  delete d.facturationEnCours;
+  d.statut = 'accepte';
+  addHisto(reason === 'avoir' ? `Facture ${num} annulée (avoir dans Axonaut) — le devis redevient une commande` : `Facture ${num} supprimée dans Axonaut — le devis redevient une commande`);
+  try{ await saveCurrent(); }catch(e){ alert("Échec de l'enregistrement : " + e.message); return; }
+  renderEditor();
+}
+// Contrôle des factures dans la liste : un devis « Facturé » dont la facture a été supprimée dans
+// Axonaut est signalé (⚠) sans qu'il faille l'ouvrir. Chaque facture n'est revérifiée qu'au bout de
+// 10 minutes ; seuls les 40 devis facturés les plus récents sont contrôlés.
+const invoiceCheckCache = new Map(); // id facture -> { missing, at }
+async function checkInvoicesInList(){
+  const list = drafts.map(x => x.draft).filter(d => d.statut === 'facture' && d.facture && d.facture.id).slice(0, 40);
+  for(const d of list){
+    const id = String(d.facture.id);
+    const c = invoiceCheckCache.get(id);
+    if(c && Date.now() - c.at < 10 * 60 * 1000) continue;
+    try{ await axonaut('/invoices/' + id); invoiceCheckCache.set(id, { missing: false, at: Date.now() }); }
+    catch(e){ if(/HTTP 404/.test(e.message)) invoiceCheckCache.set(id, { missing: true, at: Date.now() }); }
+  }
+}
+function invoiceMissing(d){
+  if(!d || d.statut !== 'facture' || !d.facture || !d.facture.id) return false;
+  const c = invoiceCheckCache.get(String(d.facture.id));
+  return !!(c && c.missing);
+}
+
+// À l'ouverture d'un devis facturé : la facture existe-t-elle encore dans Axonaut ?
+async function checkInvoiceStillExists(d){
+  const id = d.facture && d.facture.id;
+  if(!id) return;
+  let missing = false;
+  try{ await axonaut('/invoices/' + id); }
+  catch(e){ missing = /HTTP 404/.test(e.message); } // autre erreur (réseau…) : on ne conclut rien
+  invoiceCheckCache.set(String(id), { missing, at: Date.now() });
+  if(missing) renderDraftList();
+  if(!missing || current !== d) return;
+  const box = document.getElementById('axBanner');
+  if(!box) return;
+  const canFix = CSBAuth.can('devis', 'facturer');
+  box.insertAdjacentHTML('beforeend', `<div class="banner err">⚠ La facture ${escapeHtml(d.facture.numero || '#' + id)} n'existe plus dans Axonaut (supprimée).
+    ${canFix ? '<button class="btn small" id="aInvoiceGone" style="margin-left:8px;">Remettre le devis à l\'état « Commande »</button>' : " Demande à quelqu'un qui peut facturer de remettre le devis à l'état « Commande »."}</div>`);
+  const bt = document.getElementById('aInvoiceGone');
+  if(bt) bt.addEventListener('click', () => cancelInvoicing('supprimee'));
 }
 
 // ================== Lignes envoyées à Axonaut (servira à la facture, étape D) ==================
@@ -2888,6 +2997,14 @@ document.getElementById('genericClear').addEventListener('click', () => {
 
 // ================== Démarrage ==================
 document.getElementById('listSearch').addEventListener('input', e => { listSearch = e.target.value; renderDraftList(); });
+// Actualiser : recharge la liste (devis créés ou modifiés sur d'autres postes) et relève le suivi
+// (ouvertures, acceptations en ligne). Le devis ouvert n'est pas touché.
+document.getElementById('refreshListBtn').addEventListener('click', async () => {
+  const bt = document.getElementById('refreshListBtn');
+  bt.disabled = true; bt.textContent = '↻ …';
+  try{ await loadModuleSettings(); await pollSuivi(); }
+  finally{ bt.disabled = false; bt.textContent = '↻ Actualiser'; }
+});
 document.getElementById('newDraftBtn').addEventListener('click', () => {
   if(!abandonEditIfNeeded()) return;
   if(!CSBAuth.can('devis', 'creer')){ alert("Tu n'as pas le droit de créer des devis — demande à un administrateur."); return; }
@@ -2904,7 +3021,10 @@ async function init(){
     renderDraftList();
     if(pendingOpenRecId){ const id = pendingOpenRecId; pendingOpenRecId = null; openRecordById(id); }
     settingsReady.then(pollSuivi);
-    setInterval(async () => { await loadModuleSettings(); pollSuivi(); }, 5 * 60 * 1000);
+    setInterval(async () => { await loadModuleSettings(); pollSuivi(); }, 2 * 60 * 1000);
+    const pollIfStale = () => { if(document.visibilityState === 'visible' && Date.now() - lastPollAt > 30000) pollSuivi(); };
+    window.addEventListener('focus', pollIfStale);
+    document.addEventListener('visibilitychange', pollIfStale);
   }catch(e){
     document.getElementById('draftList').innerHTML = `<div class="hint" style="padding:6px; color:var(--danger);">Devis indisponibles : ${escapeHtml(e.message)}</div>`;
   }

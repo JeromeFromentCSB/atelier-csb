@@ -772,6 +772,7 @@
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn ghost" id="blViewQuoteBtn" style="display:none;">📄 Voir le devis</button>
           <button class="btn ghost" id="blFabricationBtn" style="display:none;">🏭 Bon de fabrication</button>
+          <button class="btn ghost" id="blTakeOverBtn" style="display:none;" title="Recopie le devis de cette commande dans le module Devis pour le modifier ; la commande garde tout ce qui y est attaché">✏️ Modifier le devis dans le module Devis</button>
           <button class="btn ghost" id="blDeleteOrderBtn" style="display:none; color:var(--silk-red,#c0392b);" title="Supprime la commande et son devis (module Devis)">🗑 Supprimer la commande</button>
         </div>
         <div id="blShipmentsBox" style="margin-bottom:14px;">
@@ -1718,10 +1719,15 @@ function moduleRecordToRecord(rec){
   const liv = d.livraison || {};
   const client = d.client || {};
   const id = MODULE_ORDER_PREFIX + rec.id;
+  // Commande Axonaut reprise dans le module Devis : on garde ses identifiants Axonaut, pour que
+  // photos, documents, programmes, commentaire, cases cochées, colis et étiquettes déjà attachés
+  // restent rattachés sans rien recopier.
+  const linkedId = d.linkedContractId || null;
   return {
     source: 'module', moduleRec: rec,
-    contractId: id,
-    numeroCommande: rec.numero || id,
+    contractId: linkedId || id,
+    linkedContractId: linkedId,
+    numeroCommande: d.axonautOrderName || rec.numero || id,
     objet: ((d.commande && d.commande.title) || d.title || '').trim(), // objet du devis, affiché à côté du numéro
     clientCompany: client.name || rec.client_nom || '',
     companyId: client.id || rec.client_id || null,
@@ -1731,7 +1737,7 @@ function moduleRecordToRecord(rec){
     // La commande garde sa propre copie validée des lignes (data.commande) : elle ne suit les
     // modifications du devis que si on a choisi de la mettre à jour dans le module Devis.
     montant: d.commande && typeof d.commande.totalHt === 'number' ? d.commande.totalHt : (typeof rec.total_ht === 'number' ? rec.total_ht : null),
-    quotationId: id,
+    quotationId: d.axonautQuotationId || id,
     projectNumber: '',
     rawCustomFields: {},
     invoicesId: rec.axonaut_facture_id ? [rec.axonaut_facture_id] : [],
@@ -1767,7 +1773,132 @@ function moduleQuotation(r){
 // Commandes Axonaut + commandes du module Devis, dans une seule liste.
 async function fetchAllOrders(){
   const [rawContracts, moduleRecs] = await Promise.all([fetchAllContracts(), fetchModuleOrders()]);
-  return rawContracts.map(contractToRecord).concat(moduleRecs.map(moduleRecordToRecord));
+  const moduleOrders = moduleRecs.map(moduleRecordToRecord);
+  const byLinked = new Map(moduleOrders.filter(m => m.linkedContractId).map(m => [String(m.linkedContractId), m]));
+  const axonautOrders = rawContracts.map(contractToRecord).filter(r => {
+    const m = byLinked.get(String(r.contractId));
+    if(!m) return true;
+    // Reprise dans le module : on masque la version Axonaut, mais on garde ses factures.
+    const annulees = new Set((((m.moduleRec.data || {}).facturesAnnulees) || []).map(f => String(f.id)));
+    m.invoicesId = [...new Set([...(r.invoicesId || []), ...(m.invoicesId || [])])].filter(id => !annulees.has(String(id)));
+    return false;
+  });
+  return axonautOrders.concat(moduleOrders);
+}
+// Toutes les fiches du module Devis reprises d'Axonaut (quel que soit leur statut) : id du devis Axonaut -> fiche.
+async function fetchTakenOverQuotations(){
+  const map = new Map();
+  try{
+    let page = 1;
+    while(page <= 20){
+      const res = await CSBAuth.authedFetch(devisRecordsBase() + `?perPage=200&page=${page}&fields=id,numero,statut,data`);
+      if(!res.ok) break;
+      const json = await res.json();
+      (json.items || []).forEach(rec => { const q = rec.data && rec.data.axonautQuotationId; if(q) map.set(String(q), rec); });
+      if(page >= (json.totalPages || 1)) break;
+      page++;
+    }
+  }catch(e){}
+  return map;
+}
+
+// ---------- Reprise d'un devis / d'une commande Axonaut dans le module Devis ----------
+// Le devis Axonaut est recopié dans le module (numéro, client, lignes, conditions) pour être modifié
+// et géré là-bas ; une commande Axonaut existante est « prise en main » (mêmes identifiants, voir
+// moduleRecordToRecord). Le devis et la commande restent dans Axonaut, inchangés.
+function axonautLinesToModule(q){
+  const out = [];
+  let lastChapter = null;
+  (q.quotation_lines || []).forEach(l => {
+    const ch = stripHtmlToText(l.chapter || '').trim();
+    if(ch && ch !== lastChapter) out.push({ type: 'section', name: ch });
+    lastChapter = ch;
+    const qty = Number(l.quantity) || 0, pu = Number(l.price) || 0;
+    let disc = 0;
+    if(l.line_discount_amount){
+      disc = l.line_discount_unit_is_percent ? Number(l.line_discount_amount)
+        : (qty * pu ? Math.round(Number(l.line_discount_amount) / (qty * pu) * 10000) / 100 : 0);
+    }
+    out.push({
+      type: l.product_id ? 'product' : 'free', productId: l.product_id || null, productCode: l.product_code || '', internalId: l.product_internal_id || '',
+      name: l.title || l.product_name || '', description: l.details || '', quantity: qty, price: pu,
+      taxRate: (l.tax_rates && l.tax_rates[0] && Number(l.tax_rates[0].rate)) || 0, unit: l.unit || '',
+      discountPercent: disc, cost: l.unit_job_costing != null ? l.unit_job_costing : ''
+    });
+  });
+  return out;
+}
+function openInDevisModule(recId){
+  if(window.parent === window){ alert("Disponible uniquement dans l'application Atelier CSB."); return; }
+  window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { recId } }, '*');
+}
+let takingOver = false;
+async function takeOverInDevisModule(quotationId, order){
+  if(takingOver || !quotationId) return;
+  if(!CSBAuth.can('devis', 'creer')){ alert("Tu n'as pas le droit de créer des devis dans le module Devis — demande à un administrateur."); return; }
+  takingOver = true;
+  try{
+    // Déjà repris ? On ouvre simplement la fiche du module.
+    const known = (await fetchTakenOverQuotations()).get(String(quotationId));
+    if(known){ openInDevisModule(known.id); return; }
+    const qRes = await callAxonaut('/quotations/' + quotationId);
+    if(!qRes.ok || !qRes.parsed) throw new Error('devis Axonaut introuvable (HTTP ' + qRes.status + ')');
+    const q = qRes.parsed;
+    const contractId = order ? order.contractId : (q.contract_id || null);
+    const orderRec = contractId ? contracts.find(c => !isModuleOrder(c) && String(c.contractId) === String(contractId)) : null;
+    const msg = orderRec
+      ? `Reprendre la commande ${orderRec.numeroCommande} (devis ${q.number}) dans le module Devis ?\n\nLe devis y sera modifiable ; photos, documents, programmes, commentaire, lignes cochées et colis de la commande restent attachés.\nLe devis et la commande d'origine restent inchangés dans Axonaut.`
+      : `Reprendre le devis ${q.number} dans le module Devis ?\n\nIl y sera géré et modifiable ; le devis d'origine reste inchangé dans Axonaut.`;
+    if(!confirm(msg)) return;
+    const reglages = await fetchSharedSetting('devis_reglages').catch(() => null);
+    const at = (reglages && reglages.atelier) || {};
+    const user = (CSBAuth.currentUser() && CSBAuth.currentUser().username) || '';
+    const now = new Date().toISOString();
+    const lines = axonautLinesToModule(q);
+    const statut = orderRec ? 'accepte' : (q.status === 'refused' ? 'refuse' : (q.sent_date ? 'envoye' : 'brouillon'));
+    const data = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      createdAt: now, updatedAt: now, author: user, updatedBy: user, version: 1,
+      client: { id: q.company_id, name: q.company_name || '' }, addressId: null,
+      date: (q.date || now).slice(0, 10), expiryDate: (q.expiry_date || '').slice(0, 10),
+      themeId: null, title: stripHtmlToText(q.title || '').trim(), comments: stripHtmlToText(q.comments || ''),
+      paymentTerms: at.conditionsDefaut || '', mandatoryMentions: at.mentionsDefaut || '',
+      globalDiscount: q.global_discount_amount || 0, globalDiscountIsPercent: q.global_discount_unit_is_percent !== false,
+      lines,
+      axonautQuotationId: q.id,
+      axonautImport: { at: now, by: user, quoteNumber: q.number || '', totalHt: q.pre_tax_amount, totalTtc: q.total_amount, orderName: orderRec ? orderRec.numeroCommande : '' }
+    };
+    if(orderRec){
+      Object.assign(data, {
+        linkedContractId: orderRec.contractId, axonautOrderName: orderRec.numeroCommande,
+        acceptedAt: orderRec.startDate ? orderRec.startDate + 'T12:00:00.000Z' : now, acceptedVersion: 1,
+        livraison: { nomSoc: orderRec.nomSoc || '', contact: orderRec.contact || '', adresse: orderRec.adresse || '', cp: orderRec.cp || '', ville: orderRec.ville || '', pays: orderRec.pays || 'France', tel: orderRec.tel || '' },
+        commande: { version: 1, at: now, by: user, lines: JSON.parse(JSON.stringify(lines)), title: data.title, comments: data.comments,
+          globalDiscount: data.globalDiscount, globalDiscountIsPercent: data.globalDiscountIsPercent, totalHt: q.pre_tax_amount, totalTtc: q.total_amount }
+      });
+    }
+    const body = {
+      numero: q.number || '', statut, client_id: q.company_id || null, client_nom: q.company_name || '',
+      date_devis: data.date, total_ht: q.pre_tax_amount || 0, total_ttc: q.total_amount || 0, data,
+      historique: [{ date: now, user, action: orderRec ? `Repris d'Axonaut — devis ${q.number}, commande ${orderRec.numeroCommande}` : `Repris d'Axonaut — devis ${q.number}` }],
+      auteur: user, modifie_par: user
+    };
+    const res = await CSBAuth.authedFetch(devisRecordsBase(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if(!res.ok) throw new Error('PocketBase HTTP ' + res.status + ' — ' + (await res.text()).slice(0, 200));
+    const rec = await res.json();
+    // La commande passe tout de suite sous sa forme « module » dans la liste.
+    if(orderRec){
+      contracts = await fetchAllOrders();
+      if(typeof closeBlModal === 'function') closeBlModal();
+      render();
+    }
+    if(typeof renderDevisTab === 'function' && quotations.length) renderDevisTab();
+    openInDevisModule(rec.id);
+  }catch(e){
+    alert('Reprise impossible : ' + e.message);
+  }finally{
+    takingOver = false;
+  }
 }
 function splitContactName(contact){
   const parts = (contact || '').trim().split(/\s+/).filter(Boolean);
@@ -3806,7 +3937,8 @@ async function deleteModuleOrder(r){
   const rec = r.moduleRec, data = rec.data || {};
   if(rec.statut === 'facture'){ alert("Cette commande est facturée : elle ne peut pas être supprimée (sa facture existe dans Axonaut)."); return; }
   const nom = `${r.numeroCommande}${r.objet ? ' — ' + r.objet : ''} (${r.clientCompany || ''})`;
-  if(!confirm(`Supprimer définitivement la commande ${nom} ?\n\nSon devis est supprimé aussi (module Devis), elle disparaît de la page photo du téléphone, et le lien envoyé au client ne fonctionnera plus.\n\nCette suppression est irréversible.`)) return;
+  const linkedMsg = r.linkedContractId ? `\n\nCette commande avait été reprise d'Axonaut : la commande Axonaut d'origine réapparaîtra dans la liste, avec ses photos, documents et colis.` : '';
+  if(!confirm(`Supprimer définitivement la commande ${nom} ?\n\nSon devis est supprimé aussi (module Devis), elle disparaît de la page photo du téléphone, et le lien envoyé au client ne fonctionnera plus.${linkedMsg}\n\nCette suppression est irréversible.`)) return;
   try{
     const res = await CSBAuth.authedFetch(devisRecordsBase() + '/' + rec.id, { method:'DELETE' });
     if(!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
@@ -3863,6 +3995,7 @@ async function renderBlInvoiceLine(r){
     try{
       const res = await callAxonaut(`/invoices/${id}`);
       if(res.ok && res.parsed && res.parsed.number) invoiceNumberCache[id] = res.parsed.number;
+      else if(res.status === 404) invoiceNumberCache[id] = '#' + id + ' (supprimée dans Axonaut)';
     }catch(e){ console.warn('Numéro de facture Axonaut introuvable', id, e); }
   }));
   if(currentBlRecord !== r) return; // une autre commande a été ouverte entre-temps
@@ -3917,6 +4050,9 @@ async function openBlModal(r){
   currentBlQuotation = null;
   const fabricationBtn = document.getElementById('blFabricationBtn');
   fabricationBtn.style.display = r.quotationId ? 'inline-flex' : 'none';
+  const takeOverBtn = document.getElementById('blTakeOverBtn');
+  takeOverBtn.style.display = (!isModuleOrder(r) && r.quotationId && CSBAuth.can('devis', 'creer')) ? 'inline-flex' : 'none';
+  takeOverBtn.onclick = () => takeOverInDevisModule(r.quotationId, r);
   updateFabricationBtnLabel(r.contractId);
   fabricationBtn.onclick = async () => {
     if(!currentBlQuotation){ alert('Devis introuvable pour cette commande.'); return; }
@@ -5903,6 +6039,7 @@ function renderDevisDetail(q){
         ${q.public_path && isAdminUser() ? ` · <a href="${escapeHtml(q.public_path)}" target="_blank" style="color:var(--poste-yellow-dark);">Voir le PDF</a>` : ''}
       </div>
       <button class="btn ghost" id="devisFabricationBtn" style="margin-top:10px;">🏭 Bon de fabrication</button>
+      ${CSBAuth.can('devis', 'creer') ? `<button class="btn ghost" id="devisTakeOverBtn" style="margin-top:10px;" title="Recopie ce devis dans le module Devis pour le modifier et le gérer là-bas">📝 Gérer dans le module Devis</button>` : ''}
     </div>
     <div style="margin-bottom:18px;">
       <div class="col-section-title" style="margin-bottom:8px;">Documents</div>
@@ -5943,6 +6080,15 @@ function renderDevisDetail(q){
   // pas de champ image dans son API, la vignette vient du dossier réseau partagé (voir
   // saveProductImageToAxonautFolder côté Inventaire), retrouvée par référence article.
   document.getElementById('devisFabricationBtn').addEventListener('click', () => generateBonDeFabrication(q));
+  const takeOverDevisBtn = document.getElementById('devisTakeOverBtn');
+  if(takeOverDevisBtn){
+    takeOverDevisBtn.addEventListener('click', () => takeOverInDevisModule(q.id, null));
+    // Déjà repris : le bouton ouvre directement la fiche du module.
+    fetchTakenOverQuotations().then(map => {
+      const rec = map.get(String(q.id));
+      if(rec && takeOverDevisBtn.isConnected) takeOverDevisBtn.textContent = '📝 Ouvrir dans le module Devis (déjà repris)';
+    });
+  }
   setupDocDropzones(q);
   loadDevisDocuments(q);
   loadDevisLinesCheckState(q);

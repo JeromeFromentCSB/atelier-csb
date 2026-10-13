@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.46', items: [
+    "Devis : reprise d'un devis ou d'une commande Axonaut dans le module Devis (bouton dans Gestion Commande) — la commande garde ses programmes, documents et commentaire, et la facture se rattache à la commande Axonaut d'origine",
+    "Devis : l'œil de suivi (ouvertures par le client) se met à jour dans la liste — relève toutes les 2 minutes et au retour sur le module",
+    "Devis : facture supprimée dans Axonaut détectée (étiquette « ⚠ facture supprimée » dans la liste) avec remise du devis à l'état « Commande » ; bouton administrateur « Annuler la facturation » après un avoir",
+    "Devis : bouton « ↻ Actualiser » à côté de « Nouveau devis »",
+  ]},
   { v: '0.2.45', items: [
     "Documents de fabrication et de demande de prix : dépôt et suppression réservés aux administrateurs (Gestion Commande et module Devis)",
     "Devis : liste plus compacte — couleur du cadre selon l'état (état affiché au survol), objet en entier, client et montant HT ; devis ouvert en gras sur fond de la couleur de son état",
