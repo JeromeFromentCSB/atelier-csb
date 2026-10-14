@@ -925,6 +925,12 @@ function renderClientSelect(){
     names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)} (${counts.get(n)})</option>`).join('');
   sel.value = listClient;
 }
+// Liste : le plus récent en haut — date du devis, puis date de création, puis numéro (décroissants).
+function draftRecencyCompare(a, b){
+  return String(b.date || '').localeCompare(String(a.date || ''))
+    || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+    || String(b.numero || '').localeCompare(String(a.numero || ''), 'fr', { numeric: true });
+}
 function renderDraftList(){
   renderListFilters();
   renderClientSelect();
@@ -933,7 +939,8 @@ function renderDraftList(){
   const q = norm(listSearch);
   const items = drafts.map(x => x.draft).filter(d => f.test(d.statut))
     .filter(d => !listClient || (d.client && (d.client.name || '').trim() === listClient))
-    .filter(d => !q || norm([d.numero, d.title, d.client && d.client.name].join(' ')).includes(q));
+    .filter(d => !q || norm([d.numero, d.title, d.client && d.client.name].join(' ')).includes(q))
+    .sort(draftRecencyCompare);
   if(!items.length){ list.innerHTML = '<div class="hint" style="padding:6px;">Aucun devis ici.</div>'; return; }
   list.innerHTML = items.map(d => {
     const t = computeTotals(d);
