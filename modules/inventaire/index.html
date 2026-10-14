@@ -2287,7 +2287,7 @@ function itemsTableHTML(rows, idPrefix){
       <td class="num">
         <button class="ghost small" data-compare-item="${escapeHtml(it.id)}">Comparer les fournisseurs</button>
       </td>
-      <td>${escapeHtml(it.note||'—')}</td>
+      <td>${escapeHtml(noteWithoutSites(it.note)||(noteWebSites(it.note).length?'':'—'))}${noteWebSites(it.note).length ? ` <button class="ghost small" data-sites-item="${escapeHtml(it.id)}" title="Introuvable chez nos fournisseurs : voir les sites qui le proposent">ⓘ</button>` : ''}</td>
       <td>
         ${it.lienSite ? `<a href="${escapeHtml(it.lienSite)}" target="_blank" rel="noopener"><button class="ghost small" type="button">🔗 Site</button></a>` : ''}
         <button class="ghost small" data-edit-item="${escapeHtml(it.id)}">Modifier</button>
@@ -2373,12 +2373,321 @@ function attachTableHandlers(container, onSort){
       if(item) toggleValentoRow(item);
     });
   });
+  container.querySelectorAll('[data-sites-item]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const item = state.items.find(i=>i.id === btn.dataset.sitesItem);
+      if(item) openWebSitesModal(item);
+    });
+  });
   container.querySelectorAll('[data-compare-item]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const item = state.items.find(i=>i.id === btn.dataset.compareItem);
       if(item) toggleCompareRow(item);
     });
   });
+}
+
+/* ---------- Prix manquants : recherche chez tous les fournisseurs ----------
+   Les références saisies à la main ne sont pas toujours celles des fournisseurs : espace en trop
+   (« WK 9109 » → WK9109), marque collée au modèle (« Fruit of the Loom Iconic 195 » → ICONIC 195),
+   « style 9114 », « (?) »… On en déduit plusieurs références possibles, qu'on cherche dans les
+   catalogues importés (référence puis nom du modèle) et chez TopTex en direct. Chaque proposition
+   est à valider : rien n'est enregistré sans « Appliquer ». */
+const REF_BRANDS = {
+  'fruit of the loom':'fruit of the loom', 'fruit':'fruit of the loom', 'asquith & fox':'asquith', 'asquith&fox':'asquith', 'asquith':'asquith',
+  'atlantis':'atlantis', 'b&c':'b&c', 'b.c':'b&c', 'bc':'b&c', 'blackspider':'black spider', 'black spider':'black spider', 'clique':'clique',
+  'decathlon':'decathlon', 'gildan':'gildan', 'gilolan':'gildan', 'identity':'identity', 'jhk':'jhk', 'joma':'joma', 'kariban':'kariban',
+  'karlowsky':'karlowsky', 'maddins':'maddins', 'merak':'merak', 'normandy&co.':'normandy', 'premier':'premier', 'proact':'proact',
+  'promodoro':'promodoro', 'regatta':'regatta', 'result':'result', 'roly':'roly', 'russell':'russell', 'silenzio':'silenzio',
+  "sol's":"sol's", 'sols':"sol's", 'tee jays':'tee jays', 'teejays':'tee jays', 'est.1976':'tee jays', 'valento':'valento', 'velilla':'velilla',
+  'wnex':'wnex', 'yves delorme':'yves delorme', 'columbia':'columbia', 'apollo':'apollo', 'beachdream':'beachdream', "i'm organic":'',
+  'kimood':'kimood', 'k-up':'k-up', 'yoko':'yoko'
+};
+// Mots qui décrivent le produit sans faire partie de la référence.
+const REF_NOISE = ['tee-shirt','tablier','casquette','jacket','blouse','gilet','jogging','style','ref','group','men','wmns','adulte','organic cotton','cotton organic'];
+
+function refCompact(s){ return normText(s).replace(/[^a-z0-9]/g, ''); }
+function refEscape(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function refBrandOf(item){
+  const txt = ' ' + normText((item.marque || '') + ' ' + (item.reference || '')) + ' ';
+  const keys = Object.keys(REF_BRANDS).sort((a,b)=>b.length-a.length);
+  for(const k of keys){ if(new RegExp('(^|[\\s(])' + refEscape(k) + '(?=[\\s)#/]|$)').test(txt)) return REF_BRANDS[k]; }
+  return '';
+}
+// Références possibles, de la plus probable à la moins probable.
+function refCandidates(item){
+  const out = [];
+  const add = (s, kind) => { s = String(s || '').trim(); if(s && !out.some(o => refCompact(o.text) === refCompact(s))) out.push({ text: s, kind }); };
+  const raw = String(item.reference || '').replace(/\(\?\)/g, '').trim();
+  const low = normText(raw).replace(/#/g, ' ');
+  // 1. codes (lettres + chiffres), y compris « WK 9109 » écrit avec un espace
+  const codes = [];
+  low.replace(/(?<![&.])\b([a-z]{1,4})\s+(\d{2,6}[a-z]{0,2})\b/g, (m, a, b) => { if(!(a in REF_BRANDS) || a.length <= 3) codes.push(a + b); return m; });
+  (low.match(/[a-z0-9]*\d[a-z0-9-]*/g) || []).forEach(t => t.split('/').forEach(p => codes.push(p)));
+  codes.filter(c => refCompact(c).length >= 3).forEach(c => add(c.toUpperCase(), /[a-z]/.test(c) ? 'code' : 'num'));
+  // lettre O tapée à la place du zéro (« KIO 219 » → KI0219)
+  codes.forEach(c => { const m = /^([a-z]+)o(\d+)$/.exec(refCompact(c)); if(m) add((m[1] + '0' + m[2]).toUpperCase(), 'code'); });
+  // 2. nom du modèle sans la marque ni les mots génériques (« Iconic 195 », « Heavymill »…)
+  let rest = ' ' + low + ' ';
+  Object.keys(REF_BRANDS).concat(REF_NOISE).sort((a,b)=>b.length-a.length).forEach(k => { rest = rest.replace(new RegExp('(^|[\\s(])' + refEscape(k) + '(?=[\\s)/]|$)', 'g'), ' '); });
+  rest = rest.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+  if(refCompact(rest).length >= 4) add(rest, 'nom');
+  // puis chaque mot du nom (« Anchorage 45256 » → ANCHORAGE), avec une confiance moindre
+  const words = rest.split(' ').filter(w => /^[a-z]{5,}$/.test(w));
+  if(words.length > 1 || refCompact(rest) !== (words[0] || '')) words.forEach(w => add(w, 'mot'));
+  if(item.marque && refCompact(raw).length >= 4) add(raw, 'nom');
+  return out;
+}
+function refVariantPrice(variants, item){
+  const priced = (variants || []).filter(v => v.prix != null && v.prix !== '');
+  if(!priced.length) return null;
+  const matched = priced.filter(v => matchesCatalogueItem(v, item));
+  const pool = matched.length ? matched : priced;
+  return { price: Math.min(...pool.map(v => Number(v.prix))), exact: matched.length > 0 };
+}
+// Produits du catalogue importé (tous fournisseurs) qui correspondent à une ligne de l'inventaire.
+function refSearchCatalogue(item){
+  const brand = refBrandOf(item);
+  const cands = refCandidates(item);
+  const found = new Map();
+  state.catalogueItems.forEach(prod => {
+    if(brand === 'valento' && prod.fournisseur !== 'Valento') return;
+    const pRef = refCompact(prod.reference), pMod = refCompact(prod.modele), pDes = refCompact(prod.designation);
+    const desTxt = normText(prod.designation);
+    const brandOk = brand && desTxt.includes(brand);
+    // la désignation cite une autre marque (Imbretex met la marque en tête) : correspondance douteuse
+    const otherBrand = brand && !brandOk && Object.values(REF_BRANDS).some(b => b && b !== brand && b.length > 3 && desTxt.startsWith(b));
+    // Falk & Ross ne cite pas la marque : ses références Tee Jays / Promodoro sont des numéros seuls
+    const frStyle = prod.fournisseur === 'Falk & Ross' && (brand === 'tee jays' || brand === 'promodoro');
+    let best = 0, via = '';
+    cands.forEach(c => {
+      const k = refCompact(c.text);
+      if(k.length < 3) return;
+      let s = 0;
+      if(pRef === k) s = c.kind === 'num' ? (brandOk ? 95 : frStyle ? 90 : 40) : 100;
+      else if(/\d/.test(k) && k.length >= 4 && pRef.length <= k.length + 4 && pRef.includes(k)){
+        // code fournisseur = code de la marque avec un préfixe/suffixe (Promodoro 3099 → PM3099, Russell 599M → R-599M-0)
+        s = brandOk || frStyle ? 80 : 45;
+      }
+      else if(c.kind === 'code' && /[a-z]/.test(k) && k.length >= 4){
+        if(pMod === k) s = 90;
+        else if(pMod.startsWith(k)) s = 70;
+      }
+      else if(c.kind === 'mot'){
+        if(pMod === k) s = 70;
+        else if(pMod.startsWith(k)) s = 50;
+      }
+      else if(c.kind === 'nom' && k.length >= 4){
+        if(pMod === k) s = 90;
+        else if(pMod.startsWith(k)) s = 70;
+        else if(k.length >= 6 && pDes.includes(k)) s = 50;
+      }
+      if(s && brand && brand !== 'valento' && prod.fournisseur === 'Valento') s -= 30;
+      if(s && brandOk && s < 100) s += 5;
+      if(s && otherBrand) s -= 30;
+      if(s > best){ best = s; via = c.text; }
+    });
+    if(best < 40) return;
+    const vp = refVariantPrice(prod.variants, item);
+    if(!vp) return;
+    found.set(prod.id, { key: 'cat:' + prod.id, score: best, via, fournisseur: prod.fournisseur, reference: prod.reference,
+      label: prod.modele || prod.designation || '', price: vp.price, exact: vp.exact, prod });
+  });
+  return [...found.values()];
+}
+// TopTex en direct, pour les références de type code (WK9109, KP228, K356…). Une requête par code.
+const refToptexCache = new Map();
+async function refToptexRows(code){
+  if(refToptexCache.has(code)) return refToptexCache.get(code);
+  const p = (async () => {
+    const res = await toptexGet('/v3/products/price', { catalog_reference: code });
+    if(!res.ok) return [];
+    return extractRows(res.data);
+  })().catch(() => []);
+  refToptexCache.set(code, p);
+  return p;
+}
+function refToptexPrice(rows, item){
+  const unit = r => { const up = Array.isArray(r.prices) ? (r.prices.find(p=>String(p.quantity)==='1') || r.prices[0]) : null; return up ? Number(up.price) : null; };
+  const matched = rows.filter(r => matchesVariant(r, item)).map(unit).filter(v => v != null);
+  const all = rows.map(unit).filter(v => v != null);
+  if(!all.length) return null;
+  return matched.length ? { price: Math.min(...matched), exact: true } : { price: Math.min(...all), exact: false };
+}
+async function refSearchToptex(item){
+  if(!getToptexCreds()) return [];
+  const codes = refCandidates(item).filter(c => c.kind === 'code').slice(0, 3);
+  const out = [];
+  for(const c of codes){
+    const code = refCompact(c.text).toUpperCase();
+    const rows = await refToptexRows(code);
+    const vp = rows.length ? refToptexPrice(rows, item) : null;
+    if(vp){ out.push({ key: 'tt:' + code, score: 100, via: c.text, fournisseur: 'TopTex', reference: code, label: '', price: vp.price, exact: vp.exact, toptexCode: code }); break; }
+  }
+  return out;
+}
+// Prix d'une ligne de l'inventaire pour la proposition choisie (couleur / taille de la ligne).
+async function refPriceForItem(cand, item){
+  if(cand.toptexCode){ const rows = await refToptexRows(cand.toptexCode); return refToptexPrice(rows, item); }
+  return refVariantPrice(cand.prod && cand.prod.variants, item);
+}
+
+// Sites trouvés sur internet : rangés dans la note, sur une ligne « 🌐 Sites : Nom <url> ; Nom <url> ».
+const WEB_SITES_RE = /(?:^|\n)\s*🌐 Sites\s*:\s*([^\n]*)/;
+function noteWebSites(note){
+  const m = WEB_SITES_RE.exec(String(note || ''));
+  if(!m) return [];
+  return m[1].split(/\s;\s/).map(s => {
+    const mm = /^(.*?)\s*<([^>]+)>\s*$/.exec(s.trim());
+    return mm ? { nom: mm[1].trim() || mm[2], url: mm[2].trim() } : { nom: s.trim(), url: '' };
+  }).filter(s => s.nom);
+}
+function noteWithoutSites(note){ return String(note || '').replace(WEB_SITES_RE, '').trim(); }
+function openWebSitesModal(item){
+  const sites = noteWebSites(item.note);
+  const overlay = document.createElement('div');
+  overlay.className = 'tt-overlay';
+  overlay.innerHTML = `
+    <div class="tt-modal" style="max-width:560px;">
+      <button class="ghost small tt-close">✕ Fermer</button>
+      <h3>Où trouver « ${escapeHtml(item.reference)} »</h3>
+      <div class="hint" style="margin-top:0;">Introuvable chez nos fournisseurs — sites qui le proposent (recherche sur internet).</div>
+      <ul style="margin:14px 0 0; padding-left:18px; line-height:1.9;">
+        ${sites.map(s => `<li>${s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.nom)}</a>` : escapeHtml(s.nom)}</li>`).join('')}
+      </ul>
+    </div>`;
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if(e.target === overlay || e.target.closest('.tt-close')) close(); });
+  document.body.appendChild(overlay);
+}
+
+let missingPriceRun = null;
+function missingPriceGroups(){
+  const groups = new Map();
+  state.items.filter(it => it.prix == null || it.prix === '' || Number(it.prix) === 0).forEach(it => {
+    const k = refCompact(it.reference) + '|' + normText(it.marque);
+    if(!groups.has(k)) groups.set(k, { key: k, reference: it.reference, marque: it.marque || '', items: [], cands: [], choice: '', done: false });
+    groups.get(k).items.push(it);
+  });
+  return [...groups.values()].sort((a,b) => normText(a.reference).localeCompare(normText(b.reference)));
+}
+function openMissingPricesModal(){
+  if(missingPriceRun && missingPriceRun.overlay.isConnected) return;
+  const groups = missingPriceGroups();
+  const overlay = document.createElement('div');
+  overlay.className = 'tt-overlay';
+  overlay.id = 'missing-overlay';
+  overlay.innerHTML = `
+    <div class="tt-modal" style="max-width:980px;">
+      <button class="ghost small tt-close" id="mp-close">✕ Fermer</button>
+      <h3>Prix manquants</h3>
+      <div class="hint" style="margin-top:0;">Recherche chez tous les fournisseurs (catalogues importés et TopTex en direct), en essayant plusieurs écritures de la référence. Vérifie les propositions, puis « Appliquer » : le prix de chaque ligne est pris selon sa couleur et sa taille.</div>
+      <div id="mp-progress" class="hint" style="margin:10px 0; font-weight:600;"></div>
+      <div id="mp-list"></div>
+      <div style="position:sticky; bottom:-24px; background:#fff; padding:12px 0 2px; display:flex; gap:10px; align-items:center; border-top:1px solid var(--line); margin-top:10px;">
+        <button class="primary" id="mp-apply">Appliquer les prix choisis</button>
+        <span class="hint" id="mp-apply-info" style="margin:0;"></span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const run = missingPriceRun = { overlay, groups, cancelled: false };
+  const close = () => { run.cancelled = true; overlay.remove(); };
+  overlay.querySelector('#mp-close').addEventListener('click', close);
+  overlay.querySelector('#mp-apply').addEventListener('click', () => applyMissingPrices(run));
+  renderMissingPrices(run);
+  searchMissingPrices(run);
+}
+function renderMissingPrices(run){
+  const list = run.overlay.querySelector('#mp-list');
+  if(!list) return;
+  const total = run.groups.length, done = run.groups.filter(g => g.done).length;
+  const withCands = run.groups.filter(g => g.cands.length).length;
+  run.overlay.querySelector('#mp-progress').textContent = done < total
+    ? `Recherche… ${done} / ${total} références`
+    : `${total} références sans prix — ${withCands} avec une proposition, ${total - withCands} introuvables chez nos fournisseurs.`;
+  const chosen = run.groups.filter(g => g.choice).length;
+  run.overlay.querySelector('#mp-apply-info').textContent = chosen ? `${chosen} référence(s) choisie(s)` : '';
+  list.innerHTML = run.groups.map((g, gi) => {
+    const colors = [...new Set(g.items.map(i => [i.couleur, i.taille].filter(Boolean).join(' ')).filter(Boolean))].join(', ');
+    const sites = noteWebSites((g.items.find(i => noteWebSites(i.note).length) || {}).note);
+    const head = `<div style="display:flex; gap:8px; align-items:baseline; flex-wrap:wrap;">
+        <b>${escapeHtml(g.reference)}</b>${g.marque ? `<span class="hint" style="margin:0;">${escapeHtml(g.marque)}</span>` : ''}
+        <span class="hint" style="margin:0;">${g.items.length} ligne(s)${colors ? ' · ' + escapeHtml(colors) : ''}</span>
+        ${sites.length ? `<button class="ghost small" data-mp-sites="${gi}" title="Sites trouvés sur internet">ⓘ ${sites.length} site(s)</button>` : ''}
+      </div>`;
+    let body;
+    if(!g.done) body = '<div class="hint" style="margin:4px 0 0;">…</div>';
+    else if(!g.cands.length) body = `<div class="hint" style="margin:4px 0 0;">Introuvable chez nos fournisseurs (essayé : ${escapeHtml(refCandidates(g.items[0]).map(c=>c.text).join(', ') || '—')}).</div>`;
+    else body = `<div style="margin-top:4px; display:grid; gap:2px;">
+        ${g.cands.map(c => `<label style="display:flex; gap:8px; align-items:center; font-size:13px; cursor:pointer;">
+          <input type="radio" name="mp-${gi}" value="${escapeHtml(c.key)}" ${g.choice === c.key ? 'checked' : ''} data-mp-g="${gi}">
+          <span style="min-width:96px; font-weight:600;">${escapeHtml(c.fournisseur)}</span>
+          <span style="min-width:90px;">${escapeHtml(c.reference)}</span>
+          <span style="flex:1; min-width:180px; color:var(--muted);">${escapeHtml(c.label)}${c.via && refCompact(c.via) !== refCompact(c.reference) ? ` <i>(trouvé par « ${escapeHtml(c.via)} »)</i>` : ''}</span>
+          <span style="min-width:80px; text-align:right; font-weight:600;">${fmtPrix(c.price)}</span>
+          <span class="hint" style="margin:0; min-width:120px;">${c.exact ? 'couleur/taille OK' : 'prix le plus bas du modèle'}</span>
+        </label>`).join('')}
+        <label style="display:flex; gap:8px; align-items:center; font-size:13px; cursor:pointer; color:var(--muted);">
+          <input type="radio" name="mp-${gi}" value="" ${!g.choice ? 'checked' : ''} data-mp-g="${gi}"> Aucune — ne rien changer
+        </label>
+      </div>`;
+    return `<div style="border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:8px; ${g.applied ? 'background:var(--vert-bg);' : ''}">${head}${body}${g.applied ? '<div style="color:var(--vert); font-weight:600; font-size:12px;">✓ Prix appliqué</div>' : ''}</div>`;
+  }).join('');
+  list.querySelectorAll('[data-mp-g]').forEach(r => r.addEventListener('change', () => { run.groups[Number(r.dataset.mpG)].choice = r.value; renderMissingPrices(run); }));
+  list.querySelectorAll('[data-mp-sites]').forEach(b => b.addEventListener('click', () => {
+    const g = run.groups[Number(b.dataset.mpSites)];
+    openWebSitesModal(g.items.find(i => noteWebSites(i.note).length));
+  }));
+}
+async function searchMissingPrices(run){
+  for(const g of run.groups){
+    if(run.cancelled) return;
+    const item = g.items[0];
+    let cands = refSearchCatalogue(item);
+    if(!cands.some(c => c.score >= 100)) cands = cands.concat(await refSearchToptex(item));
+    cands.sort((a,b) => b.score - a.score || a.price - b.price);
+    g.cands = cands.slice(0, 6);
+    // Présélection : uniquement une correspondance sûre (référence exacte ou nom de modèle identique).
+    const top = g.cands[0];
+    if(top && top.score >= 90){
+      const sameLevel = g.cands.filter(c => c.score === top.score);
+      const names = new Set(sameLevel.map(c => refCompact(c.label) || refCompact(c.reference)));
+      if(names.size === 1 || top.score >= 100) g.choice = sameLevel.reduce((a,b) => b.price < a.price ? b : a).key;
+    }
+    g.done = true;
+    renderMissingPrices(run);
+  }
+  // fin de la recherche : les références avec une proposition d'abord
+  run.groups.sort((a, b) => (b.cands.length > 0) - (a.cands.length > 0));
+  renderMissingPrices(run);
+}
+async function applyMissingPrices(run){
+  const todo = run.groups.filter(g => g.choice && !g.applied);
+  if(!todo.length){ toast('Aucune proposition choisie.'); return; }
+  const nb = todo.reduce((n, g) => n + g.items.length, 0);
+  if(!confirm(`Enregistrer le prix de ${nb} ligne(s) de l'inventaire (${todo.length} référence(s)) ?`)) return;
+  const btn = run.overlay.querySelector('#mp-apply');
+  btn.disabled = true;
+  let ok = 0, ko = 0;
+  for(const g of todo){
+    const cand = g.cands.find(c => c.key === g.choice);
+    if(!cand) continue;
+    for(const it of g.items){
+      try{
+        const vp = await refPriceForItem(cand, it);
+        if(!vp) continue;
+        const data = { prix: Math.round(vp.price * 100) / 100 };
+        if(!it.fournisseur) data.fournisseur = cand.fournisseur;
+        await itemsCol.doc(it.id).update(data);
+        ok++;
+      }catch(e){ ko++; }
+    }
+    g.applied = true;
+    g.choice = '';
+    renderMissingPrices(run);
+  }
+  btn.disabled = false;
+  toast(`${ok} prix enregistré(s)` + (ko ? `, ${ko} échec(s)` : '') + '.');
 }
 
 /* ---------- Inventaire panel ---------- */
@@ -2406,6 +2715,7 @@ function renderInventairePanel(){
     <div class="toolbar">
       <input type="text" class="search-box" id="inv-search" placeholder="Filtrer par référence, couleur, taille…" value="${escapeHtml(searchQuery)}">
       <select id="inv-cat-filter"><option value="">Toutes catégories</option>${[...state.categories].sort().map(c=>`<option value="${escapeHtml(c)}" ${categoryFilter===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select>
+      <button class="ghost" id="inv-missing-prices" title="Chercher le prix des articles qui n'en ont pas, chez tous les fournisseurs">🔎 Prix manquants (${state.items.filter(it => it.prix == null || it.prix === '' || Number(it.prix) === 0).length})</button>
     </div>
     <div id="inv-results"></div>
   `;
@@ -2447,6 +2757,7 @@ function renderInventairePanel(){
 
   document.getElementById('inv-search').addEventListener('input', e=>{ searchQuery = e.target.value; renderInvResults(); });
   document.getElementById('inv-cat-filter').addEventListener('change', e=>{ categoryFilter = e.target.value; renderInvResults(); });
+  document.getElementById('inv-missing-prices').addEventListener('click', openMissingPricesModal);
 
   renderInvResults();
 }

@@ -526,6 +526,24 @@ ipcMain.handle('csb:pick-paths', async (event, kind) => {
   const res = await dialog.showOpenDialog(win, { properties });
   return res.canceled ? [] : res.filePaths;
 });
+// Presse-papier pour les boutons « 📋 Coller » des documents : fichiers copiés dans l'Explorateur
+// (Ctrl+C) ou image copiée (WhatsApp, capture d'écran…) — le navigateur ne sait pas lire les fichiers.
+ipcMain.handle('csb:clipboard-content', () => {
+  const { clipboard } = require('electron');
+  let files = [];
+  if (process.platform === 'win32') {
+    try {
+      const buf = clipboard.readBuffer('FileNameW');
+      if (buf && buf.length) {
+        files = buf.toString('ucs2').split(String.fromCharCode(0)).map(s => s.trim()).filter(p => p && fs.existsSync(p) && fs.statSync(p).isFile());
+      }
+    } catch (e) {}
+  }
+  if (files.length) return { files };
+  const img = clipboard.readImage();
+  if (img && !img.isEmpty()) return { files: [], image: img.toPNG().toString('base64') };
+  return { files: [] };
+});
 ipcMain.handle('csb:read-file-bytes', (_event, filePath) => new Uint8Array(fs.readFileSync(resolvePortablePath(filePath))));
 
 // Recherche récursive (dossier courant + tous ses sous-dossiers), filtrée par

@@ -150,6 +150,7 @@
   .chip{ border:1px solid var(--line); background:#fff; border-radius:999px; padding:3px 9px; font-size:11px; font-weight:600; color:var(--muted); }
   .chip.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
   .list-search{ width:100%; margin-top:10px; border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  .list-client{ width:100%; margin-top:6px; border:1px solid var(--line); border-radius:8px; padding:5px 8px; background:#fff; font:inherit; }
   .st{ display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap; }
   .st-brouillon{ background:#EEE9E0; color:#7A7062; }
   .st-envoye{ background:#E3ECF8; color:#2D5B9A; }
@@ -225,7 +226,8 @@
         <button class="btn" id="refreshListBtn" title="Recharger la liste des devis et le suivi des ouvertures">↻ Actualiser</button>
       </div>
       <input type="text" class="list-search" id="listSearch" placeholder="🔎 N°, objet ou client…" autocomplete="off">
-      <div class="filters" id="listFilters"></div>
+      <select class="list-client" id="listFilters" title="Filtrer la liste par état"></select>
+      <select class="list-client" id="listClient" title="Filtrer la liste par client (parmi les devis de l'état choisi)"><option value="">Tous les clients</option></select>
     </header>
     <div class="draft-list" id="draftList"><div class="hint" style="padding:6px;">Chargement…</div></div>
     <footer><button class="btn small full" id="settingsBtn">⚙︎ Réglages du module</button></footer>
@@ -551,6 +553,7 @@ let currentUpdated = '';  // date "updated" PocketBase connue, pour repérer une
 let saveState = '';
 let listFilter = 'actifs';
 let listSearch = '';
+let listClient = ''; // nom du client choisi dans la liste déroulante ('' = tous)
 
 function newDraft(){
   return {
@@ -902,20 +905,34 @@ function showStatusTip(label, sc, x, y){
 }
 function hideStatusTip(){ const tip = document.getElementById('stTip'); if(tip) tip.style.display = 'none'; }
 function renderListFilters(){
-  const box = document.getElementById('listFilters');
-  box.innerHTML = LIST_FILTERS.map(f => {
+  const sel = document.getElementById('listFilters');
+  sel.innerHTML = LIST_FILTERS.map(f => {
     const n = drafts.filter(x => f.test(x.draft.statut)).length;
-    const dot = f.color ? `<span class="dot" style="background:${f.color};"></span>` : '';
-    return `<button class="chip ${listFilter === f.id ? 'on' : ''}" data-f="${f.id}">${dot}${escapeHtml(f.label)} ${n}</button>`;
+    return `<option value="${f.id}"${f.color ? ` style="color:${f.color};"` : ''}>${f.color ? '● ' : ''}${escapeHtml(f.label)} (${n})</option>`;
   }).join('');
-  box.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { listFilter = b.dataset.f; renderDraftList(); }));
+  sel.value = listFilter;
+}
+// Liste déroulante des clients : « Tous les clients » puis les clients présents dans les devis (A→Z).
+function renderClientSelect(){
+  const sel = document.getElementById('listClient');
+  if(!sel) return;
+  const counts = new Map();
+  const f = LIST_FILTERS.find(x => x.id === listFilter) || LIST_FILTERS[0];
+  drafts.filter(x => f.test(x.draft.statut)).forEach(x => { const n = x.draft.client && (x.draft.client.name || '').trim(); if(n) counts.set(n, (counts.get(n) || 0) + 1); });
+  if(listClient && !counts.has(listClient)) counts.set(listClient, 0);
+  const names = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+  sel.innerHTML = '<option value="">Tous les clients</option>' +
+    names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)} (${counts.get(n)})</option>`).join('');
+  sel.value = listClient;
 }
 function renderDraftList(){
   renderListFilters();
+  renderClientSelect();
   const list = document.getElementById('draftList');
   const f = LIST_FILTERS.find(x => x.id === listFilter) || LIST_FILTERS[0];
   const q = norm(listSearch);
   const items = drafts.map(x => x.draft).filter(d => f.test(d.statut))
+    .filter(d => !listClient || (d.client && (d.client.name || '').trim() === listClient))
     .filter(d => !q || norm([d.numero, d.title, d.client && d.client.name].join(' ')).includes(q));
   if(!items.length){ list.innerHTML = '<div class="hint" style="padding:6px;">Aucun devis ici.</div>'; return; }
   list.innerHTML = items.map(d => {
@@ -1741,9 +1758,40 @@ async function saveHtmlAsDocument(html, text, category){
   const page = html || `<pre>${escapeHtml(text || '')}</pre>`;
   await uploadDocuments([new File([page], 'email_' + Date.now() + '.html', { type: 'text/html' })], category);
 }
+// Fichiers copiés (Explorateur) ou image copiée (WhatsApp, capture…) : lus par l'application
+// installée, convertis en fichiers prêts à déposer. Renvoie [] s'il n'y a rien de ce type.
+const CLIP_MIME = { pdf:'application/pdf', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp', bmp:'image/bmp', svg:'image/svg+xml', ai:'application/postscript', eps:'application/postscript', txt:'text/plain', html:'text/html', htm:'text/html', doc:'application/msword', docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xls:'application/vnd.ms-excel', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', zip:'application/zip' };
+async function clipboardFilesAsFiles(){
+  const out = [];
+  if(window.csbHost && window.csbHost.clipboardContent){
+    try{
+      const c = await window.csbHost.clipboardContent();
+      for(const p of (c && c.files) || []){
+        const name = p.split(/[\\/]/).pop();
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        out.push(new File([await window.csbHost.readFileBytes(p)], name, { type: CLIP_MIME[ext] || 'application/octet-stream' }));
+      }
+      if(!out.length && c && c.image){
+        const bin = atob(c.image), bytes = new Uint8Array(bin.length);
+        for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        out.push(new File([bytes], 'image_' + Date.now() + '.png', { type: 'image/png' }));
+      }
+      if(out.length) return out;
+    }catch(e){ /* on retombe sur le presse-papier du navigateur */ }
+  }
+  try{
+    for(const item of await navigator.clipboard.read()){
+      const t = item.types.find(x => x.startsWith('image/'));
+      if(t){ const blob = await item.getType(t); out.push(new File([blob], 'image_' + Date.now() + '.' + (t.split('/')[1] || 'png'), { type: t })); }
+    }
+  }catch(e){}
+  return out;
+}
 async function pasteDocument(category){
   docsMsg('Lecture du presse-papier…');
   try{
+    const files = await clipboardFilesAsFiles();
+    if(files.length){ await uploadDocuments(files, category); return; }
     for(const item of await navigator.clipboard.read()){
       if(item.types.includes('text/html')){ await saveHtmlAsDocument(await (await item.getType('text/html')).text(), null, category); return; }
     }
@@ -2997,6 +3045,8 @@ document.getElementById('genericClear').addEventListener('click', () => {
 
 // ================== Démarrage ==================
 document.getElementById('listSearch').addEventListener('input', e => { listSearch = e.target.value; renderDraftList(); });
+document.getElementById('listFilters').addEventListener('change', e => { listFilter = e.target.value; renderDraftList(); });
+document.getElementById('listClient').addEventListener('change', e => { listClient = e.target.value; renderDraftList(); });
 // Actualiser : recharge la liste (devis créés ou modifiés sur d'autres postes) et relève le suivi
 // (ouvertures, acceptations en ligne). Le devis ouvert n'est pas touché.
 document.getElementById('refreshListBtn').addEventListener('click', async () => {
@@ -3052,6 +3102,7 @@ async function openRecordById(recId){
   const f = LIST_FILTERS.find(x => x.id === listFilter);
   if(f && !f.test(entry.draft.statut)) listFilter = 'tous';
   listSearch = ''; const ls = document.getElementById('listSearch'); if(ls) ls.value = '';
+  if(listClient && (!entry.draft.client || (entry.draft.client.name || '').trim() !== listClient)) listClient = '';
   editorTab = 'infos';
   openDraft(JSON.parse(JSON.stringify(entry.draft)), entry.recId, entry.updated);
   const el = document.querySelector(`.draft-item[data-id="${CSS.escape(entry.draft.id)}"]`);

@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.47', items: [
+    "Devis : la liste se filtre par état (liste déroulante) puis par client (clients des devis de l'état choisi)",
+    "Inventaire : bouton « 🔎 Prix manquants » — recherche le prix chez tous les fournisseurs (catalogues importés et TopTex) en essayant plusieurs écritures de la référence (espace retiré, marque retirée…), propositions à valider avant enregistrement",
+    "Inventaire : bouton ⓘ dans la note pour les articles introuvables chez nos fournisseurs — liste des sites internet qui les proposent",
+    "Documents de fabrication et de demande de prix : le bouton « 📋 Coller » accepte une image copiée (WhatsApp, capture d'écran) et des fichiers copiés dans l'Explorateur",
+    "Page photo du téléphone : une commande reprise dans le module Devis n'apparaît plus en double",
+  ]},
   { v: '0.2.46', items: [
     "Devis : reprise d'un devis ou d'une commande Axonaut dans le module Devis (bouton dans Gestion Commande) — la commande garde ses programmes, documents et commentaire, et la facture se rattache à la commande Axonaut d'origine",
     "Devis : l'œil de suivi (ouvertures par le client) se met à jour dans la liste — relève toutes les 2 minutes et au retour sur le module",

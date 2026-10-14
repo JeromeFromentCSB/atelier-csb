@@ -1277,6 +1277,13 @@ async function syncCommandesIndex(list){
       }else if(found.numero_commande !== body.numero_commande || found.client !== body.client || !!found.facturee !== facturee || found.tel !== body.tel || found.date !== body.date || found.lignes_json !== body.lignes_json){
         await CSBAuth.authedFetch(commandesIndexBase() + '/' + found.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(()=>{});
       }
+      // Commande Axonaut reprise dans le module Devis : elle est indexée sous son n° Axonaut ; une
+      // éventuelle ligne « D-… » d'avant la reprise ferait un doublon sur le téléphone (photos
+      // prises dessus invisibles sur l'ordinateur) — on la retire.
+      if(isModuleOrder(r) && r.linkedContractId){
+        const stale = byContract[MODULE_ORDER_PREFIX + r.moduleRec.id];
+        if(stale) await CSBAuth.authedFetch(commandesIndexBase() + '/' + stale.id, { method:'DELETE' }).catch(()=>{});
+      }
     }
   }catch(e){ console.warn('Synchro index commandes (page mobile) impossible', e); }
 }
@@ -6286,11 +6293,42 @@ async function saveClipboardHtmlAsDoc(html, text, category, q, opts){
   const file = new File([blob], 'email_' + Date.now() + '.html', { type:'text/html' });
   await uploadDevisDocuments([file], category, q, opts);
 }
+// Fichiers copiés (Explorateur) ou image copiée (WhatsApp, capture…) : lus par l'application
+// installée, convertis en fichiers prêts à déposer. Renvoie [] s'il n'y a rien de ce type.
+const CLIP_MIME = { pdf:'application/pdf', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp', bmp:'image/bmp', svg:'image/svg+xml', ai:'application/postscript', eps:'application/postscript', txt:'text/plain', html:'text/html', htm:'text/html', doc:'application/msword', docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xls:'application/vnd.ms-excel', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', zip:'application/zip' };
+async function clipboardFilesAsFiles(){
+  const out = [];
+  if(window.csbHost && window.csbHost.clipboardContent){
+    try{
+      const c = await window.csbHost.clipboardContent();
+      for(const p of (c && c.files) || []){
+        const name = p.split(/[\\/]/).pop();
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        out.push(new File([await window.csbHost.readFileBytes(p)], name, { type: CLIP_MIME[ext] || 'application/octet-stream' }));
+      }
+      if(!out.length && c && c.image){
+        const bin = atob(c.image), bytes = new Uint8Array(bin.length);
+        for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        out.push(new File([bytes], 'image_' + Date.now() + '.png', { type: 'image/png' }));
+      }
+      if(out.length) return out;
+    }catch(e){ /* on retombe sur le presse-papier du navigateur */ }
+  }
+  try{
+    for(const item of await navigator.clipboard.read()){
+      const t = item.types.find(x => x.startsWith('image/'));
+      if(t){ const blob = await item.getType(t); out.push(new File([blob], 'image_' + Date.now() + '.' + (t.split('/')[1] || 'png'), { type: t })); }
+    }
+  }catch(e){}
+  return out;
+}
 async function pasteFromClipboardToDoc(category, q, opts){
   const msg = document.getElementById((opts && opts.msgId) || 'docsUploadMsg');
   msg.style.color = 'var(--muted)';
   msg.textContent = 'Lecture du presse-papier…';
   try{
+    const files = await clipboardFilesAsFiles();
+    if(files.length){ await uploadDevisDocuments(files, category, q, opts); return; }
     const items = await navigator.clipboard.read();
     for(const item of items){
       if(item.types.includes('text/html')){

@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('csbHost', {
   pickPaths: (kind) => ipcRenderer.invoke('csb:pick-paths', kind),
   listDir: (dirPath) => ipcRenderer.invoke('csb:list-dir', dirPath),
   readFileBytes: (filePath) => ipcRenderer.invoke('csb:read-file-bytes', filePath),
+  clipboardContent: () => ipcRenderer.invoke('csb:clipboard-content'),
   startSearchFiles: (rootPath, query, exts, includeRecycle) => ipcRenderer.invoke('csb:search-files-start', { rootPath, query, exts, includeRecycle }),
   onSearchFilesProgress: (callback) => {
     const listener = (_event, payload) => callback(payload);
