@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.48', items: [
+    "Inventaire, « Prix manquants » : rien n'est coché d'avance (« Aucune » par défaut), les correspondances sûres sont signalées par ★",
+    "Inventaire, « Prix manquants » : en validant un prix, la référence devient le texte qui a permis de trouver l'article (« WK 9109 » → WK9109, « Fruit of the Loom Iconic 195 » → Iconic 195) et le reste est ajouté à la note",
+  ]},
   { v: '0.2.47', items: [
     "Devis : la liste se filtre par état (liste déroulante) puis par client (clients des devis de l'état choisi)",
     "Inventaire : bouton « 🔎 Prix manquants » — recherche le prix chez tous les fournisseurs (catalogues importés et TopTex) en essayant plusieurs écritures de la référence (espace retiré, marque retirée…), propositions à valider avant enregistrement",

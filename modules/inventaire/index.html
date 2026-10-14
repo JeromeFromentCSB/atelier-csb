@@ -2581,7 +2581,7 @@ function openMissingPricesModal(){
     <div class="tt-modal" style="max-width:980px;">
       <button class="ghost small tt-close" id="mp-close">✕ Fermer</button>
       <h3>Prix manquants</h3>
-      <div class="hint" style="margin-top:0;">Recherche chez tous les fournisseurs (catalogues importés et TopTex en direct), en essayant plusieurs écritures de la référence. Vérifie les propositions, puis « Appliquer » : le prix de chaque ligne est pris selon sa couleur et sa taille.</div>
+      <div class="hint" style="margin-top:0;">Recherche chez tous les fournisseurs (catalogues importés et TopTex en direct), en essayant plusieurs écritures de la référence. Rien n'est coché d'avance : choisis la bonne proposition pour chaque référence (★ = correspondance sûre), puis « Appliquer » : le prix de chaque ligne est pris selon sa couleur et sa taille.</div>
       <div id="mp-progress" class="hint" style="margin:10px 0; font-weight:600;"></div>
       <div id="mp-list"></div>
       <div style="position:sticky; bottom:-24px; background:#fff; padding:12px 0 2px; display:flex; gap:10px; align-items:center; border-top:1px solid var(--line); margin-top:10px;">
@@ -2621,9 +2621,9 @@ function renderMissingPrices(run){
     else body = `<div style="margin-top:4px; display:grid; gap:2px;">
         ${g.cands.map(c => `<label style="display:flex; gap:8px; align-items:center; font-size:13px; cursor:pointer;">
           <input type="radio" name="mp-${gi}" value="${escapeHtml(c.key)}" ${g.choice === c.key ? 'checked' : ''} data-mp-g="${gi}">
-          <span style="min-width:96px; font-weight:600;">${escapeHtml(c.fournisseur)}</span>
+          <span style="min-width:96px; font-weight:600;">${escapeHtml(c.fournisseur)}${c.sure ? ' <span title="Correspondance sûre : référence exacte ou même nom de modèle" style="color:var(--vert);">★</span>' : ''}</span>
           <span style="min-width:90px;">${escapeHtml(c.reference)}</span>
-          <span style="flex:1; min-width:180px; color:var(--muted);">${escapeHtml(c.label)}${c.via && refCompact(c.via) !== refCompact(c.reference) ? ` <i>(trouvé par « ${escapeHtml(c.via)} »)</i>` : ''}</span>
+          <span style="flex:1; min-width:180px; color:var(--muted);">${escapeHtml(c.label)}${(() => { const sp = refSplitForApply(g.items[0].reference, c.via); return sp.reference !== String(g.items[0].reference || '').trim() ? ` <i>→ réf. « ${escapeHtml(sp.reference)} »${sp.rest ? `, note « ${escapeHtml(sp.rest)} »` : ''}</i>` : ''; })()}</span>
           <span style="min-width:80px; text-align:right; font-weight:600;">${fmtPrix(c.price)}</span>
           <span class="hint" style="margin:0; min-width:120px;">${c.exact ? 'couleur/taille OK' : 'prix le plus bas du modèle'}</span>
         </label>`).join('')}
@@ -2647,12 +2647,13 @@ async function searchMissingPrices(run){
     if(!cands.some(c => c.score >= 100)) cands = cands.concat(await refSearchToptex(item));
     cands.sort((a,b) => b.score - a.score || a.price - b.price);
     g.cands = cands.slice(0, 6);
-    // Présélection : uniquement une correspondance sûre (référence exacte ou nom de modèle identique).
+    // Rien n'est présélectionné (« Aucune » par défaut) : chaque proposition est validée à la main.
+    // Une correspondance sûre (référence exacte ou nom de modèle identique) est seulement signalée.
     const top = g.cands[0];
     if(top && top.score >= 90){
       const sameLevel = g.cands.filter(c => c.score === top.score);
       const names = new Set(sameLevel.map(c => refCompact(c.label) || refCompact(c.reference)));
-      if(names.size === 1 || top.score >= 100) g.choice = sameLevel.reduce((a,b) => b.price < a.price ? b : a).key;
+      if(names.size === 1 || top.score >= 100) sameLevel.reduce((a,b) => b.price < a.price ? b : a).sure = true;
     }
     g.done = true;
     renderMissingPrices(run);
@@ -2660,6 +2661,24 @@ async function searchMissingPrices(run){
   // fin de la recherche : les références avec une proposition d'abord
   run.groups.sort((a, b) => (b.cands.length > 0) - (a.cands.length > 0));
   renderMissingPrices(run);
+}
+// Au moment d'appliquer : la référence devient le texte qui a permis de trouver l'article
+// (« WK 9109 » → WK9109, « Fruit of the Loom Iconic 195 » → Iconic 195) et le reste part dans la note.
+function refSplitForApply(reference, via){
+  const ref = String(reference || '').trim();
+  const v = String(via || '').trim();
+  const k = refCompact(v);
+  if(!k) return { reference: ref, rest: '' };
+  // retrouve le texte dans la référence d'origine, espaces / ponctuation / O-zéro tolérés
+  const pattern = k.split('').map(ch => ch === '0' || ch === 'o' ? '[o0]' : refEscape(ch)).join('[\\s.#/-]*');
+  const m = new RegExp(pattern, 'i').exec(normText(ref));
+  if(!m) return { reference: ref, rest: '' };
+  const found = ref.slice(m.index, m.index + m[0].length); // normText garde la longueur (accents mis à part)
+  const isCode = /\d/.test(k) && /[a-z]/.test(k) && !/\s/.test(v);
+  const newRef = isCode ? k.toUpperCase() : (found.length === m[0].length ? found : v).trim();
+  const rest = (ref.slice(0, m.index) + ' ' + ref.slice(m.index + m[0].length))
+    .replace(/\(\?\)/g, ' ').replace(/[()]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s,.;:\-–#/]+|[\s,.;:\-–#/]+$/g, '').trim();
+  return { reference: newRef, rest };
 }
 async function applyMissingPrices(run){
   const todo = run.groups.filter(g => g.choice && !g.applied);
@@ -2678,6 +2697,12 @@ async function applyMissingPrices(run){
         if(!vp) continue;
         const data = { prix: Math.round(vp.price * 100) / 100 };
         if(!it.fournisseur) data.fournisseur = cand.fournisseur;
+        const split = refSplitForApply(it.reference, cand.via);
+        if(split.reference && split.reference !== it.reference){
+          data.reference = split.reference;
+          const note = String(it.note || '').trim();
+          if(split.rest && !normText(note).includes(normText(split.rest))) data.note = note ? split.rest + String.fromCharCode(10) + note : split.rest;
+        }
         await itemsCol.doc(it.id).update(data);
         ok++;
       }catch(e){ ko++; }
