@@ -176,7 +176,7 @@
 
 <header>
   <h1>🔎 Recherche / Éditeur</h1>
-  <span class="muted" style="font-size:12.5px;">Explorateur de programmes de broderie (.DST, .PES, .PXF) avec aperçu et édition</span>
+  <span class="muted" style="font-size:12.5px;">Explorateur de programmes de broderie (.DST, .PES, .PXF, .RDE) avec aperçu et édition</span>
 </header>
 
 <main>
@@ -197,6 +197,7 @@
       <button type="button" class="filter-tab" data-ext="dst">.DST</button>
       <button type="button" class="filter-tab" data-ext="pes">.PES</button>
       <button type="button" class="filter-tab" data-ext="pxf">.PXF</button>
+      <button type="button" class="filter-tab" data-ext="rde">.RDE</button>
       <label style="display:flex; align-items:center; gap:4px; font-size:12px; margin-left:8px; cursor:pointer;" title="Fichiers supprimés conservés par le NAS Synology (dossiers #recycle et @eaDir)">
         <input type="checkbox" id="chkRecycle"> Corbeille NAS
       </label>
@@ -221,10 +222,10 @@
     <section class="card">
       <h2>Aperçu / Éditeur</h2>
       <div id="vizDropzone">
-        <span id="vizDropzoneText">Choisis un fichier dans l'explorateur à gauche, ou glisse un .DST, .PES, .PXF ou .VP3 ici, ou<br>
+        <span id="vizDropzoneText">Choisis un fichier dans l'explorateur à gauche, ou glisse un .DST, .PES, .PXF, .RDE ou .VP3 ici, ou<br>
         <button id="vizBtnImport" type="button">choisir un fichier…</button></span>
         <span id="vizDropzoneStatus" class="muted" style="display:none;"></span>
-        <input type="file" id="vizFileInput" accept=".dst,.pxf,.pes,.vp3">
+        <input type="file" id="vizFileInput" accept=".dst,.pxf,.pes,.vp3,.rde">
       </div>
       <div class="preview-frame" id="vizPreviewFrame" style="display:none;">
         <span class="preview-frame-label" id="vizPreviewLabel"></span>
@@ -499,7 +500,7 @@ async function removeNetworkRoot(path){
 ============================================================================ */
 let currentDirPath = null;
 let currentEntries = [];    // dernière liste renvoyée par csbHost.listDir() (dossier courant, non récursif)
-let extFilter = 'tous';     // 'tous' | 'dst' | 'pes' | 'pxf'
+let extFilter = 'tous';     // 'tous' | 'dst' | 'pes' | 'pxf' | 'rde'
 let searchToken = 0;        // ignore une réponse de recherche obsolète (nouvelle recherche lancée entre-temps)
 let searchDebounceTimer = null;
 let searchActive = false;       // une recherche (texte non vide) est en cours ou affichée
@@ -508,7 +509,7 @@ let searchTruncated = false;
 let searchUnsubProgress = null;
 let searchUnsubDone = null;
 
-const PROGRAM_EXTS = ['dst', 'pes', 'pxf'];
+const PROGRAM_EXTS = ['dst', 'pes', 'pxf', 'rde'];
 
 function applyExtFilter(list){
   return extFilter === 'tous' ? list : list.filter(e => e.ext === extFilter);
@@ -681,7 +682,7 @@ function createItemElement(e, recursive){
     const tr = document.createElement('tr');
     tr.dataset.path = e.path; tr.dataset.name = e.name;
     tr.innerHTML =
-      '<td class="col-name"><span class="row-icon">' + (e.ext === 'pxf' ? '🖼' : '🧵') + '</span>' + escapeHtml(e.name) + '</td>' +
+      '<td class="col-name"><span class="row-icon">' + (e.ext === 'pxf' || e.ext === 'rde' ? '🖼' : '🧵') + '</span>' + escapeHtml(e.name) + '</td>' +
       '<td class="col-date">' + formatFileDate(e.mtimeMs) + '</td>' +
       '<td class="col-type">' + fileTypeLabel(e.ext) + '</td>' +
       '<td class="col-size">' + formatFileSize(e.size) + '</td>' +
@@ -693,13 +694,13 @@ function createItemElement(e, recursive){
     row.className = 'explorer-simple-row';
     row.dataset.path = e.path; row.dataset.name = e.name;
     row.title = recursive ? e.name + '  —  ' + shortenDir(e.dir) : e.name;
-    row.innerHTML = '<span class="row-icon">' + (e.ext === 'pxf' ? '🖼' : '🧵') + '</span><span class="row-name">' + escapeHtml(e.name) + '</span>';
+    row.innerHTML = '<span class="row-icon">' + (e.ext === 'pxf' || e.ext === 'rde' ? '🖼' : '🧵') + '</span><span class="row-name">' + escapeHtml(e.name) + '</span>';
     return row;
   }
   const wrap = document.createElement('div');
   const subPath = recursive ? '<div class="sub-path" title="' + escapeHtml(e.dir) + '">' + escapeHtml(shortenDir(e.dir)) + '</div>' : '';
   wrap.innerHTML = '<div class="explorer-tile" data-path="' + escapeHtml(e.path) + '" data-name="' + escapeHtml(e.name) + '">' +
-    '<div class="explorer-thumb" data-thumb-for="' + escapeHtml(e.path) + '">' + (e.ext === 'pxf' ? '🖼' : '🧵') + '</div>' +
+    '<div class="explorer-thumb" data-thumb-for="' + escapeHtml(e.path) + '">' + (e.ext === 'pxf' || e.ext === 'rde' ? '🖼' : '🧵') + '</div>' +
     '<div class="name">' + escapeHtml(e.name) + '</div>' +
     subPath +
     '<span class="ext-pill">' + e.ext.toUpperCase() + '</span>' +
@@ -844,6 +845,16 @@ async function generateThumb(entry){
   try {
     const bytes = await window.csbHost.readFileBytes(entry.path);
     const buf = new Uint8Array(bytes);
+    if (entry.ext === 'rde') {
+      const info = parseRde(buf);
+      if (info.bmpBytes) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(new Blob([info.bmpBytes], { type: 'image/bmp' }));
+        host.innerHTML = '';
+        host.appendChild(img);
+      }
+      return;
+    }
     if (entry.ext === 'pxf') {
       const info = await parsePxf(buf);
       if (info.iconBytes) {
@@ -1049,20 +1060,34 @@ async function loadVisualiseurBytes(buf, name) {
   document.getElementById('vizMarkerLegend').style.display = 'none';
   document.getElementById('vizTransformControls').style.display = 'none';
   document.getElementById('vizIconImg').style.display = 'none';
+  document.getElementById('vizIconImg').style.width = '';
   vizDecoded = null;
   vizSelectedOpIdx = -1;
   resetVizView();
 
   try {
-    let type = sniffType(buf);
+    let type = isRde(buf) && /\.rde$/i.test(name) ? 'rde' : sniffType(buf);
     if (!type) {
       // Signature VP3 : "%vsm%" en tout début de fichier.
       const head6 = new TextDecoder('ascii').decode(buf.slice(0, 6));
       if (head6 === '%vsm%\0') type = 'vp3';
     }
-    if (!type) throw new Error('Format non reconnu (DST, PES, PXF ou VP3 attendu).');
+    if (!type) throw new Error('Format non reconnu (DST, PES, PXF, RDE ou VP3 attendu).');
 
-    if (type === 'pxf') {
+    // RDE : points déchiffrés et convertis comme un DST (aperçu, édition, enregistrement .DST) ;
+    // si le décodage échoue, on retombe sur la fiche d'infos (vignette, dimensions, fils).
+    let rdeFull = null;
+    if (type === 'rde') { try { rdeFull = decodeRde(buf); } catch (e) { rdeFull = null; } }
+    if (type === 'rde' && !rdeFull) {
+      const info = parseRde(buf);
+      vizDecoded = { type, name, rdeInfo: info };
+      if (info.bmpBytes) {
+        const img = document.getElementById('vizIconImg');
+        img.src = URL.createObjectURL(new Blob([info.bmpBytes], { type: 'image/bmp' }));
+        img.style.width = '270px'; // vignette de 90 px seulement : agrandie pour être lisible
+        img.style.display = 'block';
+      }
+    } else if (type === 'pxf') {
       const info = await parsePxf(buf);
       vizDecoded = { type, name, pxfInfo: info };
       if (info.iconBytes) {
@@ -1071,13 +1096,13 @@ async function loadVisualiseurBytes(buf, name) {
         img.style.display = 'block';
       }
     } else {
-      const decoded = type === 'pes' ? decodePes(buf) : type === 'vp3' ? decodeVp3(buf) : decodeDst(buf);
+      const decoded = rdeFull || (type === 'pes' ? decodePes(buf) : type === 'vp3' ? decodeVp3(buf) : decodeDst(buf));
       let pesColors = [];
       if (type === 'pes') {
         const text = new TextDecoder('latin1').decode(buf.slice(0, Math.min(buf.length, 300000)));
         const laIdx = text.indexOf('LA:');
         if (laIdx > 0) pesColors = extractPesColorTable(buf, laIdx);
-      } else if (type === 'vp3' && decoded.threads) {
+      } else if ((type === 'vp3' || type === 'rde') && decoded.threads) {
         pesColors = decoded.threads.map(t => ({ r: (t.color >> 16) & 0xFF, g: (t.color >> 8) & 0xFF, b: t.color & 0xFF }));
       }
       vizDecoded = Object.assign({ type, name, pesColors, modified: false }, decoded);
@@ -1380,6 +1405,26 @@ function renderVizInfo() {
     return;
   }
 
+  if (vizDecoded.type === 'rde' && !vizDecoded.stitches) {
+    const info = vizDecoded.rdeInfo;
+    const hex = t => '#' + [t.r, t.g, t.b].map(v => v.toString(16).padStart(2, '0')).join('');
+    col.innerHTML =
+      '<h3>Fichier</h3><table>' +
+        vizInfoRow('Nom', escapeHtml(vizDecoded.name)) +
+        vizInfoRow('Format', 'RDE (Ricoma Chroma)') +
+        vizInfoRow('Points', info.stitchCount.toLocaleString('fr-FR')) +
+        vizInfoRow('Couleurs', info.colorCount) +
+        vizInfoRow('Dimensions', String(info.width_mm).replace('.', ',') + ' × ' + String(info.height_mm).replace('.', ',') + ' mm') +
+        (info.sourceImage ? vizInfoRow('Image d\'origine', escapeHtml(info.sourceImage.split(/[\\/]/).pop())) : '') +
+      '</table>' +
+      (info.threads.length ? '<h3>Fils de la palette (' + info.threads.length + ')</h3><table>' +
+        info.threads.map((t, i) => vizInfoRow((i + 1) + '.', '<span class="color-swatch-dot" style="background:' + hex(t) + '"></span>' +
+          [t.brand, t.code, t.name].filter(Boolean).map(escapeHtml).join(' · '))).join('') +
+      '</table>' : '') +
+      '<small class="hint">Le tracé des points de ce fichier n\'a pas pu être décodé : seules les infos (dimensions, nombre de points, fils, vignette) sont affichées. La palette peut contenir des fils non utilisés.</small>';
+    return;
+  }
+
   if (vizDecoded.type === 'pxf') {
     const info = vizDecoded.pxfInfo;
     col.innerHTML =
@@ -1402,7 +1447,7 @@ function renderVizInfo() {
 
   let html = '<h3>Fichier</h3><table>' +
     vizInfoRow('Nom', escapeHtml(name)) +
-    vizInfoRow('Format', vizDecoded.type === 'pes' ? 'PES (Brother / Babylock)' : vizDecoded.type === 'vp3' ? 'VP3 (Husqvarna Viking / Pfaff)' : 'DST (Tajima)') +
+    vizInfoRow('Format', vizDecoded.type === 'pes' ? 'PES (Brother / Babylock)' : vizDecoded.type === 'vp3' ? 'VP3 (Husqvarna Viking / Pfaff)' : vizDecoded.type === 'rde' ? 'RDE (Ricoma Chroma)' : 'DST (Tajima)') +
     (header.name ? vizInfoRow('Nom interne', escapeHtml(header.name)) : '') +
     vizInfoRow('Points', stitches.length - 1) +
     vizInfoRow('Changements de couleur', colorChangesActual) +
@@ -1410,7 +1455,7 @@ function renderVizInfo() {
     vizInfoRow('Dimensions', widthMm + ' × ' + heightMm + ' mm') +
     '</table>';
 
-  if ((vizDecoded.type === 'pes' || vizDecoded.type === 'vp3') && pesColors && pesColors.length) {
+  if ((vizDecoded.type === 'pes' || vizDecoded.type === 'vp3' || vizDecoded.type === 'rde') && pesColors && pesColors.length) {
     const threads = vizDecoded.threads;
     html += '<h3>Table de couleurs déclarée (' + pesColors.length + ')</h3><table>' +
       pesColors.map((c, i) => {
@@ -1423,7 +1468,7 @@ function renderVizInfo() {
         return vizInfoRow((i + 1) + '.', '<span class="color-swatch-dot" style="background:' + hex + '"></span>' + fgColorLabel(resolved.colorId) + extra);
       }).join('') +
       '</table>' +
-      '<small class="hint">Teintes déclarées dans le fichier, rapprochées automatiquement de la palette France Galop' + (vizDecoded.type === 'vp3' ? ' (marque/référence fil affichées quand le fichier les fournit)' : '') + '. L\'aperçu et les vignettes ci-contre utilisent des teintes distinctes arbitraires (pas ces couleurs réelles) pour bien séparer visuellement chaque morceau, y compris de part et d\'autre d\'un coupe-fil.</small>';
+      '<small class="hint">Teintes déclarées dans le fichier, rapprochées automatiquement de la palette France Galop' + (vizDecoded.type === 'vp3' || vizDecoded.type === 'rde' ? ' (marque/référence fil affichées quand le fichier les fournit)' : '') + '. L\'aperçu et les vignettes ci-contre utilisent des teintes distinctes arbitraires (pas ces couleurs réelles) pour bien séparer visuellement chaque morceau, y compris de part et d\'autre d\'un coupe-fil.</small>';
   } else if (vizDecoded.type === 'dst') {
     html += '<small class="hint">Format DST : pas de table de couleurs intégrée — les changements ci-dessus sont de simples arrêts machine, sans référence de teinte. L\'aperçu attribue automatiquement une couleur différente à chaque segment détecté (changement de couleur ou coupe-fil), pour bien les distinguer visuellement (teintes arbitraires, pas les couleurs réelles).</small>';
   }

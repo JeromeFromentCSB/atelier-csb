@@ -243,6 +243,7 @@
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
 <script src="emplacements.js"></script>
+<script src="gunold_madeira.js"></script>
 <script>
 /* ===================== Stock de Fil — Atelier CSB ===================== */
 const DEFAULT_ZONES = ["Caisses", "Etagere"];
@@ -255,6 +256,7 @@ const TABS = [
   { id: "recherche", label: "🔍 Recherche" },
   { id: "nuancier", label: "🎨 Nuancier" },
   { id: "trouver_couleur", label: "🎯 Trouver couleur" },
+  { id: "gunold", label: "🔁 Gunold → Madeira" },
   { id: "parametres", label: "⚙︎ Paramètres" },
 ];
 // Nuancier Madeira Polyneon — numéro + couleur exacte, extraits du shade card officiel Madeira
@@ -582,7 +584,9 @@ function startSync(){
 function currentUser(){ return CSBAuth.currentUser(); }
 function allowedTabs(){
   if(CSBAuth.isAdmin()) return TABS.map(t=>t.id);
-  return TABS.filter(t => CSBAuth.can('stock_fil', t.id)).map(t=>t.id);
+  // La correspondance Gunold -> Madeira est une simple consultation : visible pour qui voit le stock ou la recherche.
+  return TABS.filter(t => CSBAuth.can('stock_fil', t.id) ||
+    (t.id === 'gunold' && (CSBAuth.can('stock_fil', 'stock') || CSBAuth.can('stock_fil', 'recherche')))).map(t=>t.id);
 }
 function userCan(user, permId){ return CSBAuth.can('stock_fil', permId); }
 function clearSession(){} // conservé pour compat avec les appels existants (reset/import) — sans effet
@@ -769,6 +773,7 @@ function doRender(){
     <div class="panel ${activeTab==='recherche'?'active':''}" id="panel-recherche"></div>
     <div class="panel ${activeTab==='nuancier'?'active':''}" id="panel-nuancier"></div>
     <div class="panel ${activeTab==='trouver_couleur'?'active':''}" id="panel-trouver_couleur"></div>
+    <div class="panel ${activeTab==='gunold'?'active':''}" id="panel-gunold"></div>
     <div class="panel ${activeTab==='parametres'?'active':''}" id="panel-parametres"></div>
 
     <footer class="foot">
@@ -788,6 +793,7 @@ function doRender(){
   if(activeTab === 'recherche') renderReberchePanel(stock);
   if(activeTab === 'nuancier') renderNuancierPanel();
   if(activeTab === 'trouver_couleur') renderTrouverCouleurPanel();
+  if(activeTab === 'gunold') renderGunoldPanel();
   if(activeTab === 'parametres') renderParametresPanel();
 }
 
@@ -1507,6 +1513,72 @@ function tcFullResCanvas(){
   tcPipetteCanvas = c;
   return c;
 }
+/* ---------- Correspondance Gunold Poly 40 -> Madeira Polyneon 40 (données : gunold_madeira.js) ---------- */
+let gunoldQuery = "";
+function renderGunoldPanel(){
+  const panel = document.getElementById('panel-gunold');
+  panel.innerHTML = `
+    <div class="form-card">
+      <h3>Gunold Poly 40 → Madeira Polyneon 40</h3>
+      <div class="hint">Saisis une référence Gunold (ex. 61001) : la ou les références Madeira Polyneon 40 correspondantes s'affichent, avec ce qu'on a en stock. Sources : tableau officiel Gunold « Madeira Poly Neon / Gunold Poly » et tableau comparatif FILOPOL.</div>
+      <div class="toolbar">
+        <input type="text" class="search-box" id="gm-ref" inputmode="numeric" placeholder="Référence Gunold 40…" value="${escapeHtml(gunoldQuery)}">
+      </div>
+    </div>
+    <div id="gm-results"></div>
+  `;
+  const input = document.getElementById('gm-ref');
+  input.addEventListener('input', e => { gunoldQuery = e.target.value; refreshGunold(); });
+  refreshGunold();
+}
+function gunoldMadeiraRowHtml(mad, sources, stockRows){
+  const hex = (MADEIRA_COLORS.find(([n]) => String(n) === mad) || [])[1];
+  const rows = stockRows.filter(r => r.filType === 'Polyneon 40' && String(r.reference) === mad);
+  const total = rows.reduce((t, r) => t + r.total, 0);
+  const teinte = (rows.find(r => r.teinte) || {}).teinte || '';
+  return `<tr>
+    <td><span style="display:inline-flex; align-items:center; gap:8px;"><span class="swatch" style="background:${hex || '#CFC7B6'}"></span><strong>Madeira ${escapeHtml(mad)}</strong></span></td>
+    <td>${escapeHtml(teinte || '—')}</td>
+    <td class="num">${total ? `<strong>${fmtNum(total)}</strong> bobine(s)` : '<span style="color:var(--ink-soft);">pas en stock</span>'}</td>
+    <td>${sources}</td>
+    <td>${empHas(mad) ? `<button class="ghost small emp-btn" data-ref="${escapeHtml(mad)}" title="Voir où elle est rangée">📍</button>` : ''}</td>
+  </tr>`;
+}
+function refreshGunold(){
+  const box = document.getElementById('gm-results');
+  if(!box) return;
+  const data = window.GUNOLD_MADEIRA || {};
+  const q = gunoldQuery.replace(/\D/g, '');
+  if(!q){ box.innerHTML = ''; return; }
+  const entry = data[q];
+  if(!entry){
+    const near = Object.keys(data).filter(k => k.startsWith(q)).slice(0, 24);
+    box.innerHTML = q.length >= 5
+      ? `<div class="hint">Aucune correspondance connue pour Gunold ${escapeHtml(q)} dans les deux tableaux. Utilise l'onglet 🎯 Trouver couleur avec un échantillon de la teinte.</div>`
+      : (near.length ? `<div class="hint">Références Gunold connues commençant par ${escapeHtml(q)} : ${near.map(k => `<button class="ghost small gm-pick" data-g="${k}">${k}</button>`).join(' ')}</div>` : `<div class="hint">Aucune référence Gunold connue ne commence par ${escapeHtml(q)}.</div>`);
+    box.querySelectorAll('.gm-pick').forEach(b => b.addEventListener('click', () => { gunoldQuery = b.dataset.g; document.getElementById('gm-ref').value = gunoldQuery; refreshGunold(); }));
+    return;
+  }
+  const mads = [...new Set([...entry.g, ...entry.f])];
+  const stockRows = computeStock();
+  const src = m => {
+    const inG = entry.g.includes(m), inF = entry.f.includes(m);
+    if(inG && inF) return '<span style="color:var(--vert,#3E7A52); font-weight:600;">✓ les 2 tableaux</span>';
+    return inG ? 'tableau Gunold' : 'tableau FILOPOL';
+  };
+  // Les deux tableaux d'accord d'abord, puis le tableau officiel Gunold, puis FILOPOL.
+  const rank = m => (entry.g.includes(m) && entry.f.includes(m)) ? 0 : entry.g.includes(m) ? 1 : 2;
+  mads.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  const disagree = entry.g.length && entry.f.length && !entry.g.some(m => entry.f.includes(m));
+  box.innerHTML = `
+    <div class="hint" style="margin-bottom:10px;">Gunold <strong>${escapeHtml(q)}</strong> → ${mads.length > 1 ? mads.length + ' références Madeira possibles' : 'Madeira ' + escapeHtml(mads[0])}${disagree ? ' — les deux tableaux ne donnent pas la même : compare les bobines à la lumière du jour.' : ''}</div>
+    <table>
+      <thead><tr><th>Madeira Polyneon 40</th><th>Teinte (stock)</th><th class="num">En stock</th><th>Source</th><th></th></tr></thead>
+      <tbody>${mads.map(m => gunoldMadeiraRowHtml(m, src(m), stockRows)).join('')}</tbody>
+    </table>`;
+  attachEmpHandlers(box);
+}
+
 function renderTrouverCouleurPanel(){
   const panel = document.getElementById('panel-trouver_couleur');
   panel.innerHTML = `

@@ -2,6 +2,11 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.49', items: [
+    "Recherche / Éditeur : lecture complète des fichiers .RDE (Ricoma Chroma) — aperçu du dessin, points, couleurs, coupe-fils, fils Gunold — et enregistrement en .DST (identique à l'export de Chroma)",
+    "Recherche / Éditeur : filtre .RDE et vignettes des fichiers .RDE dans l'explorateur",
+    "Stock Fil : onglet « Gunold → Madeira » — saisis une référence Gunold Poly 40, l'appli donne la ou les références Madeira Polyneon 40 correspondantes avec le stock et l'emplacement",
+  ]},
   { v: '0.2.48', items: [
     "Inventaire, « Prix manquants » : rien n'est coché d'avance (« Aucune » par défaut), les correspondances sûres sont signalées par ★",
     "Inventaire, « Prix manquants » : en validant un prix, la référence devient le texte qui a permis de trouver l'article (« WK 9109 » → WK9109, « Fruit of the Loom Iconic 195 » → Iconic 195) et le reste est ajouté à la note",

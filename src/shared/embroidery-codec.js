@@ -473,6 +473,166 @@ function extractPesColorTable(bytes, headerEnd) {
   return colors;
 }
 
+/* RDE (Ricoma Chroma / Vectorsoft) : en-tête de 160 octets (nb de points, nb de couleurs,
+   largeur, hauteur en 1/10 mm), puis une suite de blocs « étiquette (1 octet) + longueur (uint32)
+   + données ». Étiquettes 1 à 17 : vignette BMP, palette de fils, image d'origine, réglages.
+   Étiquettes 100 et plus : un objet brodé chacun, chiffré par un XOR avec le générateur
+   état = état × 1103515245 + 12345 (octet = (état >> 16) & 0xFF), état initial = longueur du bloc.
+   Objet déchiffré : n° de fil dans la palette (1 octet), 1 octet, nombre de points (uint32), puis
+   par point x, y (float32, 1/10 mm, y vers le bas) et un octet de type : 1 = saut, 2 = coupe après
+   ce point, 4 = arrêt (suivi de 2 octets). Vérifié point par point avec les .DST exportés par Chroma. */
+function isRde(bytes) {
+  return bytes && bytes.length > 165 && bytes[0] === 0x48 && bytes[1] === 0x45; // "HE"
+}
+function parseRde(bytes) {
+  if (!isRde(bytes)) throw new Error('Fichier RDE non reconnu.');
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const u32 = o => dv.getUint32(o, true);
+  const info = {
+    stitchCount: u32(4),
+    colorCount: u32(8),
+    width_mm: Math.round(u32(12)) / 10,
+    height_mm: Math.round(u32(16)) / 10,
+    threads: [], bmpBytes: null, sourceImage: '', encryptedBlocks: 0,
+  };
+  const readStr = (o) => { // uint32 nb de caractères + UTF-16LE
+    const n = u32(o);
+    if (n > 2000) throw new Error('chaîne invalide');
+    let str = '';
+    for (let i = 0; i < n; i++) str += String.fromCharCode(dv.getUint16(o + 4 + i * 2, true));
+    return { str, next: o + 4 + n * 2 };
+  };
+  let off = 160;
+  while (off + 5 <= bytes.length) {
+    const tag = bytes[off], len = u32(off + 1), data = off + 5;
+    if (data + len > bytes.length) break;
+    try {
+      if (tag === 1) info.bmpBytes = bytes.slice(data, data + len);
+      else if (tag === 2) {
+        const n = u32(data); let o = data + 4;
+        for (let i = 0; i < n && o < data + len; i++) {
+          const r = bytes[o], g = bytes[o + 1], b = bytes[o + 2]; o += 4;
+          const code = readStr(o); o = code.next;
+          const name = readStr(o); o = name.next;
+          const brand = readStr(o); o = brand.next;
+          o += 4;
+          info.threads.push({ r, g, b, code: code.str, name: name.str, brand: brand.str });
+        }
+      }
+      else if (tag === 5) info.sourceImage = readStr(data).str;
+      else if (tag >= 100) info.encryptedBlocks++;
+    } catch (e) { /* bloc illisible : on passe au suivant */ }
+    off = data + len;
+  }
+  return info;
+}
+
+function rdeDecrypt(data) {
+  const out = new Uint8Array(data.length);
+  let st = data.length >>> 0;
+  for (let i = 0; i < data.length; i++) {
+    st = (Math.imul(st, 0x41C64E6D) + 0x3039) >>> 0;
+    out[i] = data[i] ^ ((st >>> 16) & 0xFF);
+  }
+  return out;
+}
+// Objets brodés d'un RDE, dans l'ordre de broderie : [{ color, points: [{ x, y, flag }] }]
+function rdeObjects(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const objects = [];
+  let off = 160;
+  while (off + 5 <= bytes.length) {
+    const tag = bytes[off], len = dv.getUint32(off + 1, true), data = off + 5;
+    if (data + len > bytes.length) break;
+    if (tag >= 100 && len >= 6) {
+      const p = rdeDecrypt(bytes.subarray(data, data + len));
+      const pv = new DataView(p.buffer);
+      const n = pv.getUint32(2, true);
+      const points = [];
+      let o = 6;
+      for (let i = 0; i < n && o + 9 <= p.length; i++) {
+        const x = pv.getFloat32(o, true), y = pv.getFloat32(o + 4, true), flag = p[o + 8];
+        o += 9;
+        if (flag & 4) o += 2;
+        points.push({ x, y, flag });
+      }
+      if (points.length) objects.push({ color: p[0], points });
+    }
+    off = data + len;
+  }
+  return objects;
+}
+// Points du RDE au format interne (comme decodeDst) : origine au centre du dessin, y vers le haut,
+// sauts, coupes (3 sauts, comme Chroma) et changements de couleur entre objets de fils différents.
+function decodeRde(bytes) {
+  const info = parseRde(bytes);
+  const objects = rdeObjects(bytes);
+  const all = objects.flatMap(o => o.points);
+  if (!all.length) throw new Error('aucun point lisible');
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of all) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
+  const cx = Math.round((minX + maxX) / 2), cy = Math.round((minY + maxY) / 2);
+  const stitches = [];
+  let cur = { x: 0, y: 0 }, sewn = false, lastColor = null, pendingMove = false;
+  const colorOrder = [];
+  // Saut découpé en pas égaux de 12,1 mm au plus, puis un saut sur place, comme Chroma.
+  // landsOnStitch : le dernier pas est le point brodé lui-même (déplacement long sans saut prévu).
+  const jumpTo = (x, y, landsOnStitch) => {
+    const dx = x - cur.x, dy = y - cur.y;
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 121));
+    for (let k = 1; k <= (landsOnStitch ? steps - 1 : steps); k++) stitches.push({ x: cur.x + Math.trunc(dx * k / steps), y: cur.y + Math.trunc(dy * k / steps), type: JUMP });
+    if ((dx || dy) && !landsOnStitch) stitches.push({ x, y, type: JUMP });
+    cur = { x, y };
+  };
+  const trim = () => { // coupe-fil : 3 petits sauts, comme Chroma
+    stitches.push({ x: cur.x + 4, y: cur.y, type: JUMP }, { x: cur.x + 8, y: cur.y, type: JUMP }, { x: cur.x, y: cur.y, type: JUMP });
+  };
+  for (const obj of objects) {
+    if (lastColor !== null && obj.color !== lastColor) {
+      if (!pendingMove && sewn) trim();
+      stitches.push({ x: cur.x, y: cur.y, type: COLOR });
+      pendingMove = true;
+    }
+    if (lastColor !== obj.color) colorOrder.push(obj.color);
+    lastColor = obj.color;
+    for (const p of obj.points) {
+      const x = Math.round(p.x) - cx, y = cy - Math.round(p.y);
+      if (p.flag & 1) {            // saut jusqu'ici (avec coupe si on a déjà brodé)
+        if (sewn && !pendingMove) trim();
+        jumpTo(x, y);
+        pendingMove = false;
+        continue;
+      }
+      if (p.flag & 2) {            // coupe à la fin de l'objet (point en double du précédent)
+        if (x !== cur.x || y !== cur.y) { stitches.push({ x, y, type: STITCH }); cur = { x, y }; }
+        trim();
+        pendingMove = true;
+        continue;
+      }
+      if (!stitches.length) { stitches.push({ x: 0, y: 0, type: JUMP }); jumpTo(x, y); } // départ : saut jusqu'au 1er point
+      else if (Math.max(Math.abs(x - cur.x), Math.abs(y - cur.y)) > 121) { // trop long pour un point : coupe + saut
+        if (!pendingMove && sewn) trim();
+        jumpTo(x, y, !pendingMove);
+      }
+      pendingMove = false;
+      stitches.push({ x, y, type: STITCH });
+      cur = { x, y };
+      sewn = true;
+    }
+  }
+  if (cur.x || cur.y) jumpTo(0, 0); // retour au point de départ en fin de broderie
+  stitches.push({ x: 0, y: 0, type: JUMP }, { x: 0, y: 0, type: END });
+  let minx = 0, maxx = 0, miny = 0, maxy = 0;
+  for (const s of stitches) {
+    if (s.type === END) continue;
+    minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x);
+    miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
+  }
+  const threads = colorOrder.map(i => info.threads[i]).filter(Boolean)
+    .map(t => ({ color: (t.r << 16) | (t.g << 8) | t.b, brand: t.brand, description: t.name, catalogNumber: t.code }));
+  return { header: { name: '', stitchCount: info.stitchCount, colorCount: info.colorCount }, stitches, bbox: { minx, maxx, miny, maxy }, threads, rdeInfo: info };
+}
+
 function sniffType(bytes) {
   const head = new TextDecoder('ascii').decode(bytes.slice(0, 8));
   if (head.startsWith('LA:')) return 'dst';
