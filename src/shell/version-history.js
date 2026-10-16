@@ -2,6 +2,11 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.51', items: [
+    "Nouveau module Clients : liste des clients ou des prospects Axonaut (au choix), recherche, création et modification des fiches (adresse, SIRET, TVA, code tiers, commentaires) et des contacts",
+    "Fiche client : en tapant le nom (complet ou partiel), recherche de la société dans l'annuaire officiel des entreprises — tient compte du code postal et de la ville saisis — et remplissage automatique (SIRET, TVA intracommunautaire, adresse) ; alerte si le SIRET existe déjà dans Axonaut",
+    "Devis : « Nouveau client » utilise cette fiche avec l'annuaire, et bouton « ✏️ Modifier » pour corriger la fiche du client choisi",
+  ]},
   { v: '0.2.50', items: [
     "Devis : liste triée du plus récent (en haut) au plus ancien — date du devis, puis date de création, puis numéro",
   ]},

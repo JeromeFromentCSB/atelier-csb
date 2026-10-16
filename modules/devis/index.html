@@ -241,36 +241,6 @@
   </main>
 </div>
 
-<div class="modal-bg" id="clientModal">
-  <div class="modal">
-    <h3>Nouveau client dans Axonaut</h3>
-    <div class="row">
-      <div class="field" style="min-width:100%;"><label>Nom de la société (ou du client) *</label><input type="text" id="ncName"></div>
-    </div>
-    <div class="row" style="margin-top:8px;">
-      <div class="field"><label>Prénom du contact</label><input type="text" id="ncFirst"></div>
-      <div class="field"><label>Nom du contact</label><input type="text" id="ncLast"></div>
-    </div>
-    <div class="row" style="margin-top:8px;">
-      <div class="field"><label>Email du contact</label><input type="email" id="ncEmail"></div>
-      <div class="field"><label>Téléphone</label><input type="text" id="ncPhone"></div>
-    </div>
-    <div class="row" style="margin-top:8px;">
-      <div class="field" style="min-width:100%;"><label>Adresse</label><input type="text" id="ncStreet"></div>
-    </div>
-    <div class="row" style="margin-top:8px;">
-      <div class="field" style="max-width:140px;"><label>Code postal</label><input type="text" id="ncZip"></div>
-      <div class="field"><label>Ville</label><input type="text" id="ncCity"></div>
-      <div class="field" style="max-width:160px;"><label>Pays</label><input type="text" id="ncCountry" value="France"></div>
-    </div>
-    <label style="display:flex; gap:8px; align-items:center; margin-top:10px; font-size:13px;"><input type="checkbox" id="ncB2C"> Particulier (B2C)</label>
-    <div class="status" id="ncStatus" style="margin-top:8px;"></div>
-    <div class="actions">
-      <button class="btn" id="ncCancel">Annuler</button>
-      <button class="btn primary" id="ncSave">Créer le client dans Axonaut</button>
-    </div>
-  </div>
-</div>
 
 <div class="modal-bg" id="settingsModal">
   <div class="modal">
@@ -361,6 +331,7 @@
 
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-clients.js"></script>
 <script>
 // ================== Accès Axonaut (même relais et même clé que Gestion Commande) ==================
 const AXONAUT_KEY_CONFIG_KEY = 'csb_envoi_axonaut_api_config';
@@ -2370,12 +2341,16 @@ function renderClientArea(){
         <div style="font-weight:700;">${escapeHtml(c.name)}</div>
         <div class="hint">${escapeHtml([c.street, [c.zip, c.city].filter(Boolean).join(' '), c.country].filter(Boolean).join(' · '))}</div>
       </div>
-      <button class="btn small" id="changeClientBtn">Changer</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn small" id="editClientBtn" title="Modifier la fiche du client dans Axonaut (adresse, SIRET, TVA, contacts)">✏️ Modifier</button>
+        <button class="btn small" id="changeClientBtn">Changer</button>
+      </div>
     </div>
     <div class="field" style="margin-top:10px;">
       <label>Adresse utilisée sur le devis</label>
       <select id="addrSelect"><option value="">Chargement des adresses…</option></select>
     </div>`;
+  document.getElementById('editClientBtn').addEventListener('click', editCurrentClient);
   document.getElementById('changeClientBtn').addEventListener('click', () => {
     current.client = null; current.addressId = null; current.address = null; clientAddresses = [];
     renderClientArea(); renderLivPick(); changed();
@@ -2904,47 +2879,29 @@ function renderTotals(){
 }
 
 // ================== Nouveau client ==================
-function openClientModal(prefillName){
-  ['ncName','ncFirst','ncLast','ncEmail','ncPhone','ncStreet','ncZip','ncCity'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('ncCountry').value = 'France';
-  document.getElementById('ncB2C').checked = false;
-  document.getElementById('ncName').value = prefillName || '';
-  document.getElementById('ncStatus').textContent = '';
-  document.getElementById('ncSave').disabled = false;
-  document.getElementById('clientModal').classList.add('show');
-  document.getElementById('ncName').focus();
+// Nouveau client / modification : fiche partagée (src/shared/csb-clients.js), avec la recherche
+// des infos de la société dans l'annuaire officiel des entreprises.
+function clientFromCompany(c){
+  return { id: c.id, name: c.name || '', street: c.address_street || '', zip: c.address_zip_code || '', city: c.address_city || '', country: c.address_country || '', siret: c.siret || '', tva: c.intracommunity_number || '' };
 }
-document.getElementById('ncCancel').addEventListener('click', () => document.getElementById('clientModal').classList.remove('show'));
-document.getElementById('ncSave').addEventListener('click', async () => {
-  const v = id => document.getElementById(id).value.trim();
-  const status = document.getElementById('ncStatus');
-  if(!v('ncName')){ status.textContent = 'Le nom est obligatoire.'; status.className = 'status err'; return; }
-  const body = {
-    name: v('ncName'), is_prospect: true, is_customer: false, isB2C: document.getElementById('ncB2C').checked,
-    address_street: v('ncStreet'), address_zip_code: v('ncZip'), address_city: v('ncCity'), address_country: v('ncCountry') || 'France',
-    currency: 'EUR', language: 'fr'
-  };
-  const contactName = [v('ncFirst'), v('ncLast')].filter(Boolean).join(' ');
-  if(contactName) body.address_contact_name = contactName;
-  if(v('ncFirst') || v('ncLast') || v('ncEmail') || v('ncPhone')){
-    body.employees = [{ firstname: v('ncFirst'), lastname: v('ncLast') || v('ncName'), email: v('ncEmail'), phoneNumber: v('ncPhone'), is_billing_contact: true }];
-  }
-  const btn = document.getElementById('ncSave');
-  btn.disabled = true; status.className = 'status'; status.textContent = 'Création dans Axonaut…';
-  try{
-    const c = await axonaut('/companies', 'POST', body);
-    if(!c || !c.id) throw new Error("réponse d'Axonaut inattendue");
-    document.getElementById('clientModal').classList.remove('show');
-    if(current && !isLocked(current)){
-      current.client = { id: c.id, name: c.name || body.name, street: c.address_street || body.address_street, zip: c.address_zip_code || body.address_zip_code, city: c.address_city || body.address_city, country: c.address_country || body.address_country };
-      current.addressId = null;
-      refreshTopTitle();
-      renderClientArea(); changed();
-    }
-  }catch(e){
-    btn.disabled = false; status.className = 'status err'; status.textContent = 'Échec : ' + e.message;
-  }
-});
+function openClientModal(prefillName){
+  CSBClients.open({ prefillName, onSaved: c => {
+    if(!current || isLocked(current)) return;
+    current.client = clientFromCompany(c);
+    current.addressId = null;
+    refreshTopTitle();
+    renderClientArea(); changed();
+  } });
+}
+function editCurrentClient(){
+  if(!current || !current.client) return;
+  CSBClients.open({ companyId: current.client.id, onSaved: c => {
+    if(!current || !current.client || String(current.client.id) !== String(c.id)) return;
+    if(!isLocked(current)){ current.client = clientFromCompany(c); current.address = null; changed(); }
+    refreshTopTitle();
+    renderClientArea();
+  } });
+}
 
 // ================== Réglages du module ==================
 function renderGenericCurrent(){

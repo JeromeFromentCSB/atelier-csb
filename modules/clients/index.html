@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clients · L'Atelier CSB</title>
+<!--
+  Module Clients : la liste des clients Axonaut (recherche, création, modification, contacts).
+  La fiche client et la recherche dans l'annuaire officiel des entreprises sont dans
+  src/shared/csb-clients.js (aussi utilisées par le module Devis).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{ --bg:#F5F2EC; --card:#fff; --ink:#211C16; --muted:#8A8074; --accent:#B5452F; --line:#E7E0D3; --font-display:'Fraunces', Georgia, serif; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Public Sans', -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); font-size:14px; }
+  .wrap{ max-width:1100px; margin:0 auto; padding:18px 24px 50px; }
+  h1{ font-family:var(--font-display); font-size:22px; margin:0 0 4px; }
+  .muted{ color:var(--muted); font-size:12.5px; }
+  .bar{ display:flex; gap:10px; align-items:center; margin:16px 0 12px; flex-wrap:wrap; }
+  .bar input{ flex:1; min-width:220px; font:inherit; border:1px solid var(--line); border-radius:10px; padding:9px 12px; background:#fff; }
+  .bar select{ font:inherit; border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#fff; }
+  button{ font:inherit; cursor:pointer; border:1px solid var(--line); background:#fff; border-radius:10px; padding:8px 14px; }
+  button.primary{ background:linear-gradient(135deg, var(--ink), var(--accent)); color:#fff; border-color:transparent; }
+  button.small{ padding:4px 10px; font-size:12px; }
+  table{ width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden; box-shadow:0 1px 2px rgba(33,28,22,.05), 0 8px 24px rgba(33,28,22,.06); }
+  th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); padding:10px 12px; background:#EDE6D9; }
+  td{ padding:9px 12px; border-top:1px solid var(--line); vertical-align:middle; }
+  tr:hover td{ background:#FCFAF6; }
+  .tag{ display:inline-block; font-size:11px; font-weight:600; border-radius:999px; padding:2px 8px; }
+  .tag.client{ background:#E4EFE6; color:#3E7A52; } .tag.prospect{ background:#EAF0F8; color:#2D5B9A; } .tag.off{ background:#F1ECE4; color:#8A8074; }
+  .empty{ text-align:center; color:var(--muted); padding:30px; background:#fff; border-radius:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>👥 Clients</h1>
+  <div class="muted">Clients et prospects d'Axonaut : recherche, création et modification (adresse, SIRET, TVA, contacts). À la création, les infos de la société sont retrouvées dans l'annuaire officiel des entreprises.</div>
+  <div class="bar">
+    <input type="text" id="q" placeholder="🔎 Rechercher un client Axonaut (nom, même partiel)…" autocomplete="off">
+    <select id="type">
+      <option value="customer">Clients</option>
+      <option value="prospect">Prospects</option>
+      <option value="">Clients et prospects</option>
+    </select>
+    <button class="primary" id="newBtn">＋ Nouveau client</button>
+  </div>
+  <div id="list"><div class="empty">Chargement…</div></div>
+</div>
+
+<script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-clients.js"></script>
+<script>
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const asArray = d => Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : []);
+const canEdit = () => CSBAuth.isAdmin() || CSBAuth.can('clients', 'modifier');
+let results = [];
+let reqId = 0;
+
+function typeTag(c){
+  if(c.is_disabled) return '<span class="tag off">désactivé</span>';
+  return c.is_customer ? '<span class="tag client">client</span>' : '<span class="tag prospect">prospect</span>';
+}
+function renderList(){
+  const box = document.getElementById('list');
+  const type = document.getElementById('type').value;
+  const rows = results.filter(c => !type || (type === 'customer' ? c.is_customer : (c.is_prospect && !c.is_customer)));
+  if(!rows.length){ box.innerHTML = `<div class="empty">${loading ? 'Chargement…' : 'Aucun client trouvé.'}</div>`; return; }
+  box.innerHTML = `<table>
+    <thead><tr><th>Nom</th><th>Adresse</th><th>SIRET</th><th>Type</th><th></th></tr></thead>
+    <tbody>${rows.map(c => `<tr>
+      <td><strong>${esc(c.name)}</strong></td>
+      <td>${esc([c.address_street, [c.address_zip_code, c.address_city].filter(Boolean).join(' ')].filter(Boolean).join(' — '))}</td>
+      <td>${esc(c.siret || '')}</td>
+      <td>${typeTag(c)}</td>
+      <td style="text-align:right;">${canEdit() ? `<button class="small" data-edit="${c.id}">✏️ Modifier</button>` : ''}</td>
+    </tr>`).join('')}</tbody></table>
+    <div class="muted" style="margin-top:8px;">${rows.length} ${typeLabel()}${loading ? ' — chargement de la suite…' : ''}</div>`;
+  box.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editClient(b.dataset.edit)));
+}
+// Sans recherche : toute la liste du type choisi (clients, prospects ou les deux), page par page,
+// gardée en mémoire le temps de la session. Avec une recherche : la recherche Axonaut, même filtre.
+const listCache = {};
+let loading = false;
+function typeLabel(){
+  const t = document.getElementById('type').value;
+  return t === 'customer' ? 'client(s)' : t === 'prospect' ? 'prospect(s)' : 'client(s) et prospect(s)';
+}
+function typeParams(){
+  const t = document.getElementById('type').value;
+  return '&is_disabled=false' + (t === 'customer' ? '&is_customer=true' : t === 'prospect' ? '&is_prospect=true&is_customer=false' : '');
+}
+const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity: 'base' });
+async function fetchAllPages(base, my){
+  const seen = new Set(); let all = [];
+  for(let page = 1; page <= 60; page++){
+    const arr = asArray(await CSBClients.axonaut(base + '&page=' + page));
+    if(my !== reqId) return null;
+    const fresh = arr.filter(c => c && !seen.has(c.id));
+    if(!fresh.length) break;
+    fresh.forEach(c => seen.add(c.id));
+    all = all.concat(fresh);
+    results = all.slice().sort(byName);
+    renderList();
+  }
+  return all;
+}
+async function search(){
+  const q = document.getElementById('q').value.trim();
+  const type = document.getElementById('type').value;
+  const box = document.getElementById('list');
+  const my = ++reqId;
+  if(q.length < 2 && listCache[type]){ loading = false; results = listCache[type]; renderList(); return; }
+  results = []; loading = true; renderList();
+  try{
+    const base = '/companies?' + (q.length >= 2 ? 'search=' + encodeURIComponent(q) : 'sort=name') + typeParams();
+    const all = await fetchAllPages(base, my);
+    if(all === null) return;
+    loading = false;
+    results = all.sort(byName);
+    if(q.length < 2) listCache[type] = results;
+    renderList();
+  }catch(e){
+    loading = false;
+    if(my === reqId) box.innerHTML = `<div class="empty">Erreur : ${esc(e.message)}</div>`;
+  }
+}
+function editClient(id){
+  CSBClients.open({ companyId: id, onSaved: c => {
+    const i = results.findIndex(r => String(r.id) === String(id));
+    if(i >= 0){ results[i] = Object.assign({}, results[i], c); renderList(); }
+    Object.values(listCache).forEach(list => { const j = list.findIndex(r => String(r.id) === String(id)); if(j >= 0) list[j] = Object.assign({}, list[j], c); });
+  } });
+}
+let t = null;
+document.getElementById('q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(search, 350); });
+document.getElementById('type').addEventListener('change', search);
+document.getElementById('newBtn').addEventListener('click', () => {
+  if(!canEdit()){ alert("Tu n'as pas le droit de créer des clients."); return; }
+  CSBClients.open({ prefillName: document.getElementById('q').value.trim(), onSaved: c => {
+    Object.keys(listCache).forEach(k => delete listCache[k]);
+    document.getElementById('q').value = c.name || '';
+    search();
+  } });
+});
+function applyRights(){ document.getElementById('newBtn').style.display = canEdit() ? '' : 'none'; if(results.length) renderList(); }
+if(CSBAuth.onChange) CSBAuth.onChange(applyRights);
+applyRights();
+search();
+document.getElementById('q').focus();
+
+// Ouverture d'une fiche demandée par un autre module (ex. « Modifier » depuis Devis).
+window.addEventListener('message', event => {
+  const msg = event.data;
+  if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload) return;
+  if(msg.payload.companyId) editClient(msg.payload.companyId);
+});
+</script>
+</body>
+</html>

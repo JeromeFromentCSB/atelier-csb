@@ -20,6 +20,10 @@
       { key: 'supprimer', label: 'Supprimer des devis et commandes' },
       { key: 'marge', label: "Voir prix d'achat et marge" }
     ] },
+    // Clients Axonaut : recherche, création (avec l'annuaire officiel des entreprises) et modification.
+    { id: 'clients', label: 'Clients', icon: '👥', path: '../../modules/clients/index.html', perms: [
+      { key: 'modifier', label: 'Créer et modifier des clients' }
+    ] },
     { id: 'casaque', label: 'Gestion Casaque', icon: '🏇', path: '../../modules/casaque/index.html', perms: [
       { key: 'coussin_trousse', label: 'Modifier Coussin / Trousse' },
       { key: 'labels', label: 'Étiquettes Colissimo' },
