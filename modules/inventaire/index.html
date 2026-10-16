@@ -2715,6 +2715,193 @@ async function applyMissingPrices(run){
   toast(`${ok} prix enregistré(s)` + (ko ? `, ${ko} échec(s)` : '') + '.');
 }
 
+/* ---------- Valeur du stock pour le comptable (PDF) ----------
+   Inventaire textile : quantité × prix unitaire HT de chaque article.
+   Stock de fil (module Stock de Fil, collection stock_fil_movements) : nombre de bobines,
+   valorisées selon la part de bobines pleines (5 000 m) et incomplètes (comptées comme 1 000 m).
+   Les paramètres sont modifiables avant la génération et mémorisés sur ce poste. */
+const VALO_KEY = 'csb_inventaire_valorisation_v1';
+const VALO_DEFAULTS = { pleinePrix: 7.95, incompletePrix: 2.43, pctPleines: 55 };
+function valoParams(){
+  try{ return Object.assign({}, VALO_DEFAULTS, JSON.parse(localStorage.getItem(VALO_KEY)) || {}); }catch(e){ return Object.assign({}, VALO_DEFAULTS); }
+}
+const eur2 = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(Number(n) || 0);
+const int0 = n => new Intl.NumberFormat('fr-FR').format(Math.round(Number(n) || 0));
+
+async function loadFilStock(){
+  const movements = await pb.collection('stock_fil_movements').getFullList();
+  const map = {};
+  for(const m of movements){
+    const filType = m.filType || 'Polyneon 40';
+    const key = filType + '||' + m.reference;
+    if(!map[key]) map[key] = { filType, reference: m.reference, teinte: m.teinte || '', total: 0 };
+    if(m.teinte) map[key].teinte = m.teinte;
+    map[key].total += (m.type === 'entree' ? 1 : -1) * (Number(m.quantite) || 0);
+  }
+  return Object.values(map).filter(r => r.total > 0);
+}
+function computeValo(filRows, p){
+  // Inventaire textile, par catégorie
+  const cats = {};
+  let invPieces = 0, invValeur = 0, invLignes = 0;
+  state.items.forEach(it => {
+    const q = Number(it.qte) || 0, pu = Number(it.prix) || 0;
+    if(q <= 0) return;
+    const c = it.categorie || 'Sans catégorie';
+    if(!cats[c]) cats[c] = { categorie: c, lignes: 0, pieces: 0, valeur: 0, items: [] };
+    cats[c].lignes++; cats[c].pieces += q; cats[c].valeur += q * pu; cats[c].items.push(it);
+    invLignes++; invPieces += q; invValeur += q * pu;
+  });
+  const categories = Object.values(cats).sort((a, b) => a.categorie.localeCompare(b.categorie, 'fr'));
+  // Stock de fil, par type
+  const types = {};
+  filRows.forEach(r => { if(!types[r.filType]) types[r.filType] = { filType: r.filType, refs: 0, bobines: 0 }; types[r.filType].refs++; types[r.filType].bobines += r.total; });
+  const bobines = filRows.reduce((s, r) => s + r.total, 0);
+  const pleines = Math.round(bobines * p.pctPleines / 100);
+  const incompletes = bobines - pleines;
+  const filValeur = pleines * p.pleinePrix + incompletes * p.incompletePrix;
+  return { categories, invLignes, invPieces, invValeur, filTypes: Object.values(types), filRows, bobines, pleines, incompletes, filValeur, total: invValeur + filValeur };
+}
+
+function valoHtml(v, p, dateStr){
+  const css = `
+    *{ box-sizing:border-box; } body{ font-family:'Segoe UI', Arial, sans-serif; color:#211C16; font-size:10.5pt; margin:0; }
+    h1{ font-size:17pt; margin:0 0 2px; } h2{ font-size:12.5pt; margin:22px 0 6px; border-bottom:2px solid #211C16; padding-bottom:3px; }
+    h3{ font-size:10.5pt; margin:14px 0 4px; }
+    .sub{ color:#6B6258; font-size:9.5pt; }
+    table{ width:100%; border-collapse:collapse; margin-top:4px; }
+    th{ text-align:left; font-size:8.5pt; text-transform:uppercase; letter-spacing:.3px; color:#5F574D; background:#EFE9DE; padding:5px 7px; }
+    td{ padding:4px 7px; border-bottom:1px solid #E7E0D3; }
+    .n{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    tr.tot td{ font-weight:700; border-top:2px solid #211C16; border-bottom:none; background:#FAF7F1; }
+    .big{ margin-top:18px; border:2px solid #211C16; border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; font-size:13pt; font-weight:700; }
+    .note{ color:#6B6258; font-size:8.5pt; margin-top:6px; }
+    .detail td{ font-size:8.5pt; padding:2px 6px; } .detail th{ font-size:7.5pt; padding:3px 6px; }
+    .pb{ page-break-before:always; }
+    .head{ display:flex; justify-content:space-between; align-items:flex-start; }
+    .head img{ height:46px; }`;
+  const catRows = v.categories.map(c => `<tr><td>${escapeHtml(c.categorie)}</td><td class="n">${int0(c.lignes)}</td><td class="n">${int0(c.pieces)}</td><td class="n">${eur2(c.valeur)}</td></tr>`).join('');
+  const filRows = v.filTypes.map(t => `<tr><td>${escapeHtml(t.filType)}</td><td class="n">${int0(t.refs)}</td><td class="n">${int0(t.bobines)}</td></tr>`).join('');
+  const detailInv = v.categories.map(c => `
+    <h3>${escapeHtml(c.categorie)}</h3>
+    <table class="detail"><thead><tr><th>Référence</th><th>Taille</th><th>Couleur</th><th class="n">Qté</th><th class="n">PU HT</th><th class="n">Valeur HT</th></tr></thead><tbody>
+    ${c.items.slice().sort((a, b) => String(a.reference).localeCompare(String(b.reference), 'fr')).map(it => `<tr><td>${escapeHtml(it.reference)}</td><td>${escapeHtml(it.taille || '')}</td><td>${escapeHtml(it.couleur || '')}</td><td class="n">${int0(it.qte)}</td><td class="n">${eur2(it.prix)}</td><td class="n">${eur2((Number(it.qte) || 0) * (Number(it.prix) || 0))}</td></tr>`).join('')}
+    <tr class="tot"><td colspan="3">Total ${escapeHtml(c.categorie)}</td><td class="n">${int0(c.pieces)}</td><td></td><td class="n">${eur2(c.valeur)}</td></tr>
+    </tbody></table>`).join('');
+  const detailFil = v.filTypes.map(t => {
+    const rows = v.filRows.filter(r => r.filType === t.filType).sort((a, b) => String(a.reference).localeCompare(String(b.reference), 'fr', { numeric: true }));
+    return `<h3>${escapeHtml(t.filType)} — ${int0(t.bobines)} bobine(s)</h3>
+      <table class="detail"><thead><tr><th>Référence</th><th>Teinte</th><th class="n">Bobines</th><th>Référence</th><th>Teinte</th><th class="n">Bobines</th></tr></thead><tbody>
+      ${Array.from({ length: Math.ceil(rows.length / 2) }, (_, i) => {
+        const a = rows[i * 2], b = rows[i * 2 + 1];
+        const cell = r => r ? `<td>${escapeHtml(r.reference)}</td><td>${escapeHtml(r.teinte)}</td><td class="n">${int0(r.total)}</td>` : '<td></td><td></td><td></td>';
+        return `<tr>${cell(a)}${cell(b)}</tr>`;
+      }).join('')}</tbody></table>`;
+  }).join('');
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><style>${css}</style></head><body>
+    <div class="head">
+      <div><h1>Valorisation du stock</h1><div class="sub">État arrêté au ${escapeHtml(dateStr)} — montants hors taxes</div></div>
+      <img src="__CSB_LOGO__" alt="">
+    </div>
+
+    <h2>1. Stock textile (inventaire)</h2>
+    <table><thead><tr><th>Catégorie</th><th class="n">Lignes</th><th class="n">Pièces</th><th class="n">Valeur HT</th></tr></thead>
+      <tbody>${catRows}<tr class="tot"><td>Total stock textile</td><td class="n">${int0(v.invLignes)}</td><td class="n">${int0(v.invPieces)}</td><td class="n">${eur2(v.invValeur)}</td></tr></tbody></table>
+    <div class="note">Valeur = quantité × prix unitaire d'achat HT de chaque article (détail en annexe 1).</div>
+
+    <h2>2. Stock de fil à broder</h2>
+    <table><thead><tr><th>Type de fil</th><th class="n">Références</th><th class="n">Bobines</th></tr></thead>
+      <tbody>${filRows}<tr class="tot"><td>Total</td><td class="n">${int0(v.filTypes.reduce((s, t) => s + t.refs, 0))}</td><td class="n">${int0(v.bobines)}</td></tr></tbody></table>
+    <table style="margin-top:10px;"><thead><tr><th>Valorisation des bobines</th><th class="n">Nombre</th><th class="n">Prix unitaire HT</th><th class="n">Valeur HT</th></tr></thead><tbody>
+      <tr><td>Bobines pleines (5 000 m) — ${escapeHtml(String(p.pctPleines))} %</td><td class="n">${int0(v.pleines)}</td><td class="n">${eur2(p.pleinePrix)}</td><td class="n">${eur2(v.pleines * p.pleinePrix)}</td></tr>
+      <tr><td>Bobines incomplètes (équivalent 1 000 m) — ${escapeHtml(String(100 - p.pctPleines))} %</td><td class="n">${int0(v.incompletes)}</td><td class="n">${eur2(p.incompletePrix)}</td><td class="n">${eur2(v.incompletes * p.incompletePrix)}</td></tr>
+      <tr class="tot"><td>Total stock de fil</td><td class="n">${int0(v.bobines)}</td><td></td><td class="n">${eur2(v.filValeur)}</td></tr>
+    </tbody></table>
+    <div class="note">Une bobine pleine de 5 000 m vaut ${eur2(p.pleinePrix)} HT ; ${escapeHtml(String(p.pctPleines))} % des bobines sont pleines, les autres sont des bobines entamées valorisées comme une bobine de 1 000 m (${eur2(p.incompletePrix)} HT). Détail par référence en annexe 2.</div>
+
+    <div class="big"><span>Valeur totale du stock HT</span><span>${eur2(v.total)}</span></div>
+    <table style="margin-top:6px;"><tbody>
+      <tr><td>Stock textile</td><td class="n">${eur2(v.invValeur)}</td></tr>
+      <tr><td>Stock de fil à broder</td><td class="n">${eur2(v.filValeur)}</td></tr>
+    </tbody></table>
+
+    <div class="pb"></div>
+    <h2>Annexe 1 — Détail du stock textile</h2>
+    ${detailInv}
+    <div class="pb"></div>
+    <h2>Annexe 2 — Détail du stock de fil</h2>
+    ${detailFil}
+  </body></html>`;
+}
+
+async function openValoModal(){
+  const p = valoParams();
+  const overlay = document.createElement('div');
+  overlay.className = 'tt-overlay';
+  overlay.innerHTML = `
+    <div class="tt-modal" style="max-width:620px;">
+      <button class="ghost small tt-close" id="vl-close">✕ Fermer</button>
+      <h3>Valeur du stock pour le comptable</h3>
+      <div class="hint" style="margin-top:0;">PDF avec la valeur du stock textile (inventaire) et du stock de fil (module Stock de Fil), à la date choisie.</div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr; margin-top:14px;">
+        <div class="field"><label>Date de l'état</label><input type="date" id="vl-date" value="${new Date().toISOString().slice(0, 10)}"></div>
+        <div class="field"><label>Part de bobines pleines (%)</label><input type="number" id="vl-pct" min="0" max="100" step="1" value="${p.pctPleines}"></div>
+        <div class="field"><label>Prix d'une bobine pleine 5 000 m (€ HT)</label><input type="number" id="vl-pleine" min="0" step="0.01" value="${p.pleinePrix}"></div>
+        <div class="field"><label>Prix d'une bobine incomplète (1 000 m, € HT)</label><input type="number" id="vl-inc" min="0" step="0.01" value="${p.incompletePrix}"></div>
+      </div>
+      <div id="vl-preview" class="hint" style="margin:14px 0 0; font-size:13px;">Lecture du stock de fil…</div>
+      <div class="form-actions" style="margin-top:16px;"><button class="primary" id="vl-go" disabled>📄 Générer le PDF</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#vl-close').addEventListener('click', () => overlay.remove());
+  let filRows = null;
+  const read = () => ({
+    pctPleines: Math.max(0, Math.min(100, Number(overlay.querySelector('#vl-pct').value) || 0)),
+    pleinePrix: Number(overlay.querySelector('#vl-pleine').value) || 0,
+    incompletePrix: Number(overlay.querySelector('#vl-inc').value) || 0,
+  });
+  const preview = () => {
+    if(!filRows) return;
+    const v = computeValo(filRows, read());
+    overlay.querySelector('#vl-preview').innerHTML = `Stock textile : <b>${eur2(v.invValeur)}</b> (${int0(v.invPieces)} pièces)<br>
+      Stock de fil : <b>${eur2(v.filValeur)}</b> (${int0(v.bobines)} bobines dont ${int0(v.pleines)} pleines et ${int0(v.incompletes)} incomplètes)<br>
+      <span style="font-size:15px;">Total HT : <b>${eur2(v.total)}</b></span>`;
+  };
+  overlay.querySelectorAll('input').forEach(i => i.addEventListener('input', preview));
+  try{
+    filRows = await loadFilStock();
+    overlay.querySelector('#vl-go').disabled = false;
+    preview();
+  }catch(e){
+    overlay.querySelector('#vl-preview').textContent = 'Impossible de lire le stock de fil : ' + e.message;
+  }
+  overlay.querySelector('#vl-go').addEventListener('click', async () => {
+    const params = read();
+    try{ localStorage.setItem(VALO_KEY, JSON.stringify(params)); }catch(e){}
+    const dateIso = overlay.querySelector('#vl-date').value || new Date().toISOString().slice(0, 10);
+    const dateStr = new Date(dateIso + 'T12:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const html = valoHtml(computeValo(filRows, params), params, dateStr);
+    const name = 'Valorisation stock ' + dateIso + '.pdf';
+    if(!window.csbHost || !window.csbHost.htmlToPdf){
+      const w = window.open('', '_blank'); if(w){ w.document.write(html.replace(/__CSB_LOGO__/g, '')); w.document.close(); w.print(); }
+      return;
+    }
+    const btn = overlay.querySelector('#vl-go');
+    btn.disabled = true; btn.textContent = 'Création du PDF…';
+    try{
+      const footer = `<div style="width:100%; font-size:8px; color:#888; padding:0 28px; display:flex; justify-content:space-between; font-family:Arial;"><span>L'Atelier CSB — valorisation du stock au ${dateStr}</span><span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`;
+      const base64 = await window.csbHost.htmlToPdf(html, footer, '');
+      const saved = await window.csbHost.savePdf(base64, name);
+      if(saved) toast('PDF enregistré : ' + saved);
+      else await window.csbHost.openTempPdf(base64, name);
+      overlay.remove();
+    }catch(e){
+      btn.disabled = false; btn.textContent = '📄 Générer le PDF';
+      toast('Erreur PDF : ' + e.message);
+    }
+  });
+}
+
 /* ---------- Inventaire panel ---------- */
 function renderInventairePanel(){
   const panel = document.getElementById('panel-inventaire');
@@ -2741,6 +2928,7 @@ function renderInventairePanel(){
       <input type="text" class="search-box" id="inv-search" placeholder="Filtrer par référence, couleur, taille…" value="${escapeHtml(searchQuery)}">
       <select id="inv-cat-filter"><option value="">Toutes catégories</option>${[...state.categories].sort().map(c=>`<option value="${escapeHtml(c)}" ${categoryFilter===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select>
       <button class="ghost" id="inv-missing-prices" title="Chercher le prix des articles qui n'en ont pas, chez tous les fournisseurs">🔎 Prix manquants (${state.items.filter(it => it.prix == null || it.prix === '' || Number(it.prix) === 0).length})</button>
+      <button class="ghost" id="inv-valo" title="PDF pour le comptable : valeur du stock textile et du stock de fil">📄 Valeur du stock (comptable)</button>
     </div>
     <div id="inv-results"></div>
   `;
@@ -2783,6 +2971,7 @@ function renderInventairePanel(){
   document.getElementById('inv-search').addEventListener('input', e=>{ searchQuery = e.target.value; renderInvResults(); });
   document.getElementById('inv-cat-filter').addEventListener('change', e=>{ categoryFilter = e.target.value; renderInvResults(); });
   document.getElementById('inv-missing-prices').addEventListener('click', openMissingPricesModal);
+  document.getElementById('inv-valo').addEventListener('click', openValoModal);
 
   renderInvResults();
 }

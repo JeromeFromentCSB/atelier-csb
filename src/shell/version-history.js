@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.52', items: [
+    "Inventaire : bouton « 📄 Valeur du stock (comptable) » — PDF avec la valeur du stock textile (par catégorie) et du stock de fil (bobines pleines / incomplètes, prix et part de bobines pleines modifiables), total HT et annexes détaillées",
+  ]},
   { v: '0.2.51', items: [
     "Nouveau module Clients : liste des clients ou des prospects Axonaut (au choix), recherche, création et modification des fiches (adresse, SIRET, TVA, code tiers, commentaires) et des contacts",
     "Fiche client : en tapant le nom (complet ou partiel), recherche de la société dans l'annuaire officiel des entreprises — tient compte du code postal et de la ville saisis — et remplissage automatique (SIRET, TVA intracommunautaire, adresse) ; alerte si le SIRET existe déjà dans Axonaut",
