@@ -1390,6 +1390,39 @@ function tcNearestMadeira(rgb){
   }
   return best;
 }
+// Disponibilité en stock (Polyneon 40) du Madeira proposé ; s'il n'y en a pas, la couleur en stock
+// la plus proche de la couleur de l'image, avec l'écart en %.
+function tcStockPolyneon(){
+  const map = new Map();
+  computeStock().forEach(r => {
+    if(filTypeOf(r) !== 'Polyneon 40' || r.total <= 0) return;
+    const k = String(r.reference);
+    const cur = map.get(k) || { ref: k, teinte: r.teinte || '', total: 0 };
+    cur.total += r.total; if(r.teinte) cur.teinte = r.teinte;
+    map.set(k, cur);
+  });
+  return map;
+}
+function tcStockHtml(rgb, madNum, stock){
+  const pill = (bg, fg, txt) => `<span style="font-size:.72rem; font-weight:700; padding:3px 9px; border-radius:20px; background:${bg}; color:${fg}; white-space:nowrap;">${txt}</span>`;
+  const own = stock.get(String(madNum));
+  if(own) return pill('#E4EFE6', '#3E7A52', `✓ ${fmtNum(own.total)} bobine(s) en stock${own.teinte ? ' — ' + escapeHtml(own.teinte) : ''}`);
+  let best = null, bestD = Infinity;
+  stock.forEach(r => {
+    const mad = MADEIRA_COLORS.find(([n]) => String(n) === r.ref);
+    if(!mad) return;
+    const d = tcRgbDist2(rgb, tcHexToRgb(mad[1]));
+    if(d < bestD){ bestD = d; best = { ...r, hex: mad[1] }; }
+  });
+  if(!best) return pill('#F7E3DC', '#B5452F', 'Pas en stock');
+  const pct = Math.round(Math.sqrt(bestD) / 441.67 * 100);
+  return `${pill('#F7E3DC', '#B5452F', 'Pas en stock')}
+    <span style="font-size:.75rem; color:var(--muted,#888);">→ plus proche en stock :</span>
+    <span style="display:inline-block; width:20px; height:20px; border-radius:4px; border:1px solid var(--line,#ddd); background:${best.hex}; vertical-align:middle;"></span>
+    <span style="font-size:.78rem; font-weight:700;">Madeira ${escapeHtml(best.ref)}</span>
+    <span style="font-size:.72rem; color:var(--muted,#888);">${best.teinte ? escapeHtml(best.teinte) + ' · ' : ''}${fmtNum(best.total)} bobine(s) · écart ${pct} %</span>
+    ${empHas(best.ref) ? `<button type="button" class="ghost small emp-btn" data-ref="${escapeHtml(best.ref)}" title="Voir où elle est rangée">📍</button>` : ''}`;
+}
 function tcNearestName(rgb){
   let best=null, bestD=Infinity;
   for(const [name,hex] of NAMED_COLORS){
@@ -1606,7 +1639,7 @@ function renderTrouverCouleurPanel(){
       </div>
       <div id="tc-tools" style="display:${tcImg?'flex':'none'}; align-items:center; gap:10px; margin-top:10px;">
         <button type="button" id="tc-pipette-btn" title="Choisir une couleur précise sur l'image">💧 Pipette</button>
-        <span id="tc-pipette-hint" style="display:none; font-size:.8rem; color:var(--muted,#888);">Clique maintenant sur l'image pour choisir la couleur…</span>
+        <span id="tc-pipette-hint" style="display:none; font-size:.8rem; color:var(--muted,#888);">Clique sur l'image pour choisir une couleur (autant de fois que tu veux) — clique en dehors du dessin pour arrêter</span>
       </div>
       <div id="tc-pipette-result" style="display:none; align-items:center; gap:12px; margin-top:10px; padding:10px 12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); border-radius:8px;"></div>
     </div>
@@ -1623,21 +1656,26 @@ function renderTrouverCouleurPanel(){
     const spread = tcSeparateBadges(clusters, aspect, 0.11, 40);
     clusters.forEach((c,i) => { c.labelPos = spread[i]; });
     const total = pixels.length;
+    const stock = tcStockPolyneon();
     results.innerHTML = clusters.map((c,i) => {
       const hex = tcToHex(c.rgb);
       const [madNum, madHex] = tcNearestMadeira(c.rgb);
       const name = tcNearestName(c.rgb);
       const pct = Math.round(c.count/total*100);
       return `
-        <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); border-radius:8px;">
+        <div style="padding:10px 12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); border-radius:8px;">
+        <div style="display:flex; align-items:center; gap:12px;">
           <div style="font-weight:700; font-size:.8rem; width:20px; text-align:center; color:var(--muted,#888);">${i+1}</div>
           <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${hex};"></div>
           <div style="flex:1; font-size:.83rem; font-weight:600;">${escapeHtml(name)}<div style="font-size:.7rem; color:var(--muted,#888); font-weight:400;">${pct}% de l'image</div></div>
           <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${madHex};"></div>
           <div style="font-size:.8rem; font-weight:700; padding:4px 10px; border-radius:20px; background:var(--bg,#f5f5f5); border:1px solid var(--line,#ddd); white-space:nowrap;">Madeira ${madNum}</div>
         </div>
+        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:8px 0 0 32px;">${tcStockHtml(c.rgb, madNum, stock)}</div>
+        </div>
       `;
     }).join('');
+    attachEmpHandlers(results);
     const wrap = document.getElementById('tc-preview-wrap');
     wrap.querySelectorAll('.tc-num-badge, .tc-num-line').forEach(el => el.remove());
     clusters.forEach((c,i) => {
@@ -1672,6 +1710,8 @@ function renderTrouverCouleurPanel(){
       document.getElementById('tc-preview-wrap').style.width = TC_BASE_WIDTH + 'px';
       document.getElementById('tc-controls').style.display = 'flex';
       document.getElementById('tc-zoom-controls').style.display = 'flex';
+      document.getElementById('tc-tools').style.display = 'flex';
+      document.getElementById('tc-pipette-result').style.display = 'none';
       document.getElementById('tc-zoomrange').value = 100;
       document.getElementById('tc-zoomout').textContent = '100%';
       runAnalysis();
@@ -1728,16 +1768,17 @@ function renderTrouverCouleurPanel(){
     const name = tcNearestName(rgb);
     const resultEl = document.getElementById('tc-pipette-result');
     resultEl.style.display = 'flex';
+    resultEl.style.flexWrap = 'wrap';
     resultEl.innerHTML = `
       <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${hex};"></div>
       <div style="flex:1; font-size:.83rem; font-weight:600;">${escapeHtml(name)}<div style="font-size:.7rem; color:var(--muted,#888); font-weight:400;">${hex.toUpperCase()}</div></div>
       <div style="width:36px; height:36px; border-radius:6px; border:1px solid var(--line,#ddd); flex-shrink:0; background:${madHex};"></div>
       <div style="font-size:.8rem; font-weight:700; padding:4px 10px; border-radius:20px; background:var(--bg,#f5f5f5); border:1px solid var(--line,#ddd); white-space:nowrap;">Madeira ${madNum}</div>
+      <div style="flex-basis:100%; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">${tcStockHtml(rgb, madNum, tcStockPolyneon())}</div>
     `;
-    tcPipetteActive = false;
-    pipetteBtn.classList.remove('primary');
-    pipetteHint.style.display = 'none';
-    e.target.style.cursor = '';
+    attachEmpHandlers(resultEl);
+    // La pipette reste active : on peut cliquer plusieurs points d'affilée. Elle se désactive
+    // en cliquant en dehors du dessin (ou à nouveau sur le bouton).
   });
 
   tcScrollEl = document.getElementById('tc-preview-scroll');
@@ -1759,6 +1800,17 @@ function renderTrouverCouleurPanel(){
   // référence figée à l'ancien élément).
   if(!tcWindowListenersWired){
     tcWindowListenersWired = true;
+    document.addEventListener('mousedown', e => {
+      if(!tcPipetteActive) return;
+      if(e.target.closest('#tc-preview, #tc-pipette-btn')) return;
+      tcPipetteActive = false;
+      const btn = document.getElementById('tc-pipette-btn');
+      const hint = document.getElementById('tc-pipette-hint');
+      const img = document.getElementById('tc-preview');
+      if(btn) btn.classList.remove('primary');
+      if(hint) hint.style.display = 'none';
+      if(img) img.style.cursor = '';
+    });
     window.addEventListener('mousemove', e => {
       if(!tcPanning || !tcScrollEl) return;
       tcScrollEl.scrollLeft = tcPanScrollX - (e.clientX - tcPanStartX);

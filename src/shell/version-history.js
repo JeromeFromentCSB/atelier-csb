@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.53', items: [
+    "Stock de Fil, Trouver couleur : le bouton 💧 Pipette s'affiche dès qu'une image est chargée, et reste actif pour cliquer plusieurs points d'affilée (clic hors du dessin pour l'arrêter)",
+    "Stock de Fil, Trouver couleur : pour chaque Madeira proposé, indique s'il est en stock ; sinon, propose le fil en stock le plus proche (teinte, nombre de bobines, écart, emplacement 📍)",
+  ]},
   { v: '0.2.52', items: [
     "Inventaire : bouton « 📄 Valeur du stock (comptable) » — PDF avec la valeur du stock textile (par catégorie) et du stock de fil (bobines pleines / incomplètes, prix et part de bobines pleines modifiables), total HT et annexes détaillées",
   ]},
