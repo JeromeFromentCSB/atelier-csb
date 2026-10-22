@@ -150,6 +150,7 @@
   .chip{ border:1px solid var(--line); background:#fff; border-radius:999px; padding:3px 9px; font-size:11px; font-weight:600; color:var(--muted); }
   .chip.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
   .list-search{ width:100%; margin-top:10px; border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  .ax-tag{ font-size:10px; font-weight:700; color:#8A5A00; background:#FFF4E5; border-radius:999px; padding:1px 6px; margin-left:4px; }
   .list-client{ width:100%; margin-top:6px; border:1px solid var(--line); border-radius:8px; padding:5px 8px; background:#fff; font:inherit; }
   .st{ display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap; }
   .st-brouillon{ background:#EEE9E0; color:#7A7062; }
@@ -228,6 +229,7 @@
       <input type="text" class="list-search" id="listSearch" placeholder="🔎 N°, objet ou client…" autocomplete="off">
       <select class="list-client" id="listFilters" title="Filtrer la liste par état"></select>
       <select class="list-client" id="listClient" title="Filtrer la liste par client (parmi les devis de l'état choisi)"><option value="">Tous les clients</option></select>
+      <div id="listStats" class="hint" style="margin:6px 0 0; font-size:12px;"></div>
     </header>
     <div class="draft-list" id="draftList"><div class="hint" style="padding:6px;">Chargement…</div></div>
     <footer><button class="btn small full" id="settingsBtn">⚙︎ Réglages du module</button></footer>
@@ -878,7 +880,7 @@ function hideStatusTip(){ const tip = document.getElementById('stTip'); if(tip) 
 function renderListFilters(){
   const sel = document.getElementById('listFilters');
   sel.innerHTML = LIST_FILTERS.map(f => {
-    const n = drafts.filter(x => f.test(x.draft.statut)).length;
+    const n = allEntries().filter(x => f.test(x.draft.statut)).length;
     return `<option value="${f.id}"${f.color ? ` style="color:${f.color};"` : ''}>${f.color ? '● ' : ''}${escapeHtml(f.label)} (${n})</option>`;
   }).join('');
   sel.value = listFilter;
@@ -889,7 +891,7 @@ function renderClientSelect(){
   if(!sel) return;
   const counts = new Map();
   const f = LIST_FILTERS.find(x => x.id === listFilter) || LIST_FILTERS[0];
-  drafts.filter(x => f.test(x.draft.statut)).forEach(x => { const n = x.draft.client && (x.draft.client.name || '').trim(); if(n) counts.set(n, (counts.get(n) || 0) + 1); });
+  allEntries().filter(x => f.test(x.draft.statut)).forEach(x => { const n = x.draft.client && (x.draft.client.name || '').trim(); if(n) counts.set(n, (counts.get(n) || 0) + 1); });
   if(listClient && !counts.has(listClient)) counts.set(listClient, 0);
   const names = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
   sel.innerHTML = '<option value="">Tous les clients</option>' +
@@ -908,47 +910,327 @@ function renderDraftList(){
   const list = document.getElementById('draftList');
   const f = LIST_FILTERS.find(x => x.id === listFilter) || LIST_FILTERS[0];
   const q = norm(listSearch);
-  const items = drafts.map(x => x.draft).filter(d => f.test(d.statut))
+  const items = allEntries().map(x => x.draft).filter(d => f.test(d.statut))
     .filter(d => !listClient || (d.client && (d.client.name || '').trim() === listClient))
     .filter(d => !q || norm([d.numero, d.title, d.client && d.client.name].join(' ')).includes(q))
     .sort(draftRecencyCompare);
+  // compteur et total HT de la sélection, et état du chargement des devis Axonaut
+  const stats = document.getElementById('listStats');
+  if(stats){
+    const totalHt = items.reduce((t, d) => t + (d._ax ? d._axHT : computeTotals(d).ht), 0);
+    stats.innerHTML = `${items.length} devis · <b>${eur(totalHt)} HT</b>` +
+      (axLoading ? ' · <span>chargement des devis Axonaut…</span>' : axError ? ` · <span style="color:var(--danger);" title="${escapeHtml(axError)}">devis Axonaut indisponibles</span>` : '');
+  }
   if(!items.length){ list.innerHTML = '<div class="hint" style="padding:6px;">Aucun devis ici.</div>'; return; }
   list.innerHTML = items.map(d => {
-    const t = computeTotals(d);
+    const t = d._ax ? { ht: d._axHT } : computeTotals(d);
     const sc = STATUT_COLORS[d.statut] || STATUT_COLORS.brouillon;
-    return `<div class="draft-item ${current && current.id === d.id ? 'active' : ''}" data-id="${escapeHtml(d.id)}" style="--st-color:${sc.c}; --st-light:${sc.light};">
-      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}</span>${invoiceMissing(d) ? `<span class="inv-gone" title="La facture ${escapeHtml(d.facture.numero || '')} n'existe plus dans Axonaut : ouvre le devis pour le remettre à l'état « Commande »">⚠ facture supprimée</span>` : ''}${suiviOpens(d) ? `<span class="eye">👁 ${suiviOpens(d)}</span>` : ''}</div>
+    const isActive = (current && current.id === d.id) || (axView && d.id === 'AX-' + axView.id);
+    return `<div class="draft-item ${isActive ? 'active' : ''}" data-id="${escapeHtml(d.id)}" style="--st-color:${sc.c}; --st-light:${sc.light};">
+      <div class="row1"><span class="t">${escapeHtml(d.numero || 'Sans numéro')}</span>${d._ax ? '<span class="ax-tag">Axonaut</span>' : ''}${invoiceMissing(d) ? `<span class="inv-gone" title="La facture ${escapeHtml(d.facture.numero || '')} n'existe plus dans Axonaut : ouvre le devis pour le remettre à l'état « Commande »">⚠ facture supprimée</span>` : ''}${suiviOpens(d) ? `<span class="eye">👁 ${suiviOpens(d)}</span>` : ''}</div>
       ${(d.title || '').trim() ? `<div class="obj-full">${escapeHtml(d.title.trim())}</div>` : ''}
       <div class="row2"><span class="cl">${escapeHtml(d.client ? d.client.name : 'Client à choisir')}</span><span class="ht">${eur(t.ht)} HT</span></div>
     </div>`;
   }).join('');
   // État affiché près du curseur au survol (le cadre en donne déjà la couleur).
   list.querySelectorAll('.draft-item').forEach(el => {
-    const entry = drafts.find(x => x.draft.id === el.dataset.id);
+    const entry = allEntries().find(x => x.draft.id === el.dataset.id);
     const st = entry ? entry.draft.statut : 'brouillon';
     const sc = STATUT_COLORS[st] || STATUT_COLORS.brouillon;
     let label = (STATUTS[st] || STATUTS.brouillon).label;
     const opens = entry ? suiviOpens(entry.draft) : 0;
     if(opens) label += ` · ouvert ${opens} fois par le client`;
     if(entry && invoiceMissing(entry.draft)) label += ' · ⚠ facture supprimée dans Axonaut';
+    if(entry && entry.ax) label += ' · devis Axonaut (lecture seule)';
     el.addEventListener('mousemove', e => showStatusTip(label, sc, e.clientX, e.clientY));
     el.addEventListener('mouseleave', hideStatusTip);
   });
   list.querySelectorAll('.draft-item').forEach(el => el.addEventListener('click', () => {
     hideStatusTip();
     if(!abandonEditIfNeeded()) return;
-    const entry = drafts.find(x => x.draft.id === el.dataset.id);
+    const entry = allEntries().find(x => x.draft.id === el.dataset.id);
+    if(entry && entry.ax){ openAxQuote(entry.q.id); return; }
     if(entry) openDraft(JSON.parse(JSON.stringify(entry.draft)), entry.recId, entry.updated);
   }));
 }
 
+// ================== Devis Axonaut (lecture seule) ==================
+// Les devis faits dans Axonaut apparaissent dans la même liste (étiquette « Axonaut »), avec un état
+// déduit d'Axonaut. Ils s'ouvrent en lecture seule (Axonaut ne permet pas de les modifier par son
+// API) et peuvent être repris dans le module pour devenir modifiables.
+let axEntries = [];          // [{ ax:true, q, draft }]
+let axLoaded = false, axLoading = false, axError = '';
+let axView = null;           // devis Axonaut ouvert (réponse complète de /quotations/{id})
+const axDetailCache = {};
+function axText(html){
+  if(!html) return '';
+  const div = document.createElement('div');
+  div.innerHTML = String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n');
+  return div.textContent.replace(/\n{2,}/g, '\n').trim();
+}
+async function axFetchAll(path, maxPages){
+  const seen = new Set(); let all = [];
+  for(let page = 1; page <= (maxPages || 40); page++){
+    const arr = asArray(await axonaut(path + (path.includes('?') ? '&' : '?') + 'page=' + page + '&per_page=200'));
+    const fresh = arr.filter(x => x && !seen.has(x.id));
+    if(!fresh.length) break;
+    fresh.forEach(x => seen.add(x.id));
+    all = all.concat(fresh);
+    if(arr.length < 50) break;
+  }
+  return all;
+}
+function axStatut(q, invoicedContracts){
+  if(q.status === 'refused') return 'refuse';
+  if(q.contract_id) return invoicedContracts.has(String(q.contract_id)) ? 'facture' : 'accepte';
+  return q.sent_date ? 'envoye' : 'brouillon';
+}
+function axBuildEntries(quotes, invoicedContracts){
+  const taken = new Set(drafts.map(x => x.draft.axonautQuotationId).filter(Boolean).map(String));
+  axEntries = quotes.filter(q => !taken.has(String(q.id))).map(q => ({
+    ax: true, q,
+    draft: {
+      id: 'AX-' + q.id, _ax: true, _axHT: Number(q.pre_tax_amount) || 0,
+      numero: q.number || ('#' + q.id), title: axText(q.title), statut: axStatut(q, invoicedContracts),
+      client: q.company_name ? { id: q.company_id, name: q.company_name } : null,
+      date: String(q.date || '').slice(0, 10), createdAt: String(q.date || ''), lines: []
+    }
+  }));
+}
+let axQuotesRaw = [], axInvoiced = new Set();
+async function loadAxonautQuotes(){
+  if(axLoading) return;
+  axLoading = true; axError = '';
+  renderDraftList();
+  try{
+    const [quotes, invoices] = await Promise.all([axFetchAll('/quotations', 30), axFetchAll('/invoices', 40)]);
+    axQuotesRaw = quotes;
+    axInvoiced = new Set(invoices.map(i => i.contract_id).filter(Boolean).map(String));
+    axBuildEntries(axQuotesRaw, axInvoiced);
+    axLoaded = true;
+  }catch(e){ axError = e.message; }
+  axLoading = false;
+  renderDraftList();
+}
+function allEntries(){ return drafts.concat(axEntries); }
+
+// ---------- Vue d'un devis Axonaut ----------
+async function openAxQuote(qid){
+  if(!abandonEditIfNeeded()) return;
+  current = null; currentRecId = null; currentUpdated = ''; editSession = null;
+  const entry = axEntries.find(e => String(e.q.id) === String(qid));
+  axView = axDetailCache[qid] || (entry && entry.q) || { id: qid };
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('editor').style.display = 'block';
+  renderAxView();
+  renderDraftList();
+  if(!axDetailCache[qid]){
+    try{
+      const q = await axonaut('/quotations/' + qid);
+      axDetailCache[qid] = q;
+      if(axView && String(axView.id) === String(qid)){ axView = q; renderAxView(); }
+    }catch(e){
+      const box = document.getElementById('axLines');
+      if(box) box.innerHTML = `<div class="hint" style="color:var(--danger);">Lignes indisponibles : ${escapeHtml(e.message)}</div>`;
+    }
+  }
+}
+function axDate(v){ if(!v) return '—'; const d = new Date(v); return isNaN(d) ? String(v).slice(0, 10) : d.toLocaleDateString('fr-FR'); }
+function renderAxView(){
+  const q = axView;
+  if(!q) return;
+  const entry = axEntries.find(e => String(e.q.id) === String(q.id));
+  const st = entry ? entry.draft.statut : axStatut(q, axInvoiced);
+  const ht = Number(q.pre_tax_amount) || 0, ttc = Number(q.total_amount) || 0;
+  const lines = q.quotation_lines;
+  const ed = document.getElementById('editor');
+  ed.innerHTML = `
+    <div class="topbar">
+      <h2 id="edTitle">${escapeHtml('Devis ' + (q.number || '#' + q.id))}${axText(q.title) ? ' — ' + escapeHtml(axText(q.title)) : ''}${q.company_name ? `<span style="font-size:15px; color:var(--muted); font-weight:400;"> · ${escapeHtml(q.company_name)}</span>` : ''}</h2>
+      ${statutChip(st)}
+      <span class="st" style="background:#FFF4E5; color:#8A5A00;">Axonaut — lecture seule</span>
+    </div>
+    <div class="actions-bar">
+      ${q.public_path ? `<a class="btn" href="${escapeHtml(q.public_path)}" target="_blank" rel="noopener">📄 PDF du devis</a>` : ''}
+      ${CSBAuth.can('devis', 'creer') ? '<button class="btn primary" id="axTakeOver" title="Recopie ce devis dans le module pour le modifier et le gérer ici ; l\'original reste inchangé dans Axonaut">✏️ Reprendre dans le module</button>' : ''}
+      <button class="btn" id="axFab">🏭 Bon de fabrication</button>
+      ${q.contract_id ? '<button class="btn" id="axOrder">📦 Voir la commande</button>' : ''}
+    </div>
+    <div class="info-row">
+      <div class="card"><h2>Client</h2><div style="font-weight:700;">${escapeHtml(q.company_name || '—')}</div></div>
+      <div class="card"><h2>Dates</h2>
+        <div class="hint" style="margin:0; font-size:13px; color:var(--ink);">Devis : <b>${axDate(q.date)}</b> · validité : ${axDate(q.expiry_date)}${q.sent_date ? ' · envoyé le ' + axDate(q.sent_date) : ''}${q.date_customer_answer ? ' · réponse le ' + axDate(q.date_customer_answer) : ''}</div>
+      </div>
+      <div class="card"><h2>Montants</h2>
+        <div style="font-size:13px;">HT : <b>${eur(ht)}</b> · TVA : ${eur(q.tax_amount)} · TTC : <b>${eur(ttc)}</b></div>
+      </div>
+    </div>
+    <div class="card"><h2>Lignes <span class="hint" style="font-weight:400;">— coche les lignes au fur et à mesure de la préparation</span></h2>
+      <div id="axLines">${Array.isArray(lines) ? axLinesHtml(lines) : '<div class="hint">Chargement des lignes…</div>'}</div>
+      ${q.comments ? `<div class="hint" style="margin-top:10px; white-space:pre-line;">${escapeHtml(axText(q.comments))}</div>` : ''}
+    </div>
+    <div class="card"><h2>Production</h2><div id="prodBox"></div></div>`;
+  const tk = document.getElementById('axTakeOver');
+  if(tk) tk.addEventListener('click', () => axTakeOver(q.id));
+  document.getElementById('axFab').addEventListener('click', () => askGestionCommande({ fabricationQuotationId: q.id }));
+  const go = document.getElementById('axOrder');
+  if(go) go.addEventListener('click', () => askGestionCommande({ contractId: q.contract_id }));
+  if(Array.isArray(lines)) axLoadLineChecks(q);
+  renderProduction();
+}
+function axLinesHtml(lines){
+  if(!lines.length) return '<div class="hint">Ce devis ne contient aucune ligne.</div>';
+  let lastCh = null;
+  return `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead><tr><th style="width:28px;"></th><th style="text-align:left;">Désignation</th><th style="text-align:right;">Qté</th><th style="text-align:right;">PU HT</th><th style="text-align:right;">Total HT</th></tr></thead>
+    <tbody>${lines.map((l, i) => {
+      const ch = axText(l.chapter);
+      const head = ch && ch !== lastCh ? `<tr><td colspan="5" style="padding:8px 4px 2px; font-weight:700; color:var(--muted); text-transform:uppercase; font-size:11px;">${escapeHtml(ch)}</td></tr>` : '';
+      lastCh = ch;
+      const qty = Number(l.quantity) || 0, pu = Number(l.price) || 0;
+      return head + `<tr class="ax-line" data-idx="${i}" style="border-top:1px solid var(--line);">
+        <td style="vertical-align:top; padding:6px 4px;"><input type="checkbox" class="ax-line-check" data-idx="${i}"></td>
+        <td style="padding:6px 4px;"><b>${escapeHtml(l.title || l.product_name || '')}</b>${l.product_code ? ` <span class="hint">${escapeHtml(l.product_code)}</span>` : ''}${l.details ? `<div class="hint" style="margin:2px 0 0; white-space:pre-line;">${escapeHtml(axText(l.details))}</div>` : ''}</td>
+        <td style="text-align:right; white-space:nowrap; padding:6px 4px;">${qty.toLocaleString('fr-FR')} ${escapeHtml(l.unit || '')}</td>
+        <td style="text-align:right; white-space:nowrap; padding:6px 4px;">${eur(pu)}</td>
+        <td style="text-align:right; white-space:nowrap; padding:6px 4px;">${eur(l.pre_tax_amount != null ? l.pre_tax_amount : qty * pu)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+// Cases à cocher des lignes : même enregistrement que l'ancien onglet Devis de Gestion Commande
+// (collection devis_lignes_etat, une fiche par devis).
+function axLinesBase(){ return CSBAuth.getPbUrl().replace(/\/+$/, '') + '/api/collections/devis_lignes_etat/records'; }
+let axLinesRec = null;
+async function axLoadLineChecks(q){
+  axLinesRec = null;
+  let state = {};
+  try{
+    const res = await CSBAuth.authedFetch(axLinesBase() + '?filter=' + encodeURIComponent(`(quotation_id='${q.id}')`));
+    if(res.ok){ axLinesRec = ((await res.json()).items || [])[0] || null; state = (axLinesRec && axLinesRec.lines_state) || {}; }
+  }catch(e){}
+  if(!axView || String(axView.id) !== String(q.id)) return;
+  document.querySelectorAll('.ax-line-check').forEach(cb => {
+    cb.checked = !!state[cb.dataset.idx];
+    const row = cb.closest('tr'); if(row) row.style.opacity = cb.checked ? '.5' : '';
+    cb.addEventListener('change', async () => {
+      if(row) row.style.opacity = cb.checked ? '.5' : '';
+      const st = {}; document.querySelectorAll('.ax-line-check').forEach(x => { st[x.dataset.idx] = x.checked; });
+      const body = { quotation_id: String(q.id), numero_devis: q.number || '', lines_state: st };
+      try{
+        const url = axLinesRec ? axLinesBase() + '/' + axLinesRec.id : axLinesBase();
+        const res = await CSBAuth.authedFetch(url, { method: axLinesRec ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if(res.ok && !axLinesRec) axLinesRec = await res.json();
+      }catch(e){ console.warn('Case à cocher non enregistrée', e); }
+    });
+  });
+}
+// Demande à Gestion Commande (commande, bon de fabrication) : directement si le module y est intégré
+// (onglet Devis), sinon par le socle, qui ouvre Gestion Commande.
+function askGestionCommande(payload){
+  if(window.parent === window){ alert("Disponible uniquement dans l'application Atelier CSB."); return; }
+  window.parent.postMessage({ type: 'csb:open-module', module: 'axonaut', payload }, '*');
+}
+
+// ---------- Reprise d'un devis Axonaut dans le module ----------
+const AX_FIELD_ALIASES = {
+  nomSoc: ['NOM SOC','SOCIETE','RAISON SOCIALE','NOM SOCIETE','NOM DE LA SOCIETE'],
+  adresse: ['ADRESSE','ADRESSE LIVRAISON','ADRESSE DE LIVRAISON'],
+  cp: ['CP','CODE POSTAL'], ville: ['VILLE'], pays: ['PAYS'], tel: ['TEL','TELEPHONE'],
+  contact: ['NOM ET PRENOM DU CONTACT','CONTACT','NOM DU CONTACT']
+};
+function axDelivery(c){
+  const nk = k => String(k).trim().replace(/\s*:+\s*$/, '').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const norm = {}; Object.keys(c.custom_fields || {}).forEach(k => { norm[nk(k)] = (c.custom_fields[k] == null ? '' : c.custom_fields[k]).toString().trim(); });
+  const df = {}; Object.keys(AX_FIELD_ALIASES).forEach(f => { df[f] = ''; for(const a of AX_FIELD_ALIASES[f]) if(norm[a]){ df[f] = norm[a]; break; } });
+  if(df.nomSoc || df.adresse) return df;
+  const na = c.delivery_address;
+  return na ? { nomSoc: na.company_name || '', contact: na.contact_name || '', adresse: na.street || '', cp: na.zip_code || '', ville: na.city || '', pays: na.country || '', tel: '' } : df;
+}
+function axLinesToModule(q){
+  const out = []; let lastChapter = null;
+  (q.quotation_lines || []).forEach(l => {
+    const ch = axText(l.chapter);
+    if(ch && ch !== lastChapter) out.push({ type: 'section', name: ch });
+    lastChapter = ch;
+    const qty = Number(l.quantity) || 0, pu = Number(l.price) || 0;
+    let disc = 0;
+    if(l.line_discount_amount){
+      disc = l.line_discount_unit_is_percent ? Number(l.line_discount_amount)
+        : (qty * pu ? Math.round(Number(l.line_discount_amount) / (qty * pu) * 10000) / 100 : 0);
+    }
+    out.push({ type: l.product_id ? 'product' : 'free', productId: l.product_id || null, productCode: l.product_code || '', internalId: l.product_internal_id || '',
+      name: l.title || l.product_name || '', description: l.details || '', quantity: qty, price: pu,
+      taxRate: (l.tax_rates && l.tax_rates[0] && Number(l.tax_rates[0].rate)) || 0, unit: l.unit || '',
+      discountPercent: disc, cost: l.unit_job_costing != null ? l.unit_job_costing : '' });
+  });
+  return out;
+}
+let axTakingOver = false;
+async function axTakeOver(qid){
+  if(axTakingOver) return;
+  if(!CSBAuth.can('devis', 'creer')){ alert("Tu n'as pas le droit de créer des devis — demande à un administrateur."); return; }
+  axTakingOver = true;
+  try{
+    const q = axDetailCache[qid] || await axonaut('/quotations/' + qid);
+    const contract = q.contract_id ? await axonaut('/contracts/' + q.contract_id).catch(() => null) : null;
+    const orderName = contract ? (contract.name || '#' + contract.id) : '';
+    if(!confirm(contract
+      ? `Reprendre la commande ${orderName} (devis ${q.number}) dans le module ?\n\nLe devis y sera modifiable ; photos, documents, programmes, commentaire et colis de la commande restent attachés.\nLe devis et la commande d'origine restent inchangés dans Axonaut.`
+      : `Reprendre le devis ${q.number} dans le module ?\n\nIl y sera géré et modifiable ; le devis d'origine reste inchangé dans Axonaut.`)) return;
+    const user = userName(), now = new Date().toISOString();
+    const at = moduleSettings.atelier || {};
+    const lines = axLinesToModule(q);
+    const statut = contract ? 'accepte' : (q.status === 'refused' ? 'refuse' : (q.sent_date ? 'envoye' : 'brouillon'));
+    const data = {
+      id: uid(), createdAt: now, updatedAt: now, author: user, updatedBy: user, version: 1,
+      client: { id: q.company_id, name: q.company_name || '' }, addressId: null,
+      date: (q.date || now).slice(0, 10), expiryDate: (q.expiry_date || '').slice(0, 10),
+      themeId: null, title: axText(q.title), comments: axText(q.comments),
+      paymentTerms: at.conditionsDefaut || '', mandatoryMentions: at.mentionsDefaut || '',
+      globalDiscount: q.global_discount_amount || 0, globalDiscountIsPercent: q.global_discount_unit_is_percent !== false,
+      lines, axonautQuotationId: q.id,
+      axonautImport: { at: now, by: user, quoteNumber: q.number || '', totalHt: q.pre_tax_amount, totalTtc: q.total_amount, orderName }
+    };
+    if(contract){
+      const dl = axDelivery(contract);
+      Object.assign(data, {
+        linkedContractId: contract.id, axonautOrderName: orderName,
+        acceptedAt: contract.start_date ? String(contract.start_date).slice(0, 10) + 'T12:00:00.000Z' : now, acceptedVersion: 1,
+        livraison: { nomSoc: dl.nomSoc || '', contact: dl.contact || '', adresse: dl.adresse || '', cp: dl.cp || '', ville: dl.ville || '', pays: dl.pays || 'France', tel: dl.tel || '' },
+        commande: { version: 1, at: now, by: user, lines: JSON.parse(JSON.stringify(lines)), title: data.title, comments: data.comments,
+          globalDiscount: data.globalDiscount, globalDiscountIsPercent: data.globalDiscountIsPercent, totalHt: q.pre_tax_amount, totalTtc: q.total_amount }
+      });
+    }
+    const body = {
+      numero: q.number || '', statut, client_id: q.company_id || null, client_nom: q.company_name || '',
+      date_devis: data.date, total_ht: q.pre_tax_amount || 0, total_ttc: q.total_amount || 0, data,
+      historique: [{ date: now, user, action: contract ? `Repris d'Axonaut — devis ${q.number}, commande ${orderName}` : `Repris d'Axonaut — devis ${q.number}` }],
+      auteur: user, modifie_par: user
+    };
+    const res = await CSBAuth.authedFetch(devisBase(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if(!res.ok) throw new Error('PocketBase HTTP ' + res.status + ' — ' + (await res.text()).slice(0, 200));
+    const rec = await res.json();
+    axView = null;
+    await loadDrafts();
+    axBuildEntries(axQuotesRaw, axInvoiced);
+    const entry = drafts.find(x => x.recId === rec.id);
+    if(entry){ editorTab = 'infos'; openDraft(JSON.parse(JSON.stringify(entry.draft)), entry.recId, entry.updated); }
+    else renderDraftList();
+  }catch(e){
+    alert('Reprise impossible : ' + e.message);
+  }finally{
+    axTakingOver = false;
+  }
+}
+
 // ================== Éditeur ==================
 function closeEditor(){
+  axView = null;
   current = null; currentRecId = null; currentUpdated = '';
   document.getElementById('editor').style.display = 'none';
   document.getElementById('emptyState').style.display = 'block';
 }
 function openDraft(d, recId, updated){
+  axView = null;
   editSession = null;
   selectedLines = new Set();
   current = d; currentRecId = recId; currentUpdated = updated || '';
@@ -1492,17 +1774,19 @@ async function exportPdf(save){
 // Devis repris d'Axonaut : on garde les identifiants Axonaut (commande pour programmes et
 // commentaire, devis pour les documents), là où ces données ont été enregistrées jusqu'ici.
 function prodKey(){
+  if(axView) return axView.contract_id ? String(axView.contract_id) : 'Q-' + axView.id;
   if(!currentRecId) return null;
   return current && current.linkedContractId ? String(current.linkedContractId) : 'D-' + currentRecId;
 }
 function prodDocsKey(){
+  if(axView) return String(axView.id);
   if(!currentRecId) return null;
   return current && current.axonautQuotationId ? String(current.axonautQuotationId) : 'D-' + currentRecId;
 }
 function isAdmin(){ return CSBAuth.isAdmin(); }
 function renderProduction(){
   const box = document.getElementById('prodBox');
-  if(!box || !current) return;
+  if(!box || (!current && !axView)) return;
   if(!prodKey()){
     box.innerHTML = '<div class="hint">Disponible dès que le devis est enregistré (choisis le client ou ajoute une ligne).</div>';
     return;
@@ -1719,12 +2003,13 @@ async function uploadDocuments(files, category){
   let done = 0;
   for(const file of files){
     docsMsg(`Envoi de ${file.name}… (${done + 1}/${files.length})`);
-    const name = uniqueDocFilename(current.numero, file.name);
+    const numero = current ? current.numero : (axView ? axView.number : '');
+    const name = uniqueDocFilename(numero, file.name);
     try{
       const fh = await docsHandles[category].getFileHandle(name, { create: true });
       const w = await fh.createWritable(); await w.write(file); await w.close();
       const res = await CSBAuth.authedFetch(docsBase(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        quotation_id: key, numero_devis: current.numero || '', category, filename: name, original_filename: file.name, uploaded_by: userName() }) });
+        quotation_id: key, numero_devis: numero || '', category, filename: name, original_filename: file.name, uploaded_by: userName() }) });
       if(!res.ok) throw new Error('PocketBase HTTP ' + res.status);
       done++;
     }catch(e){ docsMsg(`Erreur sur ${file.name} : ${e.message}`, 'var(--danger)'); }
@@ -3016,7 +3301,7 @@ document.getElementById('listClient').addEventListener('change', e => { listClie
 document.getElementById('refreshListBtn').addEventListener('click', async () => {
   const bt = document.getElementById('refreshListBtn');
   bt.disabled = true; bt.textContent = '↻ …';
-  try{ await loadModuleSettings(); await pollSuivi(); }
+  try{ await loadModuleSettings(); await pollSuivi(); await loadAxonautQuotes(); }
   finally{ bt.disabled = false; bt.textContent = '↻ Actualiser'; }
 });
 document.getElementById('newDraftBtn').addEventListener('click', () => {
@@ -3033,6 +3318,7 @@ async function init(){
     await loadDrafts();
     draftsLoaded = true;
     renderDraftList();
+    loadAxonautQuotes().then(() => { if(pendingAxQuote){ const id = pendingAxQuote; pendingAxQuote = null; openAxQuoteById(id); } });
     if(pendingOpenRecId){ const id = pendingOpenRecId; pendingOpenRecId = null; openRecordById(id); }
     settingsReady.then(pollSuivi);
     setInterval(async () => { await loadModuleSettings(); pollSuivi(); }, 2 * 60 * 1000);
@@ -3075,8 +3361,25 @@ async function openRecordById(recId){
 window.addEventListener('message', (event) => {
   const msg = event.data;
   if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload) return;
-  openRecordById(msg.payload.recId);
+  if(msg.payload.axQuotationId) openAxQuoteById(msg.payload.axQuotationId);
+  else openRecordById(msg.payload.recId);
 });
+let pendingAxQuote = null;
+function openAxQuoteById(qid){
+  if(!axLoaded){ pendingAxQuote = qid; return; }
+  // devis déjà repris dans le module : on ouvre sa fiche
+  const taken = drafts.find(x => String(x.draft.axonautQuotationId) === String(qid));
+  if(taken){ openRecordById(taken.recId); return; }
+  const f = LIST_FILTERS.find(x => x.id === listFilter);
+  const entry = axEntries.find(e => String(e.q.id) === String(qid));
+  if(entry && f && !f.test(entry.draft.statut)) listFilter = 'tous';
+  listSearch = ''; const ls = document.getElementById('listSearch'); if(ls) ls.value = '';
+  listClient = '';
+  openAxQuote(qid).then(() => {
+    const el = document.querySelector(`.draft-item[data-id="AX-${CSS.escape(String(qid))}"]`);
+    if(el) el.scrollIntoView({ block: 'nearest' });
+  });
+}
 let started = false;
 CSBAuth.onChange(() => {
   if(!CSBAuth.currentUser()) return;

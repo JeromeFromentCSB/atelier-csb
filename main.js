@@ -659,6 +659,33 @@ ipcMain.handle('csb:get-axonaut-image', (_event, reference) => {
     return null;
   }
 });
+// Vignettes gérées depuis le module Articles : suppression (toutes extensions) et renommage quand
+// le code article change. Mêmes règles de nom que csb:get-axonaut-image.
+const axonautImageName = (reference) => String(reference || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+const axonautImageFiles = (reference) => {
+  const name = axonautImageName(reference);
+  try {
+    return fs.readdirSync(AXONAUT_IMAGES_DIR).filter((f) => path.parse(f).name === name && AXONAUT_IMAGE_MIME[path.extname(f).toLowerCase()]);
+  } catch (e) {
+    return [];
+  }
+};
+ipcMain.handle('csb:delete-axonaut-image', (_event, reference) => {
+  if (!reference) return 0;
+  const files = axonautImageFiles(reference);
+  files.forEach((f) => fs.unlinkSync(path.join(AXONAUT_IMAGES_DIR, f)));
+  return files.length;
+});
+ipcMain.handle('csb:rename-axonaut-image', (_event, { from, to }) => {
+  if (!from || !to || axonautImageName(from) === axonautImageName(to)) return false;
+  const files = axonautImageFiles(from);
+  if (!files.length) return false;
+  axonautImageFiles(to).forEach((f) => fs.unlinkSync(path.join(AXONAUT_IMAGES_DIR, f)));
+  const src = files[0];
+  fs.renameSync(path.join(AXONAUT_IMAGES_DIR, src), path.join(AXONAUT_IMAGES_DIR, axonautImageName(to) + path.extname(src).toLowerCase()));
+  files.slice(1).forEach((f) => fs.unlinkSync(path.join(AXONAUT_IMAGES_DIR, f)));
+  return true;
+});
 
 // ---------- Email (IMAP + mot de passe d'application) ----------
 // Remplace l'ancienne connexion OAuth Google (trop lourde à configurer : projet Google

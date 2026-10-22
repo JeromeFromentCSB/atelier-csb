@@ -2,6 +2,15 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.54', items: [
+    "Gestion Commande : nouvel onglet « 💶 Factures » — liste des factures Axonaut (non réglées par défaut) avec filtres réglées / non réglées, dates, client, montant et numéro, détail de la facture à droite",
+    "Factures : montants en HT et en TTC (ligne, total de la liste, reste dû) ; retard de paiement encadré en vert (< 15 jours), orange (15 à 30 jours) ou rouge (> 30 jours)",
+    "Factures : envoi par mail (date, heure, destinataires, relances) et commande / devis liés à la facture",
+    "Gestion Commande : l'ancien onglet Facture est supprimé ; l'onglet Devis contient maintenant le module Devis (retiré de la colonne de gauche)",
+    "Devis : les devis Axonaut apparaissent dans la liste (étiquette « Axonaut ») avec consultation, PDF, bon de fabrication, documents, et « Reprendre dans le module »",
+    "Nouveau module Articles : liste des articles Axonaut (recherche, catégorie, type, actifs / désactivés), modification et création d'un article (catégorie, type de produit, prix, TVA, prix d'achat…)",
+    "Articles : gestion de la vignette (coller, déposer, choisir un fichier, supprimer), renommée automatiquement si le code article change",
+  ]},
   { v: '0.2.53', items: [
     "Stock de Fil, Trouver couleur : le bouton 💧 Pipette s'affiche dès qu'une image est chargée, et reste actif pour cliquer plusieurs points d'affilée (clic hors du dessin pour l'arrêter)",
     "Stock de Fil, Trouver couleur : pour chaque Madeira proposé, indique s'il est en stock ; sinon, propose le fil en stock le plus proche (teinte, nombre de bobines, écart, emplacement 📍)",

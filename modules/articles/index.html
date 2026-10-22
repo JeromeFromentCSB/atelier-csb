@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Articles · L'Atelier CSB</title>
+<!--
+  Module Articles : la liste des articles (produits) Axonaut, avec recherche et filtres, et la fiche
+  d'un article modifiable (PATCH /products/{id}). Accès Axonaut partagé avec Gestion Commande
+  (src/shared/csb-clients.js : même clé API et même relais).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{ --bg:#F5F2EC; --card:#fff; --ink:#211C16; --muted:#8A8074; --accent:#B5452F; --line:#E7E0D3; --ok:#3E7A52; --font-display:'Fraunces', Georgia, serif; }
+  *{ box-sizing:border-box; }
+  html, body{ height:100%; }
+  body{ margin:0; font-family:'Public Sans', -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); font-size:14px; }
+  .layout{ display:flex; height:100vh; }
+  aside{ width:420px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid var(--line); background:#FAF7F1; }
+  aside header{ padding:14px 14px 10px; border-bottom:1px solid var(--line); }
+  h1{ font-family:var(--font-display); font-size:20px; margin:0 0 10px; }
+  input, select, textarea{ font:inherit; border:1px solid var(--line); border-radius:8px; padding:7px 9px; background:#fff; color:inherit; width:100%; }
+  textarea{ min-height:110px; resize:vertical; }
+  .row{ display:flex; gap:8px; margin-top:8px; }
+  .muted{ color:var(--muted); font-size:12px; }
+  #list{ flex:1; overflow:auto; padding:8px; }
+  .item{ display:flex; gap:10px; align-items:center; background:var(--card); border:1px solid var(--line); border-left:4px solid transparent; border-radius:8px; padding:6px 8px; margin-bottom:5px; cursor:pointer; }
+  .item:hover{ border-color:#CFC4B2; }
+  .item.active{ border-left-color:var(--ink); background:#F2ECE2; }
+  .item.off{ opacity:.55; }
+  .item .thumb{ width:40px; height:40px; flex-shrink:0; border-radius:6px; background:#F1ECE4; object-fit:contain; }
+  .item .main{ flex:1; min-width:0; }
+  .item .n{ font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item .s{ display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); }
+  main{ flex:1; overflow:auto; padding:22px 28px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px 14px; }
+  .f{ display:flex; flex-direction:column; gap:3px; }
+  .f label{ font-size:11.5px; font-weight:600; color:#5F574D; }
+  .f.wide{ grid-column:1 / -1; }
+  button{ font:inherit; cursor:pointer; border:1px solid var(--line); background:#fff; border-radius:9px; padding:7px 14px; }
+  button.primary{ background:linear-gradient(135deg, var(--ink), var(--accent)); color:#fff; border-color:transparent; }
+  button:disabled{ opacity:.5; cursor:default; }
+  .status{ font-size:12.5px; margin-left:10px; }
+  .status.err{ color:var(--accent); } .status.ok{ color:var(--ok); }
+  .tag{ display:inline-block; font-size:11px; font-weight:700; border-radius:999px; padding:2px 8px; background:#F1ECE4; color:var(--muted); }
+  .empty{ color:var(--muted); text-align:center; margin-top:80px; }
+  .head{ display:flex; gap:16px; align-items:center; margin-bottom:14px; }
+  .head img{ width:90px; height:90px; object-fit:contain; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  .head h2{ font-family:var(--font-display); margin:0; font-size:22px; }
+  .vig{ display:flex; gap:16px; align-items:flex-start; margin-top:10px; flex-wrap:wrap; }
+  .vig-drop{ width:200px; height:200px; border:2px dashed var(--line); border-radius:12px; background:#FBF9F5; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--muted); font-size:12.5px; outline:none; }
+  .vig-drop:focus, .vig-drop.over{ border-color:var(--accent); background:#FFF6F2; }
+  .vig-drop img{ max-width:100%; max-height:100%; object-fit:contain; }
+  .vig-btns{ display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <header>
+      <h1>🏷️ Articles</h1>
+      <input type="text" id="q" placeholder="🔎 Nom, code ou référence interne…" autocomplete="off">
+      <div class="row">
+        <select id="cat"><option value="">Toutes les catégories</option></select>
+        <select id="ptype" style="max-width:150px;"><option value="">Tous les types</option></select>
+        <select id="state" style="max-width:150px;">
+          <option value="active">Actifs</option>
+          <option value="disabled">Désactivés</option>
+          <option value="">Tous</option>
+        </select>
+      </div>
+      <div class="row" style="align-items:center;">
+        <span class="muted" id="count" style="flex:1;">Chargement…</span>
+        <button id="newBtn" class="primary" style="display:none;" title="Créer un article dans Axonaut">＋ Nouvel article</button>
+        <button id="refresh" title="Recharger les articles depuis Axonaut">↻ Actualiser</button>
+      </div>
+    </header>
+    <div id="list"></div>
+  </aside>
+  <main id="main"><div class="empty">Choisis un article dans la liste.</div></main>
+</div>
+
+<script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-clients.js"></script>
+<script>
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const asArray = d => Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : []);
+const eur = n => (Number(n) || 0).toLocaleString('fr-FR', { style:'currency', currency:'EUR' });
+const canEdit = () => CSBAuth.isAdmin() || CSBAuth.can('articles', 'modifier');
+const canCost = () => CSBAuth.isAdmin() || CSBAuth.can('articles', 'prix_achat');
+// La description Axonaut est du HTML : on l'édite en texte (retours à la ligne), et on ne la renvoie
+// que si elle a été modifiée, pour ne pas perdre une mise en forme faite dans Axonaut.
+function htmlToText(html){
+  const div = document.createElement('div');
+  div.innerHTML = String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p[^>]*>/gi, '\n').replace(/<\/?p[^>]*>/gi, '');
+  return div.textContent.replace(/\n{3,}/g, '\n\n').trim();
+}
+const textToHtml = t => esc(t).replace(/\n/g, '<br>');
+// Type de produit : Axonaut le renvoie en texte, mais l'enregistre avec un code (vérifié sur un
+// article de test : tout autre code est enregistré comme « Marchandise »).
+const PRODUCT_TYPES = [
+  { code: 707, label: 'Marchandise' },
+  { code: 701, label: 'Produit fini' },
+  { code: 706, label: 'Service' },
+  { code: 601, label: 'Matière première' }
+];
+
+let products = [], loading = false, selectedId = null;
+const thumbs = {};
+
+async function loadProducts(){
+  if(loading) return;
+  loading = true;
+  document.getElementById('count').textContent = 'Chargement des articles Axonaut…';
+  const seen = new Set(); let all = [];
+  try{
+    for(let page = 1; page <= 60; page++){
+      const arr = asArray(await CSBClients.axonaut(`/products?page=${page}&per_page=200&with_disabled=true`));
+      const fresh = arr.filter(p => p && !seen.has(p.id));
+      if(!fresh.length) break;
+      fresh.forEach(p => seen.add(p.id));
+      all = all.concat(fresh);
+      products = all; renderList();
+      if(arr.length < 50) break;
+    }
+    products = all;
+  }catch(e){
+    document.getElementById('count').textContent = 'Erreur : ' + e.message;
+    loading = false; return;
+  }
+  loading = false;
+  renderCategories();
+  renderList();
+}
+function renderCategories(){
+  const sel = document.getElementById('cat'), cur = sel.value;
+  const cats = [...new Set(products.map(p => (p.category || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  sel.innerHTML = '<option value="">Toutes les catégories</option>' + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  sel.value = cats.includes(cur) ? cur : '';
+}
+function filtered(){
+  const q = norm(document.getElementById('q').value.trim());
+  const cat = document.getElementById('cat').value;
+  const st = document.getElementById('state').value;
+  return products.filter(p => {
+    const off = p.disabled === true || p.disabled === 'true';
+    if(st === 'active' && off) return false;
+    if(st === 'disabled' && !off) return false;
+    if(cat && (p.category || '').trim() !== cat) return false;
+    const pt = document.getElementById('ptype').value;
+    if(pt && (p.type || '') !== pt) return false;
+    if(q && !norm([p.name, p.product_code, p.internal_id].join(' ')).includes(q)) return false;
+    return true;
+  }).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity:'base' }));
+}
+function renderList(){
+  const list = filtered();
+  document.getElementById('count').textContent = `${list.length} article(s)${loading ? ' — chargement…' : ''}`;
+  const box = document.getElementById('list');
+  const shown = list.slice(0, 400);
+  box.innerHTML = shown.map(p => `<div class="item ${String(p.id) === String(selectedId) ? 'active' : ''} ${(p.disabled === true || p.disabled === 'true') ? 'off' : ''}" data-id="${p.id}">
+      <img class="thumb" data-code="${esc(p.product_code || '')}" alt="">
+      <div class="main"><div class="n">${esc(p.name || '(sans nom)')}</div>
+      <div class="s"><span>${esc(p.product_code || '')}</span><span>${eur(p.price)} HT</span></div></div>
+    </div>`).join('') + (list.length > shown.length ? `<div class="muted" style="padding:8px;">… ${list.length - shown.length} autres : affine la recherche.</div>` : '');
+  box.querySelectorAll('.item').forEach(el => el.addEventListener('click', () => {
+    selectedId = el.dataset.id;
+    box.querySelectorAll('.item').forEach(x => x.classList.toggle('active', x === el));
+    openProduct(selectedId);
+  }));
+  box.querySelectorAll('img.thumb').forEach(loadThumb);
+}
+// Vignette : image enregistrée sur le NAS pour ce code article (comme dans Devis et Gestion Commande)
+async function thumbFor(code){
+  if(!code || !(window.csbHost && window.csbHost.getAxonautImage)) return null;
+  if(!(code in thumbs)) thumbs[code] = window.csbHost.getAxonautImage(code).catch(() => null);
+  return thumbs[code];
+}
+async function loadThumb(img){
+  const url = await thumbFor(img.dataset.code);
+  if(url && img.isConnected) img.src = url; else if(img.isConnected) img.style.visibility = 'hidden';
+}
+
+// Fiche article : modification d'un article existant, ou création (« ＋ Nouvel article »).
+let imgState = null; // vignette en attente : { dataUrl } à enregistrer, { remove:true } à supprimer
+async function openProduct(id){
+  imgState = null;
+  if(id === '__new__'){ renderForm(newProductDraft(), true); return; }
+  const p = products.find(x => String(x.id) === String(id));
+  if(!p) return;
+  renderForm(p, false);
+  try{
+    const full = await CSBClients.axonaut('/products/' + id);
+    if(full && String(selectedId) === String(id)){ Object.assign(p, full); renderForm(p, false); }
+  }catch(e){ /* on garde les données de la liste */ }
+}
+function newProductDraft(){
+  const cat = document.getElementById('cat').value, pt = document.getElementById('ptype').value;
+  return { name: '', product_code: '', internal_id: '', category: cat, type: pt || 'Marchandise', unit: '', price: '', tax_rate: 20, job_costing: '', location: '', description: '' };
+}
+function startNewProduct(){
+  selectedId = '__new__';
+  document.querySelectorAll('#list .item').forEach(x => x.classList.remove('active'));
+  openProduct('__new__');
+}
+function renderForm(p, isNew){
+  const edit = canEdit();
+  const dis = edit ? '' : 'disabled';
+  const off = p.disabled === true || p.disabled === 'true';
+  main.innerHTML = `
+    <div class="head">
+      <img id="pImg" alt="" style="visibility:hidden;">
+      <div><h2>${isNew ? 'Nouvel article' : esc(p.name || '(sans nom)')}</h2>
+        <div class="muted">${isNew ? 'Création dans Axonaut' : `${esc(p.product_code || 'sans code')} · ${eur(p.price)} HT · ${eur(p.price_with_tax)} TTC ${off ? ' · <span class="tag">désactivé</span>' : ''}`}</div></div>
+    </div>
+    <div class="card">
+      <div class="grid">
+        <div class="f wide"><label>Nom *</label><input data-k="name" value="${esc(p.name)}" ${dis}></div>
+        <div class="f"><label>Code article</label><input data-k="product_code" value="${esc(p.product_code)}" ${dis}></div>
+        <div class="f"><label>Référence interne</label><input data-k="internal_id" value="${esc(p.internal_id)}" ${dis}></div>
+        <div class="f"><label>Catégorie</label>
+          <select id="catSel" ${dis}>${catOptions(p.category)}</select>
+          <input data-k="category" value="${esc(p.category)}" placeholder="Nom de la nouvelle catégorie" style="display:none; margin-top:4px;" ${dis}></div>
+        <div class="f"><label>Type de produit</label>
+          <select data-k="product_type" ${dis}>${PRODUCT_TYPES.some(t => t.label === p.type) ? '' : `<option value="" selected>${esc(p.type || '— non renseigné —')}</option>`}${PRODUCT_TYPES.map(t => `<option value="${t.code}" ${t.label === p.type ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
+        <div class="f"><label>Unité</label><input data-k="unit" value="${esc(p.unit)}" ${dis}></div>
+        <div class="f"><label>Prix de vente HT (€)</label><input data-k="price" type="number" step="0.01" value="${esc(p.price)}" ${dis}></div>
+        <div class="f"><label>TVA (%)</label><input data-k="tax_rate" type="number" step="0.1" value="${esc(p.tax_rate)}" ${dis}></div>
+        ${canCost() ? `<div class="f"><label>Prix d'achat HT (€)</label><input data-k="job_costing" type="number" step="0.01" value="${esc(p.job_costing)}" ${dis}></div>` : ''}
+        <div class="f"><label>Emplacement</label><input data-k="location" value="${esc(p.location)}" ${dis}></div>
+        <div class="f wide"><label>Description</label><textarea data-k="description" ${dis}>${esc(htmlToText(p.description))}</textarea></div>
+        ${isNew ? '' : `<div class="f wide"><label style="display:flex; gap:8px; align-items:center; font-weight:400;"><input type="checkbox" data-k="disabled" style="width:auto;" ${off ? 'checked' : ''} ${dis}> Article désactivé (n'apparaît plus dans les recherches de produits)</label></div>`}
+      </div>
+      <div style="margin-top:14px; display:flex; align-items:center;">
+        ${edit ? `<button class="primary" id="save">${isNew ? 'Créer dans Axonaut' : 'Enregistrer dans Axonaut'}</button>` : '<span class="muted">Lecture seule — tu n\'as pas le droit de modifier les articles.</span>'}
+        <span class="status" id="st"></span>
+      </div>
+    </div>
+    <div class="card">
+      <b>Vignette</b> <span class="muted">— image utilisée par l'appli (devis, commandes, PDF), enregistrée sur le NAS sous le code article. Axonaut ne permet pas d'envoyer l'image par son API.</span>
+      <div class="vig">
+        <div id="vigDrop" class="vig-drop" tabindex="0" title="Dépose une image ici, ou clique puis Ctrl+V"><img id="vigImg" alt=""><span id="vigEmpty">Aucune vignette<br><small>Dépose une image ou colle-la (Ctrl+V)</small></span></div>
+        ${edit ? `<div class="vig-btns">
+          <button id="vigPaste">📋 Coller</button>
+          <button id="vigPick">📁 Choisir un fichier…</button>
+          <button id="vigDel">🗑 Supprimer</button>
+          <input type="file" id="vigFile" accept="image/*" style="display:none;">
+          <span class="muted" id="vigSt"></span>
+        </div>` : ''}
+      </div>
+    </div>
+    ${!isNew && p.stock != null ? `<div class="card"><b>Stock Axonaut :</b> ${esc(p.stock)}${p.stock_threshold != null ? ' · seuil ' + esc(p.stock_threshold) : ''}</div>` : ''}`;
+  showThumb(p.product_code);
+  // Catégorie : liste de toutes les catégories existantes, ou saisie d'une nouvelle
+  const catSel = document.getElementById('catSel'), catInput = main.querySelector('[data-k="category"]');
+  catSel.addEventListener('change', () => {
+    if(catSel.value === '__new__'){ catInput.value = ''; catInput.style.display = ''; catInput.focus(); }
+    else { catInput.value = catSel.value; catInput.style.display = 'none'; }
+  });
+  const btn = document.getElementById('save');
+  if(btn) btn.addEventListener('click', () => isNew ? create() : save(p));
+  if(edit) wireVignette(p, isNew);
+}
+function setVignette(url){
+  const img = document.getElementById('vigImg'), empty = document.getElementById('vigEmpty'), head = document.getElementById('pImg');
+  if(!img) return;
+  img.src = url || ''; img.style.display = url ? '' : 'none'; empty.style.display = url ? 'none' : '';
+  if(head){ head.src = url || ''; head.style.visibility = url ? 'visible' : 'hidden'; }
+}
+function showThumb(code){
+  setVignette(null);
+  if(code) thumbFor(code).then(u => { if(!imgState) setVignette(u); });
+}
+// Vignette d'un article : remplacée ou supprimée tout de suite pour un article existant qui a un
+// code ; sinon (nouvel article, ou pas encore de code) gardée en attente jusqu'à l'enregistrement.
+function wireVignette(p, isNew){
+  const st = document.getElementById('vigSt');
+  const drop = document.getElementById('vigDrop');
+  const fileInput = document.getElementById('vigFile');
+  const immediate = () => !isNew && !!(p.product_code || '').trim();
+  async function apply(state){
+    imgState = state;
+    setVignette(state.remove ? null : state.dataUrl);
+    if(!immediate()){ st.textContent = state.remove ? '' : (isNew ? "Sera enregistrée à la création de l'article (il faut un code article)." : "Sera enregistrée quand l'article aura un code."); return; }
+    st.textContent = 'Enregistrement…';
+    try{ await writeImage(p.product_code, state); imgState = null; st.textContent = state.remove ? '✔ Vignette supprimée' : '✔ Vignette enregistrée'; }
+    catch(e){ st.textContent = 'Échec : ' + e.message; }
+  }
+  async function fromBlob(blob){
+    if(!blob || !/^image\//.test(blob.type)){ st.textContent = "Ce n'est pas une image."; return; }
+    try{ apply({ dataUrl: await shrinkImage(blob) }); }catch(e){ st.textContent = 'Image illisible.'; }
+  }
+  document.getElementById('vigPick').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { if(fileInput.files[0]) fromBlob(fileInput.files[0]); fileInput.value = ''; });
+  document.getElementById('vigDel').addEventListener('click', () => {
+    if(!document.getElementById('vigImg').getAttribute('src')) return;
+    if(confirm('Supprimer la vignette de cet article ?')) apply({ remove: true });
+  });
+  document.getElementById('vigPaste').addEventListener('click', async () => {
+    try{
+      const c = window.csbHost && window.csbHost.clipboardContent ? await window.csbHost.clipboardContent() : null;
+      if(c && c.image){ fromBlob(await (await fetch('data:image/png;base64,' + c.image)).blob()); return; }
+      if(c && c.files && c.files.length){
+        const f = c.files.find(x => /\.(png|jpe?g|gif|webp|bmp)$/i.test(x));
+        if(!f){ st.textContent = "Le fichier copié n'est pas une image."; return; }
+        const bytes = await window.csbHost.readFileBytes(f);
+        const ext = f.split('.').pop().toLowerCase();
+        fromBlob(new Blob([bytes], { type: 'image/' + (ext === 'jpg' ? 'jpeg' : ext) })); return;
+      }
+      st.textContent = "Pas d'image dans le presse-papiers.";
+    }catch(e){ st.textContent = 'Collage impossible : ' + e.message; }
+  });
+  drop.addEventListener('paste', e => {
+    const item = [...(e.clipboardData && e.clipboardData.items || [])].find(i => i.type.startsWith('image/'));
+    if(item){ e.preventDefault(); fromBlob(item.getAsFile()); }
+  });
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('over');
+    const f = [...(e.dataTransfer.files || [])].find(x => x.type.startsWith('image/'));
+    if(f) fromBlob(f); else st.textContent = "Dépose un fichier image.";
+  });
+}
+// Réduit l'image (côté le plus long 800 px) et la convertit en PNG
+function shrinkImage(blob){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob), im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 800 / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k));
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); resolve(c.toDataURL('image/png'));
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image')); };
+    im.src = url;
+  });
+}
+const imageName = code => String(code || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+async function writeImage(code, state){
+  if(!(window.csbHost && window.csbHost.saveAxonautImage)) throw new Error("disponible uniquement dans l'application");
+  code = String(code || '').trim();
+  await window.csbHost.deleteAxonautImage(code);
+  if(!state.remove) await window.csbHost.saveAxonautImage(imageName(code) + '.png', state.dataUrl.split(',')[1]);
+  thumbs[code] = Promise.resolve(state.remove ? null : state.dataUrl);
+  renderList();
+}
+// Lit les champs du formulaire ; pour une modification, ne garde que ce qui a changé
+function readForm(p, isNew){
+  const get = k => main.querySelector(`[data-k="${k}"]`);
+  const body = {};
+  ['name', 'product_code', 'internal_id', 'category', 'unit', 'location'].forEach(k => {
+    const v = get(k).value.trim();
+    if(isNew ? v !== '' : v !== String(p[k] == null ? '' : p[k]).trim()) body[k] = v;
+  });
+  for(const k of ['price', 'tax_rate', 'job_costing']){
+    const el = get(k); if(!el) continue;
+    const raw = el.value.trim();
+    if(raw === '') continue;
+    const v = Number(raw.replace(',', '.'));
+    if(isNaN(v)) return { error: 'Valeur invalide : ' + el.closest('.f').querySelector('label').textContent };
+    if(isNew || v !== Number(p[k])) body[k] = v;
+  }
+  const typeSel = get('product_type');
+  if(typeSel && typeSel.value){
+    const t = PRODUCT_TYPES.find(x => String(x.code) === typeSel.value);
+    if(t && (isNew || t.label !== p.type)) body.product_type = t.code;
+  }
+  const desc = get('description').value.trim();
+  if(isNew ? desc !== '' : desc !== htmlToText(p.description)) body.description = textToHtml(desc);
+  const offEl = get('disabled');
+  if(offEl && offEl.checked !== (p.disabled === true || p.disabled === 'true')) body.disabled = offEl.checked ? 'true' : 'false';
+  if((isNew || 'name' in body) && !body.name) return { error: 'Le nom est obligatoire.' };
+  return { body };
+}
+async function create(){
+  const st = document.getElementById('st'), btn = document.getElementById('save');
+  const { body, error } = readForm({}, true);
+  if(error){ st.className = 'status err'; st.textContent = error; return; }
+  const code = (body.product_code || '').trim();
+  if(code){
+    const dup = products.find(x => norm((x.product_code || '').trim()) === norm(code));
+    if(dup && !confirm(`Le code « ${code} » est déjà utilisé par « ${dup.name} ». Créer quand même un doublon ?`)) return;
+  }
+  if(!('price' in body)) body.price = 0;
+  if(!('tax_rate' in body)) body.tax_rate = 20;
+  btn.disabled = true; st.className = 'status'; st.textContent = 'Création…';
+  try{
+    const saved = await CSBClients.axonaut('/products', 'POST', body);
+    if(!saved || !saved.id) throw new Error('réponse inattendue d\'Axonaut');
+    const p = Object.assign({}, body, saved);
+    if(!saved.type && body.product_type) p.type = (PRODUCT_TYPES.find(x => x.code === body.product_type) || {}).label;
+    products.push(p);
+    let imgMsg = '';
+    if(imgState && imgState.dataUrl){
+      if(code){ try{ await writeImage(code, imgState); }catch(e){ imgMsg = ' (vignette non enregistrée : ' + e.message + ')'; } }
+      else imgMsg = ' (vignette non enregistrée : pas de code article)';
+    }
+    imgState = null;
+    selectedId = String(p.id);
+    renderCategories(); renderList();
+    openProduct(p.id);
+    const s2 = document.getElementById('st');
+    if(s2){ s2.className = 'status ok'; s2.textContent = '✔ Article créé dans Axonaut' + imgMsg; }
+  }catch(e){
+    st.className = 'status err'; st.textContent = 'Échec : ' + e.message;
+    btn.disabled = false;
+  }
+}
+async function save(p){
+  const st = document.getElementById('st'), btn = document.getElementById('save');
+  const { body, error } = readForm(p, false);
+  if(error){ st.className = 'status err'; st.textContent = error; return; }
+  if(!Object.keys(body).length && !imgState){ st.className = 'status'; st.textContent = 'Aucune modification.'; return; }
+  const oldCode = String(p.product_code || '').trim();
+  btn.disabled = true; st.className = 'status'; st.textContent = 'Enregistrement…';
+  try{
+    if(Object.keys(body).length){
+      const saved = await CSBClients.axonaut('/products/' + p.id, 'PATCH', body);
+      Object.assign(p, saved && saved.id ? saved : body);
+      if(body.product_type && !(saved && saved.type)) p.type = (PRODUCT_TYPES.find(x => x.code === body.product_type) || {}).label;
+      if('disabled' in body) p.disabled = body.disabled === 'true';
+    }
+    // La vignette suit le code article
+    let imgMsg = '';
+    const newCode = String(p.product_code || '').trim();
+    try{
+      if(imgState && newCode){ await writeImage(newCode, imgState); imgState = null; }
+      else if('product_code' in body && oldCode && newCode && window.csbHost && window.csbHost.renameAxonautImage){
+        if(await window.csbHost.renameAxonautImage(oldCode, newCode)){ delete thumbs[oldCode]; delete thumbs[newCode]; imgMsg = ' · vignette renommée'; }
+      }
+    }catch(e){ imgMsg = ' · vignette : ' + e.message; }
+    st.className = 'status ok'; st.textContent = '✔ Enregistré dans Axonaut' + imgMsg;
+    renderCategories(); renderList();
+    const keepId = p.id; setTimeout(() => { if(String(selectedId) === String(keepId)) openProduct(keepId); }, 1200);
+  }catch(e){
+    st.className = 'status err'; st.textContent = 'Échec : ' + e.message;
+  }finally{ btn.disabled = false; }
+}
+function allCategories(){ return [...new Set(products.map(x => (x.category || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity:'base' })); }
+function catOptions(cur){
+  cur = (cur || '').trim();
+  const cats = allCategories();
+  if(cur && !cats.includes(cur)) cats.unshift(cur);
+  return '<option value="">— Aucune —</option>' + cats.map(c => `<option value="${esc(c)}" ${c === cur ? 'selected' : ''}>${esc(c)}</option>`).join('') + '<option value="__new__">➕ Nouvelle catégorie…</option>';
+}
+const main = document.getElementById('main');
+let t = null;
+document.getElementById('q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderList, 200); });
+document.getElementById('cat').addEventListener('change', renderList);
+document.getElementById('ptype').addEventListener('change', renderList);
+document.getElementById('ptype').innerHTML = '<option value="">Tous les types</option>' + PRODUCT_TYPES.map(t => `<option value="${t.label}">${t.label}</option>`).join('');
+document.getElementById('state').addEventListener('change', renderList);
+document.getElementById('refresh').addEventListener('click', loadProducts);
+document.getElementById('newBtn').addEventListener('click', startNewProduct);
+function applyPerms(){ document.getElementById('newBtn').style.display = canEdit() ? '' : 'none'; }
+applyPerms();
+if(CSBAuth.onChange) CSBAuth.onChange(applyPerms);
+loadProducts();
+</script>
+</body>
+</html>

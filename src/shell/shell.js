@@ -3,7 +3,7 @@
     { id: 'axonaut', label: 'Gestion Commande', icon: '📦', path: '../../modules/axonaut/index.html', perms: [
       { key: 'devis', label: 'Onglet Devis' },
       { key: 'commandes', label: 'Onglet Commande' },
-      { key: 'facture', label: 'Onglet Facture' },
+      { key: 'factures', label: 'Onglet Factures (liste des factures Axonaut)' },
       { key: 'etiquettes', label: 'Gestion des étiquettes' },
       { key: 'devis_pdf', label: 'Voir le PDF du devis' },
       { key: 'settings', label: 'Réglages (⚙︎)' },
@@ -12,13 +12,20 @@
     ] },
     // Devis et commandes gérés dans l'appli (collection PocketBase "devis"), à partir des clients
     // et produits Axonaut ; seule la facture est créée dans Axonaut.
-    { id: 'devis', label: 'Devis', icon: '📝', path: '../../modules/devis/index.html', perms: [
+    // Masqué dans la colonne de gauche : le module s'utilise dans l'onglet Devis de Gestion Commande
+    // (ses droits restent réglables ici). Une demande d'ouverture est redirigée vers cet onglet.
+    { id: 'devis', label: 'Devis', icon: '📝', path: '../../modules/devis/index.html', hidden: true, redirect: 'axonaut', perms: [
       { key: 'creer', label: 'Créer et modifier des devis' },
       { key: 'valider', label: 'Valider les devis (accepté = commande)' },
       { key: 'facturer', label: 'Facturer dans Axonaut' },
       { key: 'envoyer', label: 'Envoyer des devis aux clients' },
       { key: 'supprimer', label: 'Supprimer des devis et commandes' },
       { key: 'marge', label: "Voir prix d'achat et marge" }
+    ] },
+    // Articles (produits) Axonaut : liste, recherche, modification d'une fiche.
+    { id: 'articles', label: 'Articles', icon: '🏷️', path: '../../modules/articles/index.html', perms: [
+      { key: 'modifier', label: 'Modifier les articles' },
+      { key: 'prix_achat', label: "Voir et modifier le prix d'achat" }
     ] },
     // Clients Axonaut : recherche, création (avec l'annuaire officiel des entreprises) et modification.
     { id: 'clients', label: 'Clients', icon: '👥', path: '../../modules/clients/index.html', perms: [
@@ -241,6 +248,7 @@
   function renderModuleNav() {
     moduleNav.innerHTML = '';
     moduleOrder.forEach((mod) => {
+      if (mod.hidden) return;
       const allowed = CSBAuth.hasModuleAccess(mod.id);
       const item = document.createElement('div');
       item.className = 'nav-item' + (mod.id === activeModuleId ? ' active' : '') + (allowed ? '' : ' locked');
@@ -900,8 +908,15 @@
   window.addEventListener('message', (event) => {
     const msg = event.data;
     if (!msg || msg.type !== 'csb:open-module') return;
-    const mod = MODULES.find((m) => m.id === msg.module);
+    let mod = MODULES.find((m) => m.id === msg.module);
     if (!mod) return;
+    // Module masqué (Devis) : on ouvre le module qui l'intègre, en lui transmettant la demande.
+    if (mod.redirect) {
+      const target = MODULES.find((m) => m.id === mod.redirect);
+      if (!target) return;
+      msg.payload = { openDevis: msg.payload || {} };
+      mod = target;
+    }
     if (!CSBAuth.hasModuleAccess(mod.id)) { alert("Tu n'as pas accès au module « " + mod.label + " » — demande à un administrateur."); return; }
     const alreadyLoaded = !!moduleFrames[mod.id];
     openModule(mod);

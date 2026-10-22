@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('csbHost', {
   credDelete: (origin) => ipcRenderer.invoke('csb:cred-delete', origin),
   saveAxonautImage: (filename, dataBase64) => ipcRenderer.invoke('csb:save-axonaut-image', { filename, dataBase64 }),
   getAxonautImage: (reference) => ipcRenderer.invoke('csb:get-axonaut-image', reference),
+  deleteAxonautImage: (reference) => ipcRenderer.invoke('csb:delete-axonaut-image', reference),
+  renameAxonautImage: (from, to) => ipcRenderer.invoke('csb:rename-axonaut-image', { from, to }),
   listDrives: () => ipcRenderer.invoke('csb:list-drives'),
   detectDropbox: () => ipcRenderer.invoke('csb:detect-dropbox'),
   listNetworkComputers: () => ipcRenderer.invoke('csb:list-network-computers'),

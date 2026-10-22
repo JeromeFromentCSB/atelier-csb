@@ -350,6 +350,35 @@
   .tab-panel{ display:none; }
   .tab-panel.active{ display:block; }
 
+  /* ---------- Onglet Factures (factures Axonaut : liste à gauche, détail à droite) ---------- */
+  #fxHeader{ background:var(--paper); border-bottom:2px solid var(--ink); padding:10px 26px; position:sticky; top:45px; z-index:30; }
+  #fxHeader .toolbar{ gap:8px; }
+  #fxHeader .search{ min-width:0; padding:7px 12px; }
+  #fxHeader select, #fxHeader .dateInput{ font-family:sans-serif; font-size:.78rem; padding:6px 8px; border:1.5px solid var(--line); border-radius:8px; background:var(--white); color:var(--ink); }
+  #fxHeader label{ font-family:sans-serif; font-size:.72rem; color:var(--muted); font-weight:600; }
+  #fxBody{ display:flex; height:calc(100vh - 45px - var(--fx-header-h,110px)); }
+  #fxList{ width:440px; flex-shrink:0; overflow:auto; border-right:1.5px solid var(--line); background:var(--white); }
+  #fxDetail{ flex:1; overflow:auto; padding:20px 26px; min-width:0; }
+  .fx-row{ padding:9px 14px; border-bottom:1px solid var(--line); cursor:pointer; font-family:sans-serif; border-left:4px solid transparent; }
+  .fx-row:hover{ background:var(--paper-2); }
+  .fx-row.active{ background:var(--paper-2); border-left-color:var(--ink); }
+  /* Retard de paiement (facture non réglée, échéance dépassée) */
+  .fx-row.late-1{ box-shadow:inset 0 0 0 2px #3E9B5A; }
+  .fx-row.late-2{ box-shadow:inset 0 0 0 2px #E08A1E; }
+  .fx-row.late-3{ box-shadow:inset 0 0 0 2px #C8372D; }
+  .fx-late{ font-weight:700; }
+  .fx-row.late-1 .fx-late{ color:#3E9B5A; } .fx-row.late-2 .fx-late{ color:#E08A1E; } .fx-row.late-3 .fx-late{ color:#C8372D; }
+  .fx-row .l1{ display:flex; justify-content:space-between; gap:8px; font-size:.82rem; font-weight:700; }
+  .fx-row .l2{ display:flex; justify-content:space-between; gap:8px; font-size:.74rem; color:var(--muted); margin-top:2px; }
+  .fx-paid{ color:var(--silk-green); font-weight:700; }
+  .fx-unpaid{ color:var(--silk-red); font-weight:700; }
+  #fxDetail table{ width:100%; border-collapse:collapse; font-family:sans-serif; font-size:.8rem; }
+  #fxDetail th{ text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:6px 8px; border-bottom:1.5px solid var(--ink); }
+  #fxDetail td{ padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  #fxDetail td.n, #fxDetail th.n{ text-align:right; white-space:nowrap; }
+  .fx-cards{ display:flex; gap:12px; flex-wrap:wrap; margin:12px 0 16px; }
+  .fx-card{ flex:1; min-width:180px; border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--white); font-family:sans-serif; font-size:.8rem; }
+  .fx-card h4{ margin:0 0 6px; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
   #devisHeader{
     background:var(--paper); border-bottom:2px solid var(--ink); padding:10px 26px;
     position:sticky; top:45px; z-index:30;
@@ -413,11 +442,13 @@
 <div id="tabBar">
   <button class="tab-btn" data-tab="devis" id="tabBtnDevis">📑 Devis</button>
   <button class="tab-btn active" data-tab="commande" id="tabBtnCommande">📦 Commande</button>
-  <button class="tab-btn" data-tab="facture" id="tabBtnFacture">🧾 Facture</button>
+  <button class="tab-btn" data-tab="factures" id="tabBtnFactures">💶 Factures</button>
   <button class="tab-btn" data-tab="params" id="tabBtnParams">⚙︎ Paramètres</button>
 </div>
 
 <div id="tabPanelDevis" class="tab-panel">
+  <iframe id="devisModuleFrame" title="Devis" style="display:block; width:100%; height:calc(100vh - 45px); border:0; background:var(--paper);"></iframe>
+  <div id="oldDevisTab" style="display:none;">
   <div id="devisHeader">
     <div class="headrow">
       <div class="toolbar">
@@ -463,6 +494,7 @@
       <div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un devis à gauche pour voir le détail de ses lignes ici.</div>
     </div>
   </div>
+</div><!-- /oldDevisTab -->
 </div>
 
 <div id="tabPanelCommande" class="tab-panel active">
@@ -968,55 +1000,31 @@
 
 </div><!-- /tabPanelCommande -->
 
-<div id="tabPanelFacture" class="tab-panel">
-  <div id="factureHeader">
-    <div class="headrow">
-      <div class="toolbar">
-        <input type="text" class="search" id="factureSearchInput" placeholder="Rechercher une commande, un client…">
-        <div class="filters" id="factureFilterRadios" style="display:flex; gap:10px; align-items:center;">
-          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
-            <input type="radio" name="factureFilter" value="all" checked style="cursor:pointer;"> Toutes
-          </label>
-          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
-            <input type="radio" name="factureFilter" value="non_facturees" style="cursor:pointer;"> Non facturées
-          </label>
-          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
-            <input type="radio" name="factureFilter" value="non_reglees" style="cursor:pointer;"> Facturées — non réglées
-          </label>
-          <label style="display:flex; align-items:center; gap:6px; font-family:sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); cursor:pointer; margin:0;">
-            <input type="radio" name="factureFilter" value="reglees" style="cursor:pointer;"> Réglées
-          </label>
-        </div>
-        <button class="btn ghost" id="factureRefreshBtn">↻ Actualiser</button>
-      </div>
+
+<div id="tabPanelFactures" class="tab-panel">
+  <div id="fxHeader">
+    <div class="toolbar">
+      <select id="fxPaid" title="Règlement">
+        <option value="">Réglées et non réglées</option>
+        <option value="unpaid" selected>Non réglées</option>
+        <option value="paid">Réglées</option>
+      </select>
+      <label>Du <input type="date" class="dateInput" id="fxFrom"></label>
+      <label>au <input type="date" class="dateInput" id="fxTo"></label>
+      <select id="fxClient" title="Client (selon les autres filtres)" style="max-width:240px;"><option value="">Tous les clients</option></select>
+      <input type="text" class="search" id="fxAmount" placeholder="Montant (€)" inputmode="decimal" style="width:120px;">
+      <input type="text" class="search" id="fxNumber" placeholder="N° de facture" style="width:150px;">
+      <button class="btn ghost" id="fxReset" title="Effacer les filtres">✕ Filtres</button>
+      <button class="btn ghost" id="fxRefresh">↻ Actualiser</button>
+      <span id="fxCount" style="font-family:sans-serif; font-size:.75rem; color:var(--muted);"></span>
     </div>
   </div>
-  <div id="factureBody" style="display:flex; height:calc(100vh - var(--header-h,160px));">
-    <div style="flex:1; overflow:auto; padding:22px 26px; min-width:0;">
-      <div class="empty" id="factureEmptyState">
-        <span class="flag-big"></span>
-        <h2>Aucune commande</h2>
-        <p>Ouvre l'onglet Commande et clique sur « ↻ Actualiser », puis reviens ici.</p>
-      </div>
-      <div class="table-scroll" id="factureTableWrap" style="display:none; max-height:none;">
-        <table>
-          <thead><tr>
-            <th style="width:36px;"></th>
-            <th>Commande</th>
-            <th>Client</th>
-            <th style="text-align:right;">Montant HT</th>
-            <th>Statut</th>
-          </tr></thead>
-          <tbody id="factureTbody"></tbody>
-        </table>
-      </div>
-    </div>
+  <div id="fxBody">
+    <div id="fxList"><div style="padding:20px; font-family:sans-serif; color:var(--muted);">Chargement…</div></div>
+    <div id="fxDetail"><div style="font-family:sans-serif; color:var(--muted);">Choisis une facture dans la liste.</div></div>
   </div>
-  <div id="factureActionBar" style="display:none; position:sticky; bottom:0; background:var(--paper); border-top:1.5px solid var(--line); padding:12px 26px; display:flex; align-items:center; gap:12px;">
-    <span id="factureSelectionCount" style="font-family:sans-serif; font-size:.85rem; color:var(--muted);"></span>
-    <button class="btn primary" id="factureGenerateBtn" style="margin-left:auto;">🧾 Générer une facture groupée</button>
-  </div>
-</div><!-- /tabPanelFacture -->
+</div><!-- /tabPanelFactures -->
+
 
 <div id="tabPanelParams" class="tab-panel">
   <div style="max-width:720px; margin:0 auto; padding:22px 26px;">
@@ -1026,20 +1034,6 @@
     </div>
   </div>
 </div><!-- /tabPanelParams -->
-
-<div id="invoicePreviewOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:24px;">
-  <div style="width:min(720px,100%); max-height:88vh; background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.35); display:flex; flex-direction:column; overflow:hidden;">
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1.5px solid var(--line);">
-      <h3 style="margin:0; font-family:var(--font-display); font-size:17px;">Aperçu de la facture groupée</h3>
-      <button class="btn ghost" id="invoicePreviewClose">✕</button>
-    </div>
-    <div style="padding:18px 22px; overflow:auto;" id="invoicePreviewBody"></div>
-    <div style="display:flex; gap:10px; justify-content:flex-end; padding:14px 20px; border-top:1.5px solid var(--line);">
-      <button class="btn ghost" id="invoicePreviewCancelBtn">Annuler</button>
-      <button class="btn primary" id="invoicePreviewConfirmBtn">✔ Créer la facture dans Axonaut</button>
-    </div>
-  </div>
-</div>
 
 <div id="carrierChoiceOverlay" style="display:none; position:fixed; inset:0; background:rgba(28,26,23,.6); z-index:225; align-items:center; justify-content:center; padding:20px;">
   <div class="addr-modal" style="width:min(360px,100%);">
@@ -1836,8 +1830,7 @@ function axonautLinesToModule(q){
   return out;
 }
 function openInDevisModule(recId){
-  if(window.parent === window){ alert("Disponible uniquement dans l'application Atelier CSB."); return; }
-  window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { recId } }, '*');
+  openInDevisTab({ recId });
 }
 let takingOver = false;
 async function takeOverInDevisModule(quotationId, order){
@@ -3990,7 +3983,7 @@ async function renderBlInvoiceLine(r){
   const el = document.getElementById('blInvoiceLine');
   const ids = Array.isArray(r.invoicesId) ? r.invoicesId.map(String) : [];
   if(!ids.length){
-    const known = invoicesByContract[String(r.contractId)]; // facture vue dans l'onglet Facture
+    const known = invoicesByContract[String(r.contractId)]; // facture vue dans l'onglet Factures
     el.textContent = known && known.number ? 'Factures : ' + known.number : 'Non Facturé';
     return;
   }
@@ -4988,8 +4981,7 @@ function render(){
   tbody.querySelectorAll('.commande-module-link').forEach(link => {
     link.addEventListener('click', (e) => {
       e.stopPropagation();
-      if(window.parent === window){ alert("Disponible uniquement dans l'application Atelier CSB."); return; }
-      window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { recId: link.dataset.recId } }, '*');
+      openInDevisTab({ recId: link.dataset.recId });
     });
   });
 
@@ -5359,20 +5351,345 @@ function setAdminMode(on){
 
 // ---------- Onglets ----------
 const ACTIVE_TAB_KEY = 'csb_envoi_axonaut_active_tab';
-const TAB_SUFFIX = { devis:'Devis', commande:'Commande', facture:'Facture', params:'Params' };
+const TAB_SUFFIX = { devis:'Devis', commande:'Commande', factures:'Factures', params:'Params' };
 function activateTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tabBtn' + TAB_SUFFIX[tab]).classList.add('active');
   document.getElementById('tabPanel' + TAB_SUFFIX[tab]).classList.add('active');
   try{ localStorage.setItem(ACTIVE_TAB_KEY, tab); }catch(e){}
-  if(tab === 'devis' && !quotations.length) refreshQuotations();
-  if(tab === 'facture') refreshFactureTab();
+  if(tab === 'devis') ensureDevisModuleFrame();
+  if(tab === 'factures') fxOpen();
 }
 
+// ---------- Onglet Factures : toutes les factures Axonaut ----------
+// Chargées une fois (toutes les pages), puis filtrées sur le poste : réglées / non réglées, dates,
+// client (liste établie d'après les autres filtres), montant et numéro. Les plus récentes en haut.
+let fxInvoices = null, fxLoading = false, fxSelectedId = null;
+const fxDetailCache = {};
+const fxNum = v => Number(v) || 0;
+const fxEur = v => fxNum(v).toLocaleString('fr-FR', { style:'currency', currency:'EUR' });
+const fxDate = v => { if(!v) return ''; const d = new Date(v); return isNaN(d) ? String(v).slice(0,10) : d.toLocaleDateString('fr-FR'); };
+const fxIsoDay = v => { if(!v) return ''; const d = new Date(v); if(isNaN(d)) return String(v).slice(0,10); const p = n => String(n).padStart(2,'0'); return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()); };
+const fxClient = inv => (inv.company && (inv.company.name || inv.company.company_name)) || (inv.billing_address && inv.billing_address.company_name) || 'Sans client';
+const fxPaid = inv => typeof inv.outstanding_amount === 'number' ? inv.outstanding_amount <= 0.001 : !!inv.paid_date;
+const fxHT = inv => fxNum(inv.total) - fxNum(inv.tax_amount);
+// Reste dû : Axonaut le donne en TTC ; le HT est calculé au prorata de la facture
+const fxDuTTC = inv => Math.max(0, fxNum(inv.outstanding_amount));
+const fxDuHT = inv => { const t = fxNum(inv.total); return t > 0 ? fxDuTTC(inv) * fxHT(inv) / t : fxDuTTC(inv); };
+const fxHtTtc = (ht, ttc) => `${fxEur(ht)} HT · ${fxEur(ttc)} TTC`;
+const fxEsc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+function fxUpdateHeaderHeight(){
+  const el = document.getElementById('fxHeader');
+  if(el && el.offsetHeight) document.documentElement.style.setProperty('--fx-header-h', el.offsetHeight + 'px');
+}
+async function fxOpen(force){
+  fxUpdateHeaderHeight();
+  if(fxInvoices && !force){ fxRender(); return; }
+  if(fxLoading) return;
+  fxLoading = true;
+  document.getElementById('fxList').innerHTML = '<div style="padding:20px; font-family:sans-serif; color:var(--muted);">Chargement des factures Axonaut…</div>';
+  try{
+    // une même facture ne doit apparaître qu'une fois, même si une page est renvoyée deux fois
+    const seen = new Set();
+    fxInvoices = (await fetchAllInvoices()).filter(inv => inv && !seen.has(inv.id) && seen.add(inv.id));
+    // sert aussi à l'onglet Commande (icône € et ligne « Factures : … ») quand Axonaut n'a pas
+    // encore rattaché la facture à la commande
+    fxInvoices.forEach(inv => { if(inv.contract_id) invoicesByContract[String(inv.contract_id)] = { paid: fxPaid(inv), outstanding: inv.outstanding_amount, number: inv.number, id: inv.id }; });
+  }catch(e){
+    document.getElementById('fxList').innerHTML = `<div style="padding:20px; font-family:sans-serif; color:var(--silk-red);">Impossible de charger les factures : ${fxEsc(e.message)}</div>`;
+    fxLoading = false; return;
+  }
+  fxLoading = false;
+  fxRender();
+}
+function fxFiltered(withClient){
+  const paid = document.getElementById('fxPaid').value;
+  const from = document.getElementById('fxFrom').value, to = document.getElementById('fxTo').value;
+  const client = document.getElementById('fxClient').value;
+  const amountQ = document.getElementById('fxAmount').value.trim().replace(/\s/g, '').replace(',', '.');
+  const numQ = document.getElementById('fxNumber').value.trim().toLowerCase();
+  return (fxInvoices || []).filter(inv => {
+    if(paid === 'paid' && !fxPaid(inv)) return false;
+    if(paid === 'unpaid' && fxPaid(inv)) return false;
+    const day = fxIsoDay(inv.date);
+    if(from && day < from) return false;
+    if(to && day > to) return false;
+    if(numQ && !String(inv.number || '').toLowerCase().includes(numQ)) return false;
+    if(amountQ){
+      // le montant tapé est cherché dans le TTC et le HT (exact, ou en début de montant : « 120 » trouve 120,00 € et 1 205,40 €)
+      const ttc = fxNum(inv.total).toFixed(2), ht = fxHT(inv).toFixed(2);
+      const a = Number(amountQ);
+      const exact = !isNaN(a) && (Math.abs(Number(ttc) - a) < 0.01 || Math.abs(Number(ht) - a) < 0.01);
+      if(!exact && !ttc.startsWith(amountQ) && !ht.startsWith(amountQ)) return false;
+    }
+    if(withClient && client && fxClient(inv) !== client) return false;
+    return true;
+  });
+}
+// Jours de retard d'une facture non réglée dont l'échéance est passée (0 sinon)
+function fxDaysLate(inv){
+  if(fxPaid(inv)) return 0;
+  const due = fxIsoDay(inv.due_date);
+  if(!due) return 0;
+  const t = new Date(); const today = Date.UTC(t.getFullYear(), t.getMonth(), t.getDate());
+  const d = Date.UTC(+due.slice(0, 4), +due.slice(5, 7) - 1, +due.slice(8, 10));
+  return Math.max(0, Math.round((today - d) / 86400000));
+}
+function fxRender(){
+  if(!fxInvoices) return;
+  // Clients proposés : ceux des factures qui passent les autres filtres
+  const sel = document.getElementById('fxClient');
+  const cur = sel.value;
+  const counts = {};
+  fxFiltered(false).forEach(inv => { const c = fxClient(inv); counts[c] = (counts[c] || 0) + 1; });
+  const names = Object.keys(counts).sort((a,b) => a.localeCompare(b, 'fr', { sensitivity:'base' }));
+  if(cur && !counts[cur]){ counts[cur] = 0; names.unshift(cur); }
+  sel.innerHTML = '<option value="">Tous les clients</option>' + names.map(n => `<option value="${fxEsc(n)}">${fxEsc(n)} (${counts[n]})</option>`).join('');
+  sel.value = cur;
+
+  const list = fxFiltered(true).sort((a,b) => fxIsoDay(b.date).localeCompare(fxIsoDay(a.date)) || fxNum(b.id) - fxNum(a.id));
+  const sum = f => list.reduce((t, i) => t + f(i), 0);
+  document.getElementById('fxCount').textContent = `${list.length} facture(s) · Total ${fxHtTtc(sum(fxHT), sum(i => fxNum(i.total)))} · Reste dû ${fxHtTtc(sum(fxDuHT), sum(fxDuTTC))}`;
+  fxUpdateHeaderHeight();
+  const box = document.getElementById('fxList');
+  if(!list.length){ box.innerHTML = '<div style="padding:20px; font-family:sans-serif; color:var(--muted);">Aucune facture.</div>'; return; }
+  box.innerHTML = list.map(inv => {
+    const p = fxPaid(inv);
+    const late = fxDaysLate(inv);
+    const lateCls = late <= 0 ? '' : late < 15 ? 'late-1' : late <= 30 ? 'late-2' : 'late-3';
+    return `<div class="fx-row ${String(inv.id) === String(fxSelectedId) ? 'active' : ''} ${lateCls}" data-id="${inv.id}" ${late ? `title="Échéance ${fxDate(inv.due_date)} dépassée de ${late} jour(s)"` : ''}>
+      <div class="l1"><span>${fxEsc(inv.number || '#' + inv.id)}</span><span>${fxHtTtc(fxHT(inv), inv.total)}</span></div>
+      <div class="l2"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fxEsc(fxClient(inv))}</span><span>${inv.sent_date ? `<span title="Envoyée le ${fxDate(inv.sent_date)}">✉️</span> ` : '<span class="fx-unpaid" title="Pas encore envoyée">non envoyée</span> · '}${fxDate(inv.date)}</span></div>
+      <div class="l2"><span>${late ? `<span class="fx-late">${late} j de retard</span>` : ''}</span><span class="${p ? 'fx-paid' : 'fx-unpaid'}">${p ? 'Réglée' : 'Reste ' + fxHtTtc(fxDuHT(inv), fxDuTTC(inv))}</span></div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('.fx-row').forEach(el => el.addEventListener('click', () => {
+    fxSelectedId = el.dataset.id;
+    box.querySelectorAll('.fx-row').forEach(x => x.classList.toggle('active', x === el));
+    fxShowDetail(fxSelectedId);
+  }));
+}
+function fxAddress(a){
+  if(!a) return '';
+  return [a.company_name, a.contact_name, a.street || a.address_street, [a.zip_code || a.address_zip_code, a.city || a.address_city].filter(Boolean).join(' '), a.country || a.address_country]
+    .filter(Boolean).map(fxEsc).join('<br>');
+}
+function fxText(html){ return fxEsc(stripHtmlToText(html || '')); }
+// ---- Commande et devis liés à la facture ----
+const fxContractCache = {}, fxQuoteCache = {};
+function fxFindContract(inv){
+  return contracts.find(c => (inv.contract_id && (String(c.contractId) === String(inv.contract_id) || String(c.linkedContractId) === String(inv.contract_id)))
+    || (Array.isArray(c.invoicesId) && c.invoicesId.map(String).includes(String(inv.id)))) || null;
+}
+// Infos manquantes (onglet Commande pas encore chargé, devis Axonaut) récupérées dans Axonaut.
+async function fxLoadLinks(id, done){
+  const inv = fxDetailCache[id] || (fxInvoices || []).find(i => String(i.id) === String(id));
+  if(!inv) return;
+  let changed = false;
+  const cid = inv.contract_id;
+  if(cid && !fxFindContract(inv) && !fxContractCache[cid]){
+    try{ const r = await callAxonaut('/contracts/' + cid); if(r.ok && r.parsed){ fxContractCache[cid] = r.parsed; changed = true; } }catch(e){}
+  }
+  const c = fxFindContract(inv);
+  const qid = (c && !isModuleOrder(c) && c.quotationId) || (fxContractCache[cid] && fxContractCache[cid].quotation && fxContractCache[cid].quotation.id);
+  if(qid && !fxQuoteCache[qid]){
+    try{ const r = await callAxonaut('/quotations/' + qid); if(r.ok && r.parsed){ fxQuoteCache[qid] = r.parsed; changed = true; } }catch(e){}
+  }
+  if(changed) done();
+}
+// ---------- Envoi par mail : retrouvé dans les événements (mails) du client Axonaut ----------
+// L'API ne donne que la date d'envoi sur la facture ; le détail (date, heure, destinataires,
+// relances) vient des mails enregistrés dans la fiche du client. Elle ne dit pas si le client a
+// ouvert la facture.
+const fxEventsCache = {};
+function fxCompanyEvents(companyId){
+  if(!fxEventsCache[companyId]){
+    fxEventsCache[companyId] = (async () => {
+      const res = await callAxonaut('/companies/' + companyId + '/events');
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const seen = new Set();
+      return (Array.isArray(res.parsed) ? res.parsed : []).filter(e => e && !seen.has(e.id) && seen.add(e.id));
+    })();
+    fxEventsCache[companyId].catch(() => { delete fxEventsCache[companyId]; });
+  }
+  return fxEventsCache[companyId];
+}
+function fxInvoiceMails(inv, events){
+  const num = String(inv.number || '').trim();
+  if(!num || !events) return [];
+  const re = new RegExp('(^|[^0-9A-Za-z])' + num.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![0-9])');
+  return events.filter(e => e.nature === 'Email' && (re.test(e.title || '') || re.test(e.content || '')))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+function fxDateTime(v){
+  const d = new Date(v);
+  if(isNaN(d)) return fxDate(v);
+  return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+}
+function fxMailHtml(inv, state){
+  let body;
+  if(state === 'loading') body = '<span style="color:var(--muted);">Recherche des mails…</span>';
+  else if(state === 'error') body = (inv.sent_date ? 'Envoyée le <b>' + fxDate(inv.sent_date) + '</b><br>' : '') + '<span style="color:var(--muted);">Détail des mails indisponible.</span>';
+  else if(state.length){
+    body = state.map((e, i) => {
+      const to = (e.employees || []).map(x => `${fxEsc(x.fullname || '')}${x.email ? ' <span style="color:var(--muted);">&lt;' + fxEsc(x.email) + '&gt;</span>' : ''}`).join('<br>');
+      return `<div style="${i ? 'margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);' : ''}"><b>${i ? 'Relance ' + i : 'Envoyée'}</b> le ${fxDateTime(e.date)}${to ? '<br>à ' + to : ''}</div>`;
+    }).join('');
+  }
+  else body = inv.sent_date ? `Marquée envoyée le <b>${fxDate(inv.sent_date)}</b><br><span style="color:var(--muted);">Aucun mail trouvé dans Axonaut (envoyée autrement ?).</span>` : '<span class="fx-unpaid">Pas encore envoyée</span>';
+  return `<h4>✉️ Envoi par mail</h4>${body}<div style="color:var(--muted); font-size:.72rem; margin-top:6px;">Ouverture par le client : non fournie par Axonaut.</div>`;
+}
+function fxLinksHtml(inv, contract){
+  const cid = inv.contract_id;
+  const raw = cid ? fxContractCache[cid] : null;
+  if(!contract && !raw) return cid ? `<div class="fx-card"><h4>Commande</h4>Commande Axonaut #${fxEsc(cid)} — chargement…</div>` : `<div class="fx-card"><h4>Commande / devis</h4><span style="color:var(--muted);">Aucune commande liée à cette facture.</span></div>`;
+  const orderName = contract ? contract.numeroCommande : (raw.name || '#' + raw.id);
+  const orderDate = contract ? contract.startDate : raw.start_date;
+  let devisHtml;
+  if(contract && isModuleOrder(contract)){
+    const d = (contract.moduleRec && contract.moduleRec.data) || {};
+    devisHtml = `<b>${fxEsc(d.numero || contract.numeroCommande)}</b> <span style="color:var(--muted);">(module Devis)</span>${d.title ? '<br>' + fxEsc(d.title) : ''}
+      <div style="margin-top:6px;"><button class="btn ghost" id="fxGoDevisModule">📝 Ouvrir le devis</button></div>`;
+  }else{
+    const qid = (contract && contract.quotationId) || (raw && raw.quotation && raw.quotation.id);
+    const q = qid ? fxQuoteCache[qid] : null;
+    devisHtml = !qid ? '<span style="color:var(--muted);">Aucun devis lié.</span>'
+      : `<b>${fxEsc(q ? q.number : '#' + qid)}</b>${q && q.title ? '<br>' + fxEsc(stripHtmlToText(q.title)) : ''}${q ? '<br>' + fxEur(q.pre_tax_amount) + ' HT · ' + fxDate(q.date) : '<br><span style="color:var(--muted);">chargement…</span>'}
+        <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn ghost" id="fxGoDevis" data-qid="${fxEsc(qid)}">📑 Voir le devis</button>
+          ${q && q.public_path ? `<a class="btn ghost" href="${fxEsc(q.public_path)}" target="_blank" rel="noopener">📄 PDF du devis</a>` : ''}
+        </div>`;
+  }
+  return `<div class="fx-card"><h4>Commande liée</h4><b>${fxEsc(orderName)}</b>${orderDate ? '<br>du ' + fxDate(orderDate) : ''}
+      <div style="margin-top:6px;"><button class="btn ghost" id="fxGoOrder" data-cid="${fxEsc(contract ? contract.contractId : cid)}">📦 Voir la commande</button></div></div>
+    <div class="fx-card"><h4>Devis lié</h4>${devisHtml}</div>`;
+}
+function fxWireLinks(inv, contract){
+  const go = document.getElementById('fxGoOrder');
+  if(go) go.addEventListener('click', () => jumpToCommande(contract ? contract.contractId : Number(go.dataset.cid)));
+  const gd = document.getElementById('fxGoDevis');
+  if(gd) gd.addEventListener('click', () => jumpToDevis(Number(gd.dataset.qid)));
+  const gm = document.getElementById('fxGoDevisModule');
+  if(gm) gm.addEventListener('click', () => openInDevisModule(contract.moduleRec.id));
+}
+async function fxShowDetail(id){
+  const box = document.getElementById('fxDetail');
+  const base = (fxInvoices || []).find(i => String(i.id) === String(id)) || {};
+  let inv = fxDetailCache[id] || base;
+  let mails = 'loading';
+  const companyId = base.company && base.company.id;
+  if(companyId) fxCompanyEvents(companyId)
+    .then(ev => { mails = fxInvoiceMails(inv, ev); }, () => { mails = 'error'; })
+    .then(() => { const el = document.getElementById('fxMail'); if(el && String(fxSelectedId) === String(id)) el.innerHTML = fxMailHtml(inv, mails); });
+  else mails = [];
+  const render = () => {
+    const p = fxPaid(inv);
+    const lines = inv.invoice_lines || [];
+    const contract = fxFindContract(inv);
+    const dl = inv.delivery_address;
+    box.innerHTML = `
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <h2 style="margin:0; font-family:var(--font-display);">Facture ${fxEsc(inv.number || '#' + inv.id)}</h2>
+        <span class="badge ${p ? 'ok' : 'warn'}">${p ? 'Réglée' + (inv.paid_date ? ' le ' + fxDate(inv.paid_date) : '') : 'Non réglée'}</span>
+        <span style="margin-left:auto; display:flex; gap:8px;">
+          ${inv.public_path ? `<a class="btn ghost" href="${fxEsc(inv.public_path)}" target="_blank" rel="noopener">📄 PDF</a>` : ''}
+        </span>
+      </div>
+      <div class="fx-cards" id="fxLinks">${fxLinksHtml(inv, contract)}</div>
+      <div class="fx-cards">
+        <div class="fx-card"><h4>Client</h4><b>${fxEsc(fxClient(inv))}</b>${inv.billing_address ? '<br>' + fxAddress(inv.billing_address) : ''}</div>
+        <div class="fx-card"><h4>Dates</h4>Facture : <b>${fxDate(inv.date) || '—'}</b><br>Échéance : ${fxDate(inv.due_date) || '—'}${inv.sent_date ? '<br>Envoyée : ' + fxDate(inv.sent_date) : ''}${inv.paid_date ? '<br>Réglée : ' + fxDate(inv.paid_date) : ''}</div>
+        <div class="fx-card"><h4>Montants</h4>HT : <b>${fxEur(fxHT(inv))}</b><br>TVA : ${fxEur(inv.tax_amount)}<br>TTC : <b>${fxEur(inv.total)}</b><br>Reste dû : <b class="${p ? 'fx-paid' : 'fx-unpaid'}">${fxEur(fxDuHT(inv))} HT</b> · <b class="${p ? 'fx-paid' : 'fx-unpaid'}">${fxEur(fxDuTTC(inv))} TTC</b></div>
+        <div class="fx-card" id="fxMail">${fxMailHtml(inv, mails)}</div>
+        ${dl && (dl.street || dl.address_street) ? `<div class="fx-card"><h4>Livraison</h4>${fxAddress(dl)}</div>` : ''}
+      </div>
+      ${lines.length ? `<table>
+        <thead><tr><th>Désignation</th><th class="n">Qté</th><th class="n">PU HT</th><th class="n">Total HT</th></tr></thead>
+        <tbody>${lines.map(l => `<tr>
+          <td><b>${fxEsc(l.name || l.product_name || '')}</b>${l.product_code ? ' <span style="color:var(--muted);">' + fxEsc(l.product_code) + '</span>' : ''}${l.details ? '<div style="color:var(--muted); font-size:.74rem;">' + fxText(l.details) + '</div>' : ''}</td>
+          <td class="n">${fxNum(l.quantity).toLocaleString('fr-FR')} ${fxEsc(l.unit || '')}</td>
+          <td class="n">${fxEur(l.price)}</td>
+          <td class="n">${fxEur(l.total_pre_tax_amount)}</td></tr>`).join('')}</tbody>
+      </table>` : '<div style="font-family:sans-serif; color:var(--muted);">Chargement des lignes…</div>'}
+      ${inv.payment_terms ? `<div style="font-family:sans-serif; font-size:.78rem; color:var(--muted); margin-top:12px;">Conditions de paiement : ${fxText(inv.payment_terms)}</div>` : ''}`;
+    fxWireLinks(inv, contract);
+  };
+  render();
+  fxLoadLinks(id, () => { if(String(fxSelectedId) === String(id)) render(); });
+  if(!fxDetailCache[id]){
+    try{
+      const res = await callAxonaut('/invoices/' + id);
+      if(res.ok && res.parsed){ fxDetailCache[id] = res.parsed; if(String(fxSelectedId) === String(id)){ inv = res.parsed; render(); } }
+    }catch(e){}
+  }
+}
+['fxPaid','fxFrom','fxTo','fxClient'].forEach(id => document.getElementById(id).addEventListener('change', fxRender));
+['fxAmount','fxNumber'].forEach(id => document.getElementById(id).addEventListener('input', fxRender));
+document.getElementById('fxReset').addEventListener('click', () => {
+  ['fxPaid','fxFrom','fxTo','fxClient','fxAmount','fxNumber'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fxPaid').value = 'unpaid'; // filtre par défaut
+  fxRender();
+});
+document.getElementById('fxRefresh').addEventListener('click', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); Object.keys(fxEventsCache).forEach(k => delete fxEventsCache[k]); fxOpen(true); });
+window.addEventListener('resize', fxUpdateHeaderHeight);
+
+
 // ---------- Navigation croisée Commande <-> Devis ----------
+// ---------- Module Devis intégré à l'onglet Devis ----------
+let devisFrameLoaded = false, devisFrameQueue = [];
+function ensureDevisModuleFrame(){
+  const f = document.getElementById('devisModuleFrame');
+  if(!f.getAttribute('src')){
+    f.addEventListener('load', () => {
+      devisFrameLoaded = true;
+      devisFrameQueue.splice(0).forEach(payload => f.contentWindow.postMessage({ type: 'csb:open-item', payload }, '*'));
+    }, { once: true });
+    f.setAttribute('src', '../devis/index.html');
+  }
+  return f;
+}
+function openInDevisTab(payload){
+  activateTab('devis');
+  const f = ensureDevisModuleFrame();
+  if(devisFrameLoaded) f.contentWindow.postMessage({ type: 'csb:open-item', payload }, '*');
+  else devisFrameQueue.push(payload);
+}
+// Demandes adressées à Gestion Commande (depuis le module Devis intégré, ou depuis le socle quand
+// le module Devis est ouvert à part) : voir une commande, imprimer un bon de fabrication.
+async function handleGestionCommandeRequest(payload){
+  if(!payload) return;
+  if(payload.openDevis){ openInDevisTab(payload.openDevis); return; }
+  if(payload.contractId){ await jumpToCommande(isNaN(Number(payload.contractId)) ? payload.contractId : Number(payload.contractId)); return; }
+  if(payload.fabricationQuotationId){
+    try{
+      const res = await callAxonaut('/quotations/' + payload.fabricationQuotationId);
+      if(!res.ok || !res.parsed) throw new Error('devis introuvable (HTTP ' + res.status + ')');
+      const q = res.parsed;
+      const r = q.contract_id ? contracts.find(c => !isModuleOrder(c) && String(c.contractId) === String(q.contract_id)) : null;
+      await generateBonDeFabrication(q, r ? { client: r.clientCompany || r.nomSoc, livraison: r.hasDeliveryInfo, contact: r.contact,
+        nomSoc: r.nomSoc || r.clientCompany, adresse: r.adresse, cp: r.cp, ville: r.ville, pays: r.pays, tel: r.tel } : undefined);
+    }catch(e){ alert('Bon de fabrication impossible : ' + e.message); }
+  }
+}
+window.addEventListener('message', event => {
+  const msg = event.data;
+  if(!msg || !msg.type) return;
+  const frame = document.getElementById('devisModuleFrame');
+  const fromDevisFrame = frame && event.source === frame.contentWindow;
+  if(fromDevisFrame && msg.type === 'csb:open-module'){
+    if(msg.module === 'axonaut') handleGestionCommandeRequest(msg.payload);
+    else if(msg.module === 'devis') openInDevisTab(msg.payload || {});
+    else if(window.parent !== window) window.parent.postMessage(msg, '*'); // autre module : relayé au socle
+    return;
+  }
+  if(event.source === window.parent && msg.type === 'csb:open-item') handleGestionCommandeRequest(msg.payload);
+});
 async function jumpToDevis(quotationId){
   if(!quotationId){ alert('Aucun devis lié à cette commande.'); return; }
+  openInDevisTab({ axQuotationId: quotationId });
+}
+async function jumpToDevisOld(quotationId){
   if(!quotations.length) await refreshQuotations();
   activateTab('devis');
   const q = quotations.find(x => x.id === quotationId);
@@ -5424,19 +5741,8 @@ function isContractInvoiced(contractId){
   return c ? c.invoicesId.length > 0 : null;
 }
 
-// ==================== Onglet Facture ====================
-// Regroupe plusieurs commandes (devis) du même client en une seule facture Axonaut.
-// L'API Axonaut n'a pas de notion de facture liée à plusieurs commandes à la fois (une facture
-// n'a qu'un seul contract_id optionnel) : on fusionne donc les lignes de chaque devis sélectionné
-// dans une facture unique, et on trace les commandes d'origine dans le champ "order_number".
+// Factures Axonaut par commande (statut « facturée » dans l'onglet Commande).
 let invoicesByContract = {}; // contractId (string) -> { paid, outstanding, number, id }
-let selectedFactureContracts = new Set();
-let factureSearch = '';
-const FACTURE_FILTER_KEY = 'csb_envoi_axonaut_facture_filter';
-let factureFilter = (() => { try{ return localStorage.getItem(FACTURE_FILTER_KEY) || 'all'; }catch(e){ return 'all'; } })();
-const FACTURE_EXPANDED_KEY = 'csb_envoi_axonaut_facture_expanded';
-let expandedFactureClients = (() => { try{ return new Set(JSON.parse(localStorage.getItem(FACTURE_EXPANDED_KEY)) || []); }catch(e){ return new Set(); } })();
-function saveExpandedFactureClients(){ try{ localStorage.setItem(FACTURE_EXPANDED_KEY, JSON.stringify([...expandedFactureClients])); }catch(e){} }
 
 async function fetchAllInvoices(){
   let all = [], page = 1;
@@ -5445,6 +5751,8 @@ async function fetchAllInvoices(){
     if(!res.ok) throw new Error('Axonaut HTTP ' + res.status + (res.text ? ' — ' + res.text.slice(0,300) : ''));
     const arr = Array.isArray(res.parsed) ? res.parsed : (res.parsed && Array.isArray(res.parsed.data) ? res.parsed.data : []);
     if(!arr.length) break;
+    const known = new Set(all.map(x => x && x.id));
+    if(arr.every(x => x && known.has(x.id))) break; // page déjà reçue : on est au bout
     all = all.concat(arr);
     if(arr.length < 50) break; // page manifestement incomplète : dernière page
     page++;
@@ -5452,280 +5760,6 @@ async function fetchAllInvoices(){
   }
   return all;
 }
-async function refreshFactureTab(){
-  const wrap = document.getElementById('factureTableWrap');
-  const empty = document.getElementById('factureEmptyState');
-  if(!contracts.length){
-    empty.style.display = 'block'; wrap.style.display = 'none';
-    return;
-  }
-  try{
-    const invoices = await fetchAllInvoices();
-    invoicesByContract = {};
-    invoices.forEach(inv => {
-      if(!inv.contract_id) return;
-      const key = String(inv.contract_id);
-      const paid = (typeof inv.outstanding_amount === 'number' ? inv.outstanding_amount <= 0.001 : !!inv.paid_date);
-      // En cas de plusieurs factures pour une même commande, on garde la moins avancée (non réglée prioritaire).
-      if(!invoicesByContract[key] || (invoicesByContract[key].paid && !paid)){
-        invoicesByContract[key] = { paid, outstanding: inv.outstanding_amount, number: inv.number, id: inv.id };
-      }
-    });
-  }catch(e){
-    console.warn('Chargement des factures Axonaut impossible', e);
-  }
-  renderFactureTab();
-}
-function factureStatusFor(r){
-  const inv = invoicesByContract[String(r.contractId)];
-  if(!inv) return { key:'non_facturee', label:'Non facturée', badge:'warn' };
-  if(inv.paid) return { key:'reglee', label:`Réglée (${escapeHtml(inv.number||'')})`, badge:'ok' };
-  return { key:'non_reglee', label:`Facturée — non réglée (${escapeHtml(inv.number||'')})`, badge:'track' };
-}
-function renderFactureTab(){
-  const wrap = document.getElementById('factureTableWrap');
-  const empty = document.getElementById('factureEmptyState');
-  const tbody = document.getElementById('factureTbody');
-  // Seules les commandes Axonaut avec devis sont facturables ici ; celles du module Devis se
-  // facturent depuis le module lui-même.
-  let list = contracts.filter(r => r.quotationId && !isModuleOrder(r));
-  const st = factureSearch;
-  if(st){
-    list = list.filter(r => (r.numeroCommande||'').toLowerCase().includes(st) || (r.clientCompany||'').toLowerCase().includes(st) || (r.nomSoc||'').toLowerCase().includes(st));
-  }
-  list = list.filter(r => {
-    const s = factureStatusFor(r).key;
-    if(factureFilter === 'non_facturees') return s === 'non_facturee';
-    if(factureFilter === 'non_reglees') return s === 'non_reglee';
-    if(factureFilter === 'reglees') return s === 'reglee';
-    return true;
-  });
-  if(!list.length){
-    empty.style.display = 'block'; wrap.style.display = 'none';
-    document.getElementById('factureActionBar').style.display = 'none';
-    return;
-  }
-  empty.style.display = 'none'; wrap.style.display = 'block';
-
-  const byClient = {};
-  list.forEach(r => {
-    const key = r.clientCompany || r.nomSoc || 'Sans client';
-    if(!byClient[key]) byClient[key] = [];
-    byClient[key].push(r);
-  });
-  const clientNames = Object.keys(byClient).sort((a,b) => a.localeCompare(b));
-
-  tbody.innerHTML = clientNames.map(client => {
-    const rows = byClient[client];
-    const expanded = expandedFactureClients.has(client);
-    const color = colorForClient(client);
-    const headerRow = `
-      <tr class="commande-group-header" data-client="${escapeHtml(client)}" style="cursor:pointer; border-left:5px solid ${color};">
-        <td colspan="5" style="padding:8px 16px; background:var(--paper-2); border-bottom:1px solid var(--line); border-top:1px solid var(--line);">
-          <span style="font-weight:700; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-family:sans-serif;"><span style="display:inline-block; width:14px;">${expanded ? '▾' : '▸'}</span>${escapeHtml(client)} (${rows.length})</span>
-        </td>
-      </tr>`;
-    const bodyRows = expanded ? rows.map(r => {
-      const status = factureStatusFor(r);
-      const selectable = status.key === 'non_facturee';
-      const checked = selectedFactureContracts.has(r.contractId);
-      return `<tr data-id="${r.contractId}" style="border-left:5px solid ${color};">
-        <td><input type="checkbox" class="factureCheck" data-id="${r.contractId}" ${checked?'checked':''} ${selectable?'':'disabled'} title="${selectable?'':'Déjà facturée'}"></td>
-        <td class="name">${escapeHtml(r.numeroCommande)}</td>
-        <td>${escapeHtml(r.clientCompany || r.nomSoc)}</td>
-        <td style="text-align:right;">${formatMontant(r.montant)}</td>
-        <td><span class="badge ${status.badge}">${status.label}</span></td>
-      </tr>`;
-    }).join('') : '';
-    return headerRow + bodyRows;
-  }).join('');
-
-  tbody.querySelectorAll('.commande-group-header').forEach(header => {
-    header.addEventListener('click', () => {
-      const client = header.dataset.client;
-      if(expandedFactureClients.has(client)) expandedFactureClients.delete(client);
-      else expandedFactureClients.add(client);
-      saveExpandedFactureClients();
-      renderFactureTab();
-    });
-  });
-  tbody.querySelectorAll('.factureCheck').forEach(cb => {
-    cb.addEventListener('click', (e) => e.stopPropagation());
-    cb.addEventListener('change', () => {
-      const id = parseInt(cb.dataset.id, 10);
-      if(cb.checked) selectedFactureContracts.add(id); else selectedFactureContracts.delete(id);
-      updateFactureActionBar();
-    });
-  });
-  updateFactureActionBar();
-}
-function updateFactureActionBar(){
-  const bar = document.getElementById('factureActionBar');
-  const n = selectedFactureContracts.size;
-  bar.style.display = n > 0 ? 'flex' : 'none';
-  document.getElementById('factureSelectionCount').textContent = n + ' commande(s) sélectionnée(s)';
-}
-document.getElementById('factureSearchInput').addEventListener('input', (e) => {
-  factureSearch = e.target.value.trim().toLowerCase();
-  renderFactureTab();
-});
-document.querySelectorAll('#factureFilterRadios input[type="radio"]').forEach(radio => {
-  radio.checked = (radio.value === factureFilter);
-  radio.addEventListener('change', () => {
-    factureFilter = radio.value;
-    try{ localStorage.setItem(FACTURE_FILTER_KEY, factureFilter); }catch(e){}
-    renderFactureTab();
-  });
-});
-document.getElementById('factureRefreshBtn').addEventListener('click', refreshFactureTab);
-
-// ---------- Aperçu + création de la facture groupée ----------
-let invoicePreviewLines = [];
-let invoicePreviewCompanyId = null;
-document.getElementById('factureGenerateBtn').addEventListener('click', async () => {
-  const selected = contracts.filter(r => selectedFactureContracts.has(r.contractId));
-  if(!selected.length) return;
-  const companyIds = new Set(selected.map(r => r.companyId).filter(Boolean));
-  if(companyIds.size > 1){
-    alert("Les commandes sélectionnées n'appartiennent pas toutes au même client dans Axonaut — impossible de les regrouper sur une seule facture. Sélectionne des commandes d'un seul et même client.");
-    return;
-  }
-  if(companyIds.size === 0){
-    alert("Impossible de déterminer le client Axonaut de ces commandes (aucun company_id trouvé).");
-    return;
-  }
-  invoicePreviewCompanyId = [...companyIds][0];
-  const body = document.getElementById('invoicePreviewBody');
-  body.innerHTML = '<div class="hint">Chargement des lignes des devis…</div>';
-  document.getElementById('invoicePreviewOverlay').style.display = 'flex';
-  try{
-    invoicePreviewLines = [];
-    const groupingText = 'Commandes regroupées : ' + selected.map(x => x.numeroCommande).join(', ');
-    for(const r of selected){
-      const qRes = await callAxonaut('/quotations/' + r.quotationId);
-      if(!qRes.ok) throw new Error(`Devis introuvable pour ${r.numeroCommande} (Axonaut HTTP ${qRes.status})`);
-      const lines = (qRes.parsed && qRes.parsed.quotation_lines) || [];
-      // Reprend la structure du devis telle quelle : chaque ligne garde SON propre en-tête de
-      // section (un devis peut avoir plusieurs chapitres) ; seules les lignes sans en-tête
-      // propre se rattachent au texte de regroupement, pour rester repérables sur la facture.
-      lines.forEach(l => {
-        const ownChapter = stripHtmlToText(l.chapter || '');
-        invoicePreviewLines.push({
-          productId: l.product_id || null,
-          productInternalId: l.product_internal_id || '',
-          orderRef: r.numeroCommande,
-          name: l.title || l.product_name || '',
-          description: stripHtmlToText(l.details || ''),
-          quantity: l.quantity || 0,
-          unit: l.unit || '',
-          price: (typeof l.price === 'number') ? l.price : 0,
-          tax_rate: (l.tax_rates && l.tax_rates[0] && typeof l.tax_rates[0].rate === 'number') ? l.tax_rates[0].rate : 20,
-          product_code: l.product_code || '',
-          chapter: ownChapter || groupingText
-        });
-      });
-    }
-    renderInvoicePreview(selected);
-  }catch(e){
-    body.innerHTML = `<div class="hint" style="color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
-  }
-});
-function renderInvoicePreview(selected){
-  const total = invoicePreviewLines.reduce((sum, l) => sum + (l.price * l.quantity), 0);
-  const client = selected[0].clientCompany || selected[0].nomSoc || '';
-  const body = document.getElementById('invoicePreviewBody');
-  body.innerHTML = `
-    <div style="font-family:sans-serif; margin-bottom:14px;">
-      <div style="font-weight:700; font-size:1.05rem;">${escapeHtml(client)}</div>
-      <div class="hint">Commandes regroupées : ${selected.map(r => escapeHtml(r.numeroCommande)).join(', ')}</div>
-    </div>
-    <div class="row" style="margin-bottom:10px;">
-      <label style="min-width:140px;">Date de facture</label>
-      <input type="date" id="invoiceDateInput" value="${new Date().toISOString().slice(0,10)}">
-    </div>
-    <div class="table-scroll" style="max-height:40vh;">
-      <table>
-        <thead><tr><th>Description</th><th style="text-align:right;">Qté</th><th style="text-align:right;">PU HT</th><th style="text-align:right;">Total HT</th></tr></thead>
-        <tbody>
-          ${(() => {
-            // Reproduit la structure finale telle qu'elle sera envoyée à Axonaut : une ligne
-            // d'en-tête par chapitre (dès qu'il change), pas une colonne "Commande" à part.
-            let html = '', lastChapter = null;
-            invoicePreviewLines.forEach(l => {
-              if(l.chapter !== lastChapter){
-                lastChapter = l.chapter;
-                html += `<tr><td colspan="4" style="background:var(--paper-2); font-weight:700; font-family:sans-serif; font-size:.85rem; padding:8px 10px; border-top:1.5px solid var(--line);">${escapeHtml(l.chapter)}</td></tr>`;
-              }
-              html += `<tr>
-                <td>${escapeHtml(l.name)}${l.description ? `<br><span class="hint" style="font-size:.75rem;">${escapeHtml(l.description)}</span>` : ''}<br><span class="hint" style="font-size:.72rem;">Commande : ${escapeHtml(l.orderRef)}</span></td>
-                <td style="text-align:right;">${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}</td>
-                <td style="text-align:right;">${l.price.toFixed(2).replace('.', ',')} €</td>
-                <td style="text-align:right;">${(l.price*l.quantity).toFixed(2).replace('.', ',')} €</td>
-              </tr>`;
-            });
-            return html;
-          })()}
-        </tbody>
-      </table>
-    </div>
-    <div style="text-align:right; margin-top:12px; font-weight:700; font-family:sans-serif;">Total HT : ${total.toFixed(2).replace('.', ',')} €</div>
-    <div id="invoiceCreateResult" class="col-result" style="margin-top:12px;"></div>
-  `;
-}
-document.getElementById('invoicePreviewClose').addEventListener('click', () => { document.getElementById('invoicePreviewOverlay').style.display = 'none'; });
-document.getElementById('invoicePreviewCancelBtn').addEventListener('click', () => { document.getElementById('invoicePreviewOverlay').style.display = 'none'; });
-document.getElementById('invoicePreviewConfirmBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('invoicePreviewConfirmBtn');
-  const resultBox = document.getElementById('invoiceCreateResult');
-  const dateInput = document.getElementById('invoiceDateInput');
-  if(!invoicePreviewLines.length) return;
-  const selected = contracts.filter(r => selectedFactureContracts.has(r.contractId));
-  const orderNumber = selected.map(r => r.numeroCommande).join(', ');
-  const dateVal = dateInput ? dateInput.value : ''; // yyyy-mm-dd (input type=date)
-  // L'API attend une date ISO8601/RFC3339 complète avec décalage horaire explicite, sans
-  // millisecondes (ex: 2022-05-28T18:05:35+02:00) — Date#toISOString() (suffixe Z + ms) est
-  // rejetée par le validateur Axonaut malgré la conformité RFC3339.
-  const isoDate = dateVal ? toAxonautRfc3339(dateVal + 'T12:00:00') : undefined;
-  const payload = {
-    company_id: invoicePreviewCompanyId,
-    // Axonaut ne permet de lier qu'UNE seule commande à la facture (colonne "Commande" de la
-    // liste des factures) : on y met la première commande sélectionnée. La liste complète des
-    // commandes regroupées reste tracée dans order_number (affiché à côté du n° de facture).
-    contract_id: selected[0].contractId,
-    date: isoDate,
-    order_number: orderNumber,
-    products: invoicePreviewLines.map(l => ({
-      id: l.productId || undefined, internal_id: l.productInternalId || undefined,
-      name: l.name, description: l.description, quantity: l.quantity, unit: l.unit,
-      price: l.price, tax_rate: l.tax_rate, product_code: l.product_code || undefined, chapter: l.chapter
-    }))
-  };
-  btn.disabled = true;
-  resultBox.className = 'col-result';
-  resultBox.textContent = 'Création de la facture dans Axonaut…';
-  try{
-    const res = await callAxonaut('/invoices', 'POST', payload);
-    if(!res.ok) throw new Error('Axonaut HTTP ' + res.status + (res.text ? ' — ' + res.text.slice(0,400) : ''));
-    const inv = res.parsed;
-    resultBox.className = 'col-result ok';
-    resultBox.textContent = `✔ Facture ${inv.number || ''} créée dans Axonaut.` + (inv.public_path ? ' Lien : ' + inv.public_path : '');
-    if(selected.length > 1){
-      resultBox.textContent += `\n⚠ Seule la commande « ${selected[0].numeroCommande} » sera visible comme liée à cette facture dans Axonaut (limite de la plateforme : une facture ne peut être rattachée qu'à une seule commande). Les commandes d'origine restent toutes listées dans la référence de la facture (order_number).`;
-    }
-    selected.forEach(r => { invoicesByContract[String(r.contractId)] = { paid:false, outstanding: null, number: inv.number, id: inv.id }; });
-    selectedFactureContracts.clear();
-
-    setTimeout(() => {
-      document.getElementById('invoicePreviewOverlay').style.display = 'none';
-      renderFactureTab();
-    }, 3000);
-  }catch(e){
-    resultBox.className = 'col-result err';
-    resultBox.textContent = '✘ ' + e.message;
-  }
-  btn.disabled = false;
-});
-
 document.querySelectorAll('#devisFilterRadios input[type="radio"]').forEach(radio => {
   radio.addEventListener('change', () => {
     devisFilter = radio.value;
@@ -6526,15 +6560,15 @@ async function openDevisDocument(filename, category){
 function applyPermissions(){
   const canDevis = CSBAuth.can('axonaut', 'devis');
   const canCommandes = CSBAuth.can('axonaut', 'commandes');
-  const canFacture = CSBAuth.can('axonaut', 'facture');
+  const canFactures = CSBAuth.can('axonaut', 'factures');
   const canSettings = CSBAuth.can('axonaut', 'settings');
   document.getElementById('tabBtnDevis').style.display = canDevis ? '' : 'none';
   document.getElementById('tabBtnCommande').style.display = canCommandes ? '' : 'none';
-  document.getElementById('tabBtnFacture').style.display = canFacture ? '' : 'none';
+  document.getElementById('tabBtnFactures').style.display = canFactures ? '' : 'none';
   document.getElementById('tabBtnParams').style.display = canSettings ? '' : 'none';
   if(!canDevis && document.getElementById('tabBtnDevis').classList.contains('active')) activateTab('commande');
   if(!canCommandes && document.getElementById('tabBtnCommande').classList.contains('active')) activateTab('devis');
-  if(!canFacture && document.getElementById('tabBtnFacture').classList.contains('active')) activateTab('commande');
+  if(!canFactures && document.getElementById('tabBtnFactures').classList.contains('active')) activateTab('commande');
   if(!canSettings && document.getElementById('tabBtnParams').classList.contains('active')) activateTab('commande');
   setAdminMode(CSBAuth.isAdmin());
   if(contracts.length) render();
