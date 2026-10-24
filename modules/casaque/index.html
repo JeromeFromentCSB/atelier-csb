@@ -3363,65 +3363,216 @@ function findPreviousImport(hash){
   return loadHistory().find(h => h.hash === hash);
 }
 
-// ---------- Import Excel ----------
-function normalizeRows(rows, imageMap){
-  imageMap = imageMap || new Map();
-  const header = rows[0].map(h => (h||'').toString().trim().toLowerCase());
-  const idx = name => header.indexOf(name.toLowerCase());
-  let iCasaque = idx('Casaque');
-  if(iCasaque === -1) iCasaque = 0; // colonne Casaque parfois sans en-tête ou avec casse différente (ex: "CASAQUE")
-  const iNom = idx('Nom');
-  const iPrenom = idx('Prénom');
-  const iEmail = idx('Email');
-  const iTel1 = idx('Tel 1');
-  const iTel2 = idx('Tel 2');
-  const iNomAdr = idx('Nom Adresse');
-  const iAdr1 = idx('ADRESSE LIGNE 1');
-  const iAdr2 = idx('ADRESSE LIGNE 2');
-  const iAdr3 = idx('ADRESSE LIGNE 3');
-  const iCp = idx('Code postal');
-  const iVille = idx('Ville');
-  const iPays = idx('Pays de résidence');
-  const iCoul1 = idx('LIBELLE COULEURS 1');
-  const iTypePersonne = idx('Type de personne');
-  const iCasaqueBase = idx('CASAQUE:COULEUR DE BASE');
-  const iCasaqueSec = idx('CASAQUE:COULEUR SECONDAIRE');
-  const iCasaqueDispo = idx('CASAQUE:DISPOSITIF');
-  const iManchesBase = idx('MANCHES:COULEUR DE BASE');
-  const iManchesSec = idx('MANCHES:COULEUR SECONDAIRE');
-  const iManchesDispo = idx('MANCHES:DISPOSITIF');
+// ---------- Import Excel : correspondance des colonnes ----------
+// Chaque information est cherchée par le titre de sa colonne. S'il en manque (fichier avec des
+// titres différents, colonne absente), une fenêtre demande quelle colonne utiliser — ou de
+// l'ignorer — et le choix est retenu pour les fichiers qui ont exactement les mêmes colonnes.
+// Les vignettes sont lues qu'elles soient « dans la cellule » (Rich Data) ou posées sur la feuille.
+const IMPORT_FIELDS = [
+  { key:'nom',              label:'Nom',                         names:['Nom'] },
+  { key:'prenom',           label:'Prénom',                      names:['Prénom','Prenom'] },
+  { key:'email',            label:'Email',                       names:['Email','E-mail','Mail','Adresse mail'] },
+  { key:'tel1',             label:'Téléphone 1',                 names:['Tel 1','Tél 1','Téléphone','Telephone','Tel'] },
+  { key:'tel2',             label:'Téléphone 2',                 names:['Tel 2','Tél 2','Portable','Mobile'] },
+  { key:'nomAdresse',       label:'Nom pour l\'adresse',         names:['Nom Adresse','Destinataire'] },
+  { key:'adr1',             label:'Adresse ligne 1',             names:['ADRESSE LIGNE 1','Adresse','Adresse 1'] },
+  { key:'adr2',             label:'Adresse ligne 2',             names:['ADRESSE LIGNE 2','Adresse 2'] },
+  { key:'adr3',             label:'Adresse ligne 3',             names:['ADRESSE LIGNE 3','Adresse 3'] },
+  { key:'cp',               label:'Code postal',                 names:['Code postal','CP'] },
+  { key:'ville',            label:'Ville',                       names:['Ville','Localité'] },
+  { key:'pays',             label:'Pays',                        names:['Pays de résidence','Pays'] },
+  { key:'coul1',            label:'Libellé des couleurs',        names:['LIBELLE COULEURS 1','Libellé couleurs','Couleurs'] },
+  { key:'coul2',            label:'Libellé des couleurs (suite)',names:['LIBELLE COULEURS 2'] },
+  { key:'typePersonne',     label:'Type de personne (société)',  names:['Type de personne'] },
+  { key:'casaqueBase',      label:'Casaque : couleur de base',   names:['CASAQUE:COULEUR DE BASE'] },
+  { key:'casaqueSec',       label:'Casaque : couleur secondaire',names:['CASAQUE:COULEUR SECONDAIRE'] },
+  { key:'casaqueDispositif',label:'Casaque : dispositif',        names:['CASAQUE:DISPOSITIF'] },
+  { key:'manchesBase',      label:'Manches : couleur de base',   names:['MANCHES:COULEUR DE BASE'] },
+  { key:'manchesSec',       label:'Manches : couleur secondaire',names:['MANCHES:COULEUR SECONDAIRE'] },
+  { key:'manchesDispositif',label:'Manches : dispositif',        names:['MANCHES:DISPOSITIF'] },
+  { key:'casaque',          label:'Casaque (texte de la cellule)',names:['Casaque'] }
+];
+const IMPORT_MAP_KEY = 'csb_casaque_import_map:';
+const impNorm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+const colLetter = i => { let s = ''; i++; while(i > 0){ const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
 
+// Vignettes : Map<indexColonne, Map<numéroDeLigneExcel, dataURI>>
+async function extractSheetImages(buf){
+  const byCol = new Map();
+  const put = (col, row, uri) => { if(!byCol.has(col)) byCol.set(col, new Map()); if(!byCol.get(col).has(row)) byCol.get(col).set(row, uri); };
+  if(typeof JSZip === 'undefined') return byCol;
+  let zip;
+  try{ zip = await JSZip.loadAsync(buf); }catch(e){ return byCol; }
+  const parser = new DOMParser();
+  const xml = async path => { const f = zip.file(path); return f ? parser.parseFromString(await f.async('text'), 'application/xml') : null; };
+  const mediaUri = async path => {
+    const f = zip.file(path); if(!f) return null;
+    const ext = path.split('.').pop().toLowerCase();
+    const mime = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/png';
+    return `data:${mime};base64,${await f.async('base64')}`;
+  };
+  const resolve = (base, target) => {
+    if(target.startsWith('/')) return target.slice(1);
+    const parts = base.split('/'); parts.pop();
+    target.split('/').forEach(p => { if(p === '..') parts.pop(); else if(p !== '.') parts.push(p); });
+    return parts.join('/');
+  };
+  const relsOf = async (path) => {
+    const dir = path.split('/'); const file = dir.pop();
+    const doc = await xml(dir.join('/') + '/_rels/' + file + '.rels');
+    const map = {};
+    if(doc) Array.from(doc.getElementsByTagName('Relationship')).forEach(r => { map[r.getAttribute('Id')] = { target: resolve(path, r.getAttribute('Target')), type: r.getAttribute('Type') || '' }; });
+    return map;
+  };
+  const sheetPath = 'xl/worksheets/sheet1.xml';
+  const rNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  // 1) images « dans la cellule » (Rich Data, formule =DISPIMG)
+  try{
+    const meta = await xml('xl/metadata.xml'), rv = await xml('xl/richData/richValueRel.xml'), sheet = await xml(sheetPath);
+    if(meta && rv && sheet){
+      const vmSection = meta.getElementsByTagName('valueMetadata')[0];
+      const vmList = Array.from(vmSection ? vmSection.getElementsByTagName('bk') : []).map(bk => { const rc = bk.getElementsByTagName('rc')[0]; return rc ? parseInt(rc.getAttribute('v'), 10) : null; });
+      const rvRels = await relsOf('xl/richData/richValueRel.xml');
+      const rvIndexToRid = Array.from(rv.documentElement.children).map(el => el.getAttributeNS(rNs, 'id'));
+      for(const c of Array.from(sheet.getElementsByTagName('c'))){
+        const vm = c.getAttribute('vm'); if(!vm) continue;
+        const ref = c.getAttribute('r') || '';
+        const letters = ref.replace(/[0-9]/g, ''); let col = 0; for(const ch of letters) col = col * 26 + (ch.charCodeAt(0) - 64); col -= 1;
+        const rvIdx = vmList[parseInt(vm, 10) - 1];
+        const rel = rvIdx != null ? rvRels[rvIndexToRid[rvIdx]] : null;
+        const uri = rel ? await mediaUri(rel.target) : null;
+        if(uri) put(col, parseInt(ref.replace(/[^0-9]/g, ''), 10), uri);
+      }
+    }
+  }catch(e){ console.warn('Vignettes (dans la cellule) : échec', e); }
+  // 2) images posées sur la feuille (dessin ancré sur une cellule)
+  try{
+    const sheetRels = await relsOf(sheetPath);
+    for(const rel of Object.values(sheetRels)){
+      if(!/\/drawing$/.test(rel.type)) continue;
+      const drawing = await xml(rel.target); if(!drawing) continue;
+      const dRels = await relsOf(rel.target);
+      const anchors = Array.from(drawing.getElementsByTagNameNS('*', 'twoCellAnchor')).concat(Array.from(drawing.getElementsByTagNameNS('*', 'oneCellAnchor')));
+      for(const an of anchors){
+        const from = an.getElementsByTagNameNS('*', 'from')[0];
+        const blip = an.getElementsByTagNameNS('*', 'blip')[0];
+        if(!from || !blip) continue;
+        const col = parseInt(from.getElementsByTagNameNS('*', 'col')[0].textContent, 10);
+        const row = parseInt(from.getElementsByTagNameNS('*', 'row')[0].textContent, 10) + 1; // 0 = ligne Excel 1
+        const rid = blip.getAttributeNS(rNs, 'embed') || blip.getAttribute('r:embed');
+        const uri = dRels[rid] ? await mediaUri(dRels[rid].target) : null;
+        if(uri) put(col, row, uri);
+      }
+    }
+  }catch(e){ console.warn('Vignettes (images sur la feuille) : échec', e); }
+  return byCol;
+}
+
+// Correspondance automatique d'après les titres, puis choix mémorisé pour ces mêmes colonnes
+function autoColumnMap(header, images){
+  const H = header.map(impNorm);
+  const map = {};
+  IMPORT_FIELDS.forEach(f => {
+    let i = -1;
+    for(const n of f.names){ i = H.indexOf(impNorm(n)); if(i >= 0) break; }
+    map[f.key] = i;
+  });
+  // ancien comportement : sans colonne « Casaque », la première colonne
+  if(map.casaque < 0 && !IMPORT_FIELDS.some(f => f.key !== 'casaque' && map[f.key] === 0)) map.casaque = 0;
+  // vignettes : la colonne qui contient des images (la plus fournie)
+  const imgCols = [...images.entries()].sort((a, b) => b[1].size - a[1].size);
+  map.image = imgCols.length ? imgCols[0][0] : -1;
+  return map;
+}
+// Fenêtre de choix des colonnes manquantes ; renvoie la correspondance, ou null si annulé
+function askColumnMap(header, rows, map, images, missing){
+  return new Promise(resolve => {
+    const sample = i => { for(let r = 1; r < Math.min(rows.length, 8); r++){ const v = rows[r] && rows[r][i]; if(v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim().slice(0, 28); } return ''; };
+    const colOpts = (cur) => '<option value="-1">— Ignorer —</option>' + header.map((h, i) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${colLetter(i)} · ${escapeHtml(String(h || '(sans titre)'))}${sample(i) ? ' — ex. ' + escapeHtml(sample(i)) : ''}</option>`).join('');
+    const imgCols = [...images.entries()];
+    const imgOpts = '<option value="-1">— Pas de vignettes —</option>' + imgCols.map(([c, m]) => `<option value="${c}" ${c === map.image ? 'selected' : ''}>${colLetter(c)} · ${escapeHtml(String(header[c] || '(sans titre)'))} — ${m.size} image(s)</option>`).join('');
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(33,28,22,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:640px;width:100%;max-height:88vh;overflow:auto;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+      <h3 style="margin:0 0 6px;">Colonnes du fichier</h3>
+      <p style="margin:0 0 14px;color:#8A8074;font-size:13px;">Ces informations n'ont pas été trouvées sous leur titre habituel. Choisis la colonne à utiliser pour chacune, ou « Ignorer ».</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        ${missing.map(k => { const f = IMPORT_FIELDS.find(x => x.key === k); return `<tr><td style="padding:5px 8px 5px 0;white-space:nowrap;font-weight:600;">${escapeHtml(f.label)}</td><td style="padding:5px 0;"><select data-k="${k}" style="width:100%;padding:5px;">${colOpts(map[k])}</select></td></tr>`; }).join('')}
+        <tr><td style="padding:10px 8px 5px 0;white-space:nowrap;font-weight:600;">🖼️ Vignettes casaque</td><td style="padding:10px 0 5px;">${imgCols.length ? `<select data-k="image" style="width:100%;padding:5px;">${imgOpts}</select>` : '<span style="color:#8A8074;">aucune image trouvée dans ce fichier</span>'}</td></tr>
+      </table>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:12px;font-size:13px;"><input type="checkbox" id="impRemember" checked> Retenir ces choix pour les prochains fichiers qui ont les mêmes colonnes</label>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+        <button class="btn ghost" id="impCancel">Annuler l'import</button>
+        <button class="btn primary" id="impOk">Importer</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const done = (res) => { ov.remove(); resolve(res); };
+    ov.querySelector('#impCancel').addEventListener('click', () => done(null));
+    ov.querySelector('#impOk').addEventListener('click', () => {
+      const out = Object.assign({}, map);
+      ov.querySelectorAll('select[data-k]').forEach(s => { out[s.dataset.k] = parseInt(s.value, 10); });
+      out._remember = ov.querySelector('#impRemember').checked;
+      done(out);
+    });
+  });
+}
+async function resolveColumnMap(rows, images){
+  const header = (rows[0] || []).map(h => h == null ? '' : h);
+  const sig = IMPORT_MAP_KEY + header.map(impNorm).join('|');
+  const map = autoColumnMap(header, images);
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(sig)); }catch(e){}
+  if(saved){ Object.keys(saved).forEach(k => { if(k in map && map[k] < 0) map[k] = saved[k]; }); if('image' in saved && images.has(saved.image)) map.image = saved.image; }
+  const missing = IMPORT_FIELDS.map(f => f.key).filter(k => map[k] < 0 && !(saved && k in saved));
+  // vignettes : on demande aussi s'il y a des images dans plusieurs colonnes
+  const askImage = images.size > 1 && !(saved && 'image' in saved);
+  if(!missing.length && !askImage) return map;
+  const chosen = await askColumnMap(header, rows, map, images, missing);
+  if(!chosen) return null;
+  if(chosen._remember){
+    const keep = {};
+    missing.forEach(k => { keep[k] = chosen[k]; });
+    keep.image = chosen.image;
+    try{ localStorage.setItem(sig, JSON.stringify(Object.assign(saved || {}, keep))); }catch(e){}
+  }
+  delete chosen._remember;
+  return chosen;
+}
+
+function normalizeRows(rows, map, images){
+  const imgs = (map.image >= 0 && images && images.get(map.image)) || new Map();
+  const cell = (r, k) => { const i = map[k]; if(i == null || i < 0) return ''; const v = r[i]; return v === undefined || v === null ? '' : v.toString(); };
   const out = [];
-  for(let i=1;i<rows.length;i++){
+  for(let i = 1; i < rows.length; i++){
     const r = rows[i];
-    if(!r || r.every(c => c===undefined || c===null || c==='')) continue;
-    const nom = (r[iNom]||'').toString().trim();
-    const prenom = (r[iPrenom]||'').toString().trim();
+    if(!r || r.every(c => c === undefined || c === null || c === '')) continue;
+    const nom = cell(r, 'nom').trim();
+    const prenom = cell(r, 'prenom').trim();
     if(!nom && !prenom) continue;
-    const casaqueVal = r[iCasaque];
     const excelRowNum = i + 1; // rows[0] = en-tête = ligne Excel 1, donc rows[i] = ligne Excel i+1
     out.push({
-      casaque: (casaqueVal===undefined || casaqueVal===null) ? '' : casaqueVal.toString(),
-      casaqueImg: imageMap.get(excelRowNum) || null,
-      nomAdresse: (r[iNomAdr]||'').toString().trim(),
+      casaque: cell(r, 'casaque'),
+      casaqueImg: imgs.get(excelRowNum) || null,
+      nomAdresse: cell(r, 'nomAdresse').trim(),
       nom, prenom,
-      email: (r[iEmail]||'').toString().trim(),
-      tel1: (r[iTel1]||'').toString().trim(),
-      tel2: (r[iTel2]||'').toString().trim(),
-      adr1: (r[iAdr1]||'').toString().trim(),
-      adr2: (r[iAdr2]||'').toString().trim(),
-      adr3: (r[iAdr3]||'').toString().trim(),
-      cp: (r[iCp]===undefined || r[iCp]===null) ? '' : r[iCp].toString().trim(),
-      ville: (r[iVille]||'').toString().trim(),
-      pays: (r[iPays]||'').toString().trim(),
-      coul1: (r[iCoul1]||'').toString().trim(),
-      societe: (r[iTypePersonne]||'').toString().trim().toLowerCase().includes('morale'),
-      casaqueBase: (r[iCasaqueBase]||'').toString().trim(),
-      casaqueSec: (r[iCasaqueSec]||'').toString().trim(),
-      casaqueDispositif: (r[iCasaqueDispo]||'').toString().trim(),
-      manchesBase: (r[iManchesBase]||'').toString().trim(),
-      manchesSec: (r[iManchesSec]||'').toString().trim(),
-      manchesDispositif: (r[iManchesDispo]||'').toString().trim(),
+      email: cell(r, 'email').trim(),
+      tel1: cell(r, 'tel1').trim(),
+      tel2: cell(r, 'tel2').trim(),
+      adr1: cell(r, 'adr1').trim(),
+      adr2: cell(r, 'adr2').trim(),
+      adr3: cell(r, 'adr3').trim(),
+      cp: cell(r, 'cp').trim(),
+      ville: cell(r, 'ville').trim(),
+      pays: cell(r, 'pays').trim(),
+      // libellé coupé en deux colonnes de longueur fixe (« …M BLA » + « NCHES… ») : on recolle tel quel
+      coul1: (cell(r, 'coul1') + cell(r, 'coul2')).replace(/\s+/g, ' ').trim(),
+      societe: cell(r, 'typePersonne').trim().toLowerCase().includes('morale'),
+      casaqueBase: cell(r, 'casaqueBase').trim(),
+      casaqueSec: cell(r, 'casaqueSec').trim(),
+      casaqueDispositif: cell(r, 'casaqueDispositif').trim(),
+      manchesBase: cell(r, 'manchesBase').trim(),
+      manchesSec: cell(r, 'manchesSec').trim(),
+      manchesDispositif: cell(r, 'manchesDispositif').trim(),
     });
   }
   return out;
@@ -3436,14 +3587,16 @@ const MERGEABLE_FIELDS = [
 // d'un fichier corrigé/complété), on met à jour les champs manquants au lieu de dupliquer la ligne,
 // et on conserve l'état déjà connu (tracking / envoyé / programme généré).
 async function applyWorkbook(buf, lotName){
-  let imageMap = new Map();
-  try{ imageMap = await extractRichDataImages(buf); }
+  let images = new Map();
+  try{ images = await extractSheetImages(buf); }
   catch(e){ console.warn('Extraction vignettes casaque impossible', e); }
 
   const wb = XLSX.read(buf, {type:'array'});
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:true, defval:''});
-  const parsedRows = normalizeRows(rows, imageMap).map(r => { r._key = keyFor(r); return r; });
+  const colMap = await resolveColumnMap(rows, images);
+  if(!colMap) return false; // import annulé dans la fenêtre des colonnes
+  const parsedRows = normalizeRows(rows, colMap, images).map(r => { r._key = keyFor(r); return r; });
 
   const toSync = [];
   for(const parsed of parsedRows){
@@ -3472,6 +3625,7 @@ async function applyWorkbook(buf, lotName){
   currentLot = lotName;
   syncLotWithPocketBase(toSync, lotName);
   render();
+  return true;
 }
 
 document.getElementById('fileInput').addEventListener('change', async (e) => {
@@ -3492,7 +3646,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
   const suggested = file.name.replace(/\.[^.]+$/,'');
   const lotName = await customPrompt('Nom pour cet import (les fiches seront regroupées sous ce nom) :', suggested);
   if(!lotName){ e.target.value = ''; return; }
-  await applyWorkbook(buf, lotName.trim());
+  if(!(await applyWorkbook(buf, lotName.trim()))){ e.target.value = ''; return; }
   saveHistoryEntry({ hash, filename:file.name, date:new Date().toISOString(), rows: records.filter(r=>r.lot===lotName.trim()).length, lot: lotName.trim() });
   e.target.value = '';
 });

@@ -368,6 +368,41 @@
   .fx-row.late-3{ box-shadow:inset 0 0 0 2px #C8372D; }
   .fx-late{ font-weight:700; }
   .fx-row.late-1 .fx-late{ color:#3E9B5A; } .fx-row.late-2 .fx-late{ color:#E08A1E; } .fx-row.late-3 .fx-late{ color:#C8372D; }
+  /* ---------- Onglet Statistiques (chiffre d'affaires d'après les factures Axonaut) ---------- */
+  #stHeader{ background:var(--paper); border-bottom:2px solid var(--ink); padding:10px 26px; position:sticky; top:45px; z-index:30; }
+  #stHeader .toolbar{ gap:8px; }
+  #stHeader select, #stHeader .dateInput{ font-family:sans-serif; font-size:.78rem; padding:6px 8px; border:1.5px solid var(--line); border-radius:8px; background:var(--white); color:var(--ink); }
+  #stHeader label{ font-family:sans-serif; font-size:.72rem; color:var(--muted); font-weight:600; }
+  #stBody{ padding:18px 26px 40px; font-family:sans-serif; max-width:1250px; }
+  .st-kpis{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; margin-bottom:16px; }
+  .st-kpi{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; }
+  .st-kpi .k{ font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+  .st-kpi .v{ font-family:var(--font-display, Georgia, serif); font-size:1.5rem; font-weight:600; margin-top:4px; color:var(--ink); }
+  .st-kpi .s{ font-size:.74rem; color:var(--muted); margin-top:2px; }
+  .st-up{ color:var(--silk-green); font-weight:700; } .st-down{ color:var(--silk-red); font-weight:700; }
+  .st-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; }
+  .st-card h3{ margin:0 0 10px; font-size:.95rem; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .st-legend{ font-size:.72rem; font-weight:400; color:var(--muted); display:flex; gap:14px; align-items:center; }
+  .st-legend i{ display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:5px; }
+  .st-legend i.prev{ height:0; border-top:2px solid var(--ink); border-radius:0; width:14px; vertical-align:3px; }
+  #stChart{ position:relative; }
+  #stChart svg{ display:block; width:100%; overflow:visible; }
+  #stChart .bar{ fill:#B5452F; }
+  #stChart .hit{ fill:transparent; cursor:pointer; }
+  #stChart .hit:hover + .bar, #stChart .bar.hover{ fill:#8E3423; }
+  #stChart .grid{ stroke:var(--line); stroke-width:1; }
+  #stChart .axis{ fill:var(--muted); font-size:11px; font-family:sans-serif; }
+  #stChart .prev{ stroke:var(--ink); stroke-width:2; stroke-linecap:round; pointer-events:none; }
+  #stTip{ position:fixed; z-index:80; pointer-events:none; display:none; background:var(--ink); color:#fff; font-family:sans-serif; font-size:.76rem; line-height:1.45; padding:8px 10px; border-radius:8px; box-shadow:var(--shadow); max-width:260px; }
+  .st-table{ width:100%; border-collapse:collapse; font-size:.8rem; }
+  .st-table th, .st-table td{ padding:6px 8px; border-bottom:1px solid var(--line); text-align:left; }
+  .st-table th{ font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  .st-table .n{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .st-table tfoot td{ font-weight:700; border-top:2px solid var(--ink); border-bottom:none; }
+  .st-table tbody tr.click{ cursor:pointer; } .st-table tbody tr.click:hover{ background:var(--paper); }
+  .st-cbar{ height:8px; border-radius:4px; background:#B5452F; min-width:2px; }
+  .st-cols{ display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:16px; }
+  @media (max-width:1000px){ .st-cols{ grid-template-columns:1fr; } }
   .fx-row .l1{ display:flex; justify-content:space-between; gap:8px; font-size:.82rem; font-weight:700; }
   .fx-row .l2{ display:flex; justify-content:space-between; gap:8px; font-size:.74rem; color:var(--muted); margin-top:2px; }
   .fx-paid{ color:var(--silk-green); font-weight:700; }
@@ -443,6 +478,7 @@
   <button class="tab-btn" data-tab="devis" id="tabBtnDevis">📑 Devis</button>
   <button class="tab-btn active" data-tab="commande" id="tabBtnCommande">📦 Commande</button>
   <button class="tab-btn" data-tab="factures" id="tabBtnFactures">💶 Factures</button>
+  <button class="tab-btn" data-tab="stats" id="tabBtnStats">📊 Statistiques</button>
   <button class="tab-btn" data-tab="params" id="tabBtnParams">⚙︎ Paramètres</button>
 </div>
 
@@ -1024,6 +1060,30 @@
     <div id="fxDetail"><div style="font-family:sans-serif; color:var(--muted);">Choisis une facture dans la liste.</div></div>
   </div>
 </div><!-- /tabPanelFactures -->
+
+<div id="tabPanelStats" class="tab-panel">
+  <div id="stHeader">
+    <div class="toolbar">
+      <select id="stView" title="Regroupement">
+        <option value="month">Par mois</option>
+        <option value="year">Par année</option>
+        <option value="custom">Dates personnalisées</option>
+      </select>
+      <select id="stYear" title="Année"></select>
+      <label class="st-custom">Du <input type="date" class="dateInput" id="stFrom"></label>
+      <label class="st-custom">au <input type="date" class="dateInput" id="stTo"></label>
+      <select id="stClient" title="Client" style="max-width:260px;"><option value="">Tous les clients</option></select>
+      <select id="stAmt" title="Montants">
+        <option value="ht">Montants HT</option>
+        <option value="ttc">Montants TTC</option>
+      </select>
+      <button class="btn ghost" id="stRefresh">↻ Actualiser</button>
+      <span id="stInfo" style="font-family:sans-serif; font-size:.75rem; color:var(--muted);"></span>
+    </div>
+  </div>
+  <div id="stBody"><div style="padding:20px; font-family:sans-serif; color:var(--muted);">Chargement des factures…</div></div>
+  <div id="stTip" role="tooltip"></div>
+</div><!-- /tabPanelStats -->
 
 
 <div id="tabPanelParams" class="tab-panel">
@@ -5351,7 +5411,7 @@ function setAdminMode(on){
 
 // ---------- Onglets ----------
 const ACTIVE_TAB_KEY = 'csb_envoi_axonaut_active_tab';
-const TAB_SUFFIX = { devis:'Devis', commande:'Commande', factures:'Factures', params:'Params' };
+const TAB_SUFFIX = { devis:'Devis', commande:'Commande', factures:'Factures', stats:'Stats', params:'Params' };
 function activateTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -5360,6 +5420,7 @@ function activateTab(tab){
   try{ localStorage.setItem(ACTIVE_TAB_KEY, tab); }catch(e){}
   if(tab === 'devis') ensureDevisModuleFrame();
   if(tab === 'factures') fxOpen();
+  if(tab === 'stats') stOpen();
 }
 
 // ---------- Onglet Factures : toutes les factures Axonaut ----------
@@ -5633,6 +5694,225 @@ document.getElementById('fxReset').addEventListener('click', () => {
 });
 document.getElementById('fxRefresh').addEventListener('click', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); Object.keys(fxEventsCache).forEach(k => delete fxEventsCache[k]); fxOpen(true); });
 window.addEventListener('resize', fxUpdateHeaderHeight);
+
+// ---------- Onglet Statistiques : chiffre d'affaires d'après les factures Axonaut ----------
+// Mêmes factures que l'onglet Factures (chargées une seule fois). Regroupement par mois d'une
+// année, par année, ou sur des dates choisies ; pour tous les clients ou un seul ; en HT ou TTC.
+// Chaque période est comparée à la même période de l'année précédente.
+const ST_MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+let stInited = false;
+async function stEnsureInvoices(){
+  if(!fxInvoices) await fxOpen();
+  while(!fxInvoices && fxLoading) await new Promise(r => setTimeout(r, 200));
+  return fxInvoices;
+}
+async function stOpen(force){
+  const body = document.getElementById('stBody');
+  if(force || !fxInvoices) body.innerHTML = '<div style="padding:20px; color:var(--muted);">Chargement des factures…</div>';
+  if(force){ fxInvoices = null; }
+  await stEnsureInvoices();
+  if(!fxInvoices){ body.innerHTML = '<div style="padding:20px; color:var(--silk-red);">Impossible de charger les factures.</div>'; return; }
+  if(!stInited) stInit();
+  stRender();
+}
+function stInit(){
+  stInited = true;
+  const now = new Date(), y = now.getFullYear();
+  const years = [...new Set(fxInvoices.map(i => fxIsoDay(i.date).slice(0, 4)).filter(Boolean))].sort().reverse();
+  if(!years.includes(String(y))) years.unshift(String(y));
+  document.getElementById('stYear').innerHTML = years.map(v => `<option value="${v}">${v}</option>`).join('');
+  document.getElementById('stYear').value = String(y);
+  document.getElementById('stFrom').value = y + '-01-01';
+  document.getElementById('stTo').value = fxIsoDay(now);
+}
+const stAmount = inv => document.getElementById('stAmt').value === 'ttc' ? fxNum(inv.total) : fxHT(inv);
+// reste dû des factures non réglées, en HT ou TTC selon le choix
+const stDue = inv => document.getElementById('stAmt').value === 'ttc' ? fxDuTTC(inv) : fxDuHT(inv);
+const stShift = (iso, years) => (Number(iso.slice(0, 4)) + years) + iso.slice(4);
+function stPeriodLabel(key, unit, long){
+  if(unit === 'year') return key;
+  if(unit === 'month'){ const m = ST_MONTHS[Number(key.slice(5, 7)) - 1]; return long ? m + ' ' + key.slice(0, 4) : m; }
+  return key.slice(8, 10) + '/' + key.slice(5, 7);
+}
+// Calcule les périodes affichées, leur total, et le même total un an plus tôt
+function stCompute(){
+  const view = document.getElementById('stView').value;
+  const client = document.getElementById('stClient').value;
+  const today = fxIsoDay(new Date());
+  let from, to, unit;
+  if(view === 'month'){ const y = document.getElementById('stYear').value; from = y + '-01-01'; to = y + '-12-31'; unit = 'month'; }
+  else if(view === 'custom'){
+    from = document.getElementById('stFrom').value || '2000-01-01';
+    to = document.getElementById('stTo').value || today;
+    if(from > to) [from, to] = [to, from];
+    unit = (new Date(to) - new Date(from)) / 86400000 <= 62 ? 'day' : 'month';
+  }else{ unit = 'year'; }
+  const all = fxInvoices.filter(i => fxIsoDay(i.date));
+  if(unit === 'year'){
+    const ys = all.map(i => fxIsoDay(i.date).slice(0, 4)).sort();
+    from = (ys[0] || today.slice(0, 4)) + '-01-01'; to = today.slice(0, 4) + '-12-31';
+  }
+  const keyOf = d => unit === 'year' ? d.slice(0, 4) : unit === 'month' ? d.slice(0, 7) : d;
+  // liste complète des périodes (y compris celles sans facture)
+  const keys = [];
+  const cur = new Date(from + 'T12:00:00'), end = new Date(to + 'T12:00:00');
+  while(cur <= end){
+    const k = keyOf(fxIsoDay(cur));
+    if(keys[keys.length - 1] !== k) keys.push(k);
+    if(unit === 'day') cur.setDate(cur.getDate() + 1);
+    else if(unit === 'month'){ cur.setDate(1); cur.setMonth(cur.getMonth() + 1); }
+    else cur.setFullYear(cur.getFullYear() + 1);
+  }
+  const inRange = (d, a, b) => d >= a && d <= b;
+  const periodInv = all.filter(i => inRange(fxIsoDay(i.date), from, to));
+  const prevFrom = stShift(from, -1), prevTo = stShift(to, -1);
+  const prevInv = all.filter(i => inRange(fxIsoDay(i.date), prevFrom, prevTo));
+  // clients proposés : ceux qui ont des factures sur la période, par chiffre d'affaires décroissant
+  const byClient = {};
+  periodInv.forEach(i => { const c = fxClient(i); (byClient[c] = byClient[c] || { name: c, ca: 0, n: 0, du: 0, nd: 0 }); byClient[c].ca += stAmount(i); byClient[c].n++; byClient[c].du += stDue(i); byClient[c].nd += fxDuTTC(i) > 0.005 ? 1 : 0; });
+  const clients = Object.values(byClient).sort((a, b) => b.ca - a.ca);
+  const sel = document.getElementById('stClient');
+  const names = clients.map(c => c.name);
+  if(client && !names.includes(client)) names.unshift(client);
+  sel.innerHTML = '<option value="">Tous les clients</option>' + names.map(n => `<option value="${fxEsc(n)}">${fxEsc(n)}</option>`).join('');
+  sel.value = client;
+  const keep = i => !client || fxClient(i) === client;
+  const inv = periodInv.filter(keep), prev = prevInv.filter(keep);
+  const rows = keys.map(k => ({ key: k, ca: 0, ht: 0, ttc: 0, n: 0, prev: 0, du: 0, nd: 0 }));
+  const idx = Object.fromEntries(rows.map((r, n) => [r.key, n]));
+  inv.forEach(i => { const r = rows[idx[keyOf(fxIsoDay(i.date))]]; if(!r) return; r.ca += stAmount(i); r.ht += fxHT(i); r.ttc += fxNum(i.total); r.n++; r.du += stDue(i); if(fxDuTTC(i) > 0.005) r.nd++; });
+  // année précédente ; pour la période en cours (pas finie), seulement jusqu'au même jour
+  const todayKey = keyOf(today);
+  prev.forEach(i => {
+    const sd = stShift(fxIsoDay(i.date), 1), k = keyOf(sd);
+    if(k === todayKey && sd > today) return;
+    const r = rows[idx[k]]; if(r) r.prev += stAmount(i);
+  });
+  // comparaison « à date » : pour une période qui n'est pas finie, l'année précédente est
+  // comptée jusqu'au même jour, pour comparer ce qui est comparable
+  const cut = to > today ? today : to;
+  const prevToDate = prev.filter(i => fxIsoDay(i.date) <= stShift(cut, -1)).reduce((t, i) => t + stAmount(i), 0);
+  return { view, unit, from, to, client, rows, inv, clients, prevToDate, partial: to > today, hasPrev: unit !== 'year' || rows.length > 1 };
+}
+function stDelta(cur, prev){
+  if(!prev) return '';
+  const p = (cur - prev) / Math.abs(prev) * 100;
+  return `<span class="${p >= 0 ? 'st-up' : 'st-down'}">${p >= 0 ? '▲ +' : '▼ '}${p.toFixed(1).replace('.', ',')} %</span>`;
+}
+function stRender(){
+  if(!fxInvoices) return;
+  const view = document.getElementById('stView').value;
+  document.getElementById('stYear').style.display = view === 'month' ? '' : 'none';
+  document.querySelectorAll('.st-custom').forEach(el => el.style.display = view === 'custom' ? '' : 'none');
+  const d = stCompute();
+  const amtLabel = document.getElementById('stAmt').value === 'ttc' ? 'TTC' : 'HT';
+  const total = d.rows.reduce((t, r) => t + r.ca, 0);
+  const n = d.inv.length;
+  const du = d.inv.reduce((t, i) => t + fxDuTTC(i), 0);
+  const totTTC = d.inv.reduce((t, i) => t + fxNum(i.total), 0);
+  const best = d.rows.reduce((b, r) => r.ca > (b ? b.ca : -Infinity) ? r : b, null);
+  const rangeTxt = d.unit === 'year' ? 'toutes les années' : `du ${fxDate(d.from)} au ${fxDate(d.to)}`;
+  document.getElementById('stInfo').textContent = `${n} facture(s) · ${rangeTxt}${d.client ? ' · ' + d.client : ''}`;
+  const prevLabel = d.partial ? "même période l'an dernier, à date" : "même période l'an dernier";
+  const kpis = `<div class="st-kpis">
+    <div class="st-kpi"><div class="k">Chiffre d'affaires ${amtLabel}</div><div class="v">${fxEur(total)}</div>
+      <div class="s">${d.unit === 'year' ? 'toutes années confondues' : (d.prevToDate ? stDelta(total, d.prevToDate) + ' vs ' + fxEur(d.prevToDate) + ' (' + prevLabel + ')' : "pas de factures l'an dernier sur cette période")}</div></div>
+    <div class="st-kpi"><div class="k">Factures</div><div class="v">${n}</div><div class="s">${d.client ? fxEsc(d.client) : d.clients.length + ' client(s)'}</div></div>
+    <div class="st-kpi"><div class="k">Panier moyen ${amtLabel}</div><div class="v">${fxEur(n ? total / n : 0)}</div><div class="s">par facture</div></div>
+    <div class="st-kpi"><div class="k">Encaissé / reste dû (TTC)</div><div class="v">${fxEur(totTTC - du)}</div><div class="s">${du > 0.005 ? '<span class="fx-unpaid">reste dû ' + fxEur(du) + ' TTC</span> · ' + d.inv.filter(i => fxDuTTC(i) > 0.005).length + ' facture(s)' : 'tout est réglé'}</div></div>
+    ${best && best.ca ? `<div class="st-kpi"><div class="k">Meilleure période</div><div class="v">${stPeriodLabel(best.key, d.unit, true)}</div><div class="s">${fxEur(best.ca)} ${amtLabel}</div></div>` : ''}
+  </div>`;
+  const unitName = { month: 'mois', year: 'année', day: 'jour' }[d.unit];
+  const chart = `<div class="st-card"><h3>Chiffre d'affaires ${amtLabel} par ${unitName}
+      <span class="st-legend"><span><i style="background:#B5452F"></i>${d.unit === 'year' ? 'Année' : 'Période choisie'}</span><span><i class="prev"></i>Année précédente (à date pour la période en cours)</span></span></h3>
+    <div id="stChart"></div></div>`;
+  const showPrev = true;
+  const table = `<div class="st-card"><h3>Détail par ${unitName}</h3>
+    <table class="st-table"><thead><tr><th>Période</th><th class="n">Factures</th><th class="n">CA HT</th><th class="n">CA TTC</th>${showPrev ? `<th class="n" title="Pour la période en cours : jusqu'au même jour de l'année précédente">Année préc. (${amtLabel})</th>` : ''}<th class="n">Évolution</th><th class="n">Reste dû ${amtLabel}</th></tr></thead>
+    <tbody>${d.rows.map((r, k) => {
+      const ref = r.prev;
+      return `<tr class="${d.unit !== 'day' ? 'click' : ''}" data-key="${r.key}"><td>${stPeriodLabel(r.key, d.unit, true)}</td><td class="n">${r.n || ''}</td><td class="n">${r.n ? fxEur(r.ht) : '—'}</td><td class="n">${r.n ? fxEur(r.ttc) : '—'}</td>${showPrev ? `<td class="n">${r.prev ? fxEur(r.prev) : '—'}</td>` : ''}<td class="n">${r.ca && ref ? stDelta(r.ca, ref) : ''}</td><td class="n">${stDueCell(r.du, r.nd)}</td></tr>`;
+    }).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td class="n">${n}</td><td class="n">${fxEur(d.rows.reduce((t, r) => t + r.ht, 0))}</td><td class="n">${fxEur(d.rows.reduce((t, r) => t + r.ttc, 0))}</td>${showPrev ? `<td class="n">${fxEur(d.rows.reduce((t, r) => t + r.prev, 0))}</td>` : ''}<td></td><td class="n">${stDueCell(d.rows.reduce((t, r) => t + r.du, 0), d.rows.reduce((t, r) => t + r.nd, 0))}</td></tr></tfoot></table></div>`;
+  const top = d.client ? '' : `<div class="st-card"><h3>Par client <span class="st-legend">clic sur un client pour voir son détail</span></h3>
+    ${d.clients.length ? `<table class="st-table"><thead><tr><th>Client</th><th style="width:30%;"></th><th class="n">Factures</th><th class="n">CA ${amtLabel}</th><th class="n">Part</th><th class="n">Reste dû ${amtLabel}</th></tr></thead>
+    <tbody>${d.clients.map(c => `<tr class="click" data-client="${fxEsc(c.name)}"><td>${fxEsc(c.name)}</td><td><div class="st-cbar" style="width:${d.clients[0].ca > 0 ? Math.max(0, c.ca / d.clients[0].ca * 100) : 0}%"></div></td><td class="n">${c.n}</td><td class="n">${fxEur(c.ca)}</td><td class="n">${total ? (c.ca / total * 100).toFixed(1).replace('.', ',') + ' %' : ''}</td><td class="n">${stDueCell(c.du, c.nd)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td></td><td class="n">${n}</td><td class="n">${fxEur(total)}</td><td></td><td class="n">${stDueCell(d.clients.reduce((t, c) => t + c.du, 0), d.clients.reduce((t, c) => t + c.nd, 0))}</td></tr></tfoot></table>` : '<div style="color:var(--muted);">Aucune facture sur la période.</div>'}</div>`;
+  const body = document.getElementById('stBody');
+  body.innerHTML = kpis + chart + (top ? `<div class="st-cols">${table}${top}</div>` : table);
+  stDrawChart(d, amtLabel);
+  // un clic sur une année ouvre ses mois ; sur un mois, ses jours ; sur un client, son détail
+  body.querySelectorAll('tr.click[data-key]').forEach(tr => tr.addEventListener('click', () => stDrill(d, tr.dataset.key)));
+  body.querySelectorAll('tr.click[data-client]').forEach(tr => tr.addEventListener('click', () => { document.getElementById('stClient').value = tr.dataset.client; stRender(); }));
+}
+function stDueCell(du, nd){
+  return du > 0.005 ? `<span class="fx-unpaid" title="${nd} facture(s) non réglée(s)">${fxEur(du)}</span>` : '<span style="color:var(--muted);">—</span>';
+}
+function stDrill(d, key){
+  if(d.unit === 'year'){ document.getElementById('stView').value = 'month'; document.getElementById('stYear').value = key; }
+  else if(d.unit === 'month'){
+    const last = new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0).getDate();
+    document.getElementById('stView').value = 'custom';
+    document.getElementById('stFrom').value = key + '-01';
+    document.getElementById('stTo').value = key + '-' + String(last).padStart(2, '0');
+  }else return;
+  stRender();
+}
+function stNiceMax(v){
+  if(v <= 0) return 100;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for(const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if(m * p >= v) return m * p;
+  return 10 * p;
+}
+const stShort = v => Math.abs(v) >= 1000 ? (v / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' k€' : Math.round(v) + ' €';
+function stDrawChart(d, amtLabel){
+  const box = document.getElementById('stChart');
+  if(!box) return;
+  const W = Math.max(320, box.clientWidth), H = 260, L = 58, R = 10, T = 12, B = 28;
+  const rows = d.rows, nB = rows.length || 1;
+  const max = stNiceMax(Math.max(0, ...rows.map(r => Math.max(r.ca, r.prev))));
+  const min = Math.min(0, ...rows.map(r => r.ca));
+  const y = v => T + (H - T - B) * (1 - (v - min) / (max - min || 1));
+  const slot = (W - L - R) / nB, bw = Math.max(2, Math.min(56, slot * 0.62));
+  let svg = '';
+  for(let k = 0; k <= 4; k++){
+    const v = min + (max - min) * k / 4, yy = y(v);
+    svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text class="axis" x="${L - 6}" y="${yy + 4}" text-anchor="end">${stShort(v)}</text>`;
+  }
+  const every = Math.ceil(nB / Math.max(1, Math.floor((W - L - R) / 46)));
+  rows.forEach((r, k) => {
+    const cx = L + slot * k + slot / 2, x = cx - bw / 2;
+    const y0 = y(0), y1 = y(r.ca), top = Math.min(y0, y1), h = Math.abs(y0 - y1);
+    const rr = Math.min(4, bw / 2, h);
+    // barre arrondie (4 px) du côté de la valeur, posée sur la ligne de base
+    const bar = h > 0 ? (r.ca >= 0
+      ? `<path class="bar" data-i="${k}" d="M${x},${y0} V${top + rr} Q${x},${top} ${x + rr},${top} H${x + bw - rr} Q${x + bw},${top} ${x + bw},${top + rr} V${y0} Z"/>`
+      : `<path class="bar" data-i="${k}" d="M${x},${y0} V${top + h - rr} Q${x},${top + h} ${x + rr},${top + h} H${x + bw - rr} Q${x + bw},${top + h} ${x + bw},${top + h - rr} V${y0} Z"/>`) : '';
+    svg += `<rect class="hit" data-i="${k}" x="${L + slot * k}" y="${T}" width="${slot}" height="${H - T - B}"/>${bar}`;
+    if(r.prev) svg += `<line class="prev" x1="${x - 2}" x2="${x + bw + 2}" y1="${y(r.prev)}" y2="${y(r.prev)}"/>`;
+    if(k % every === 0) svg += `<text class="axis" x="${cx}" y="${H - 8}" text-anchor="middle">${stPeriodLabel(r.key, d.unit)}</text>`;
+  });
+  svg += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-width="1"/>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Chiffre d'affaires ${amtLabel} par période">${svg}</svg>`;
+  const tip = document.getElementById('stTip');
+  box.querySelectorAll('.hit').forEach(el => {
+    const r = rows[Number(el.dataset.i)];
+    const bar = box.querySelector(`.bar[data-i="${el.dataset.i}"]`);
+    el.addEventListener('mousemove', e => {
+      tip.innerHTML = `<b>${stPeriodLabel(r.key, d.unit, true)}</b><br>${fxEur(r.ca)} ${amtLabel} · ${r.n} facture(s)<br>Année préc. : ${r.prev ? fxEur(r.prev) : '—'} ${r.ca && r.prev ? stDelta(r.ca, r.prev).replace(/class="st-(up|down)"/, 'style="font-weight:700"') : ''}${d.unit !== 'day' ? '<br><span style="opacity:.7">clic : détail</span>' : ''}`;
+      tip.style.display = 'block';
+      const tx = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+      tip.style.left = tx + 'px'; tip.style.top = (e.clientY - tip.offsetHeight - 10) + 'px';
+      if(bar) bar.classList.add('hover');
+    });
+    el.addEventListener('mouseleave', () => { tip.style.display = 'none'; if(bar) bar.classList.remove('hover'); });
+    el.addEventListener('click', () => { tip.style.display = 'none'; stDrill(d, r.key); });
+  });
+}
+['stView', 'stYear', 'stFrom', 'stTo', 'stClient', 'stAmt'].forEach(id => document.getElementById(id).addEventListener('change', stRender));
+document.getElementById('stRefresh').addEventListener('click', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); stOpen(true); });
+let stResizeT = null;
+window.addEventListener('resize', () => { clearTimeout(stResizeT); stResizeT = setTimeout(() => { if(document.getElementById('tabPanelStats').classList.contains('active')) stRender(); }, 150); });
 
 
 // ---------- Navigation croisée Commande <-> Devis ----------
@@ -6562,10 +6842,13 @@ function applyPermissions(){
   const canCommandes = CSBAuth.can('axonaut', 'commandes');
   const canFactures = CSBAuth.can('axonaut', 'factures');
   const canSettings = CSBAuth.can('axonaut', 'settings');
+  const canStats = CSBAuth.can('axonaut', 'stats');
   document.getElementById('tabBtnDevis').style.display = canDevis ? '' : 'none';
   document.getElementById('tabBtnCommande').style.display = canCommandes ? '' : 'none';
   document.getElementById('tabBtnFactures').style.display = canFactures ? '' : 'none';
   document.getElementById('tabBtnParams').style.display = canSettings ? '' : 'none';
+  document.getElementById('tabBtnStats').style.display = canStats ? '' : 'none';
+  if(!canStats && document.getElementById('tabBtnStats').classList.contains('active')) activateTab('commande');
   if(!canDevis && document.getElementById('tabBtnDevis').classList.contains('active')) activateTab('commande');
   if(!canCommandes && document.getElementById('tabBtnCommande').classList.contains('active')) activateTab('devis');
   if(!canFactures && document.getElementById('tabBtnFactures').classList.contains('active')) activateTab('commande');

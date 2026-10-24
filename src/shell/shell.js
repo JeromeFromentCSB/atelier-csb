@@ -4,6 +4,7 @@
       { key: 'devis', label: 'Onglet Devis' },
       { key: 'commandes', label: 'Onglet Commande' },
       { key: 'factures', label: 'Onglet Factures (liste des factures Axonaut)' },
+      { key: 'stats', label: "Onglet Statistiques (chiffre d'affaires)" },
       { key: 'etiquettes', label: 'Gestion des étiquettes' },
       { key: 'devis_pdf', label: 'Voir le PDF du devis' },
       { key: 'settings', label: 'Réglages (⚙︎)' },
@@ -245,6 +246,36 @@
   let moduleOrder = loadModuleOrder();
   let draggedModId = null;
 
+  // ================== Compteur des demandes (prix / commandes) à côté du module Email ==================
+  // Relevé toutes les 5 minutes (et mis à jour aussitôt par le module Email après chaque action).
+  let demandesCounts = null;
+  function demandesBadgeHtml() {
+    const c = demandesCounts;
+    if (!c || !c.atraiter) return '';
+    const hot = c.unread || c.noReply;
+    const tip = `${c.atraiter} demande(s) à traiter` + (c.unread ? ` · ${c.unread} avec un message non lu` : '') + (c.noReply ? ` · ${c.noReply} sans réponse` : '');
+    return `<span class="nav-badge${hot ? ' hot' : ''}" title="${tip}">${c.atraiter}</span>`;
+  }
+  function setDemandesCounts(c) {
+    const same = JSON.stringify(c) === JSON.stringify(demandesCounts);
+    demandesCounts = c;
+    if (!same) renderModuleNav();
+  }
+  async function pollDemandes() {
+    if (!window.csbHost || !window.csbHost.demandesSearch || !window.CSBDemandes) return;
+    if (!CSBAuth.currentUser() || !CSBAuth.hasModuleAccess('email')) return;
+    if (moduleFrames.email) return; // module Email ouvert : c'est lui qui relève et envoie les compteurs
+    try {
+      const d = await window.CSBDemandes.load(window.csbHost, { suggestions: false });
+      setDemandesCounts(window.CSBDemandes.counts(d.threads));
+    } catch (e) { /* boîte mail non connectée sur ce poste : pas de compteur */ }
+  }
+  window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'csb:demandes-counts' && event.data.counts) setDemandesCounts(event.data.counts);
+  });
+  setTimeout(pollDemandes, 15000);
+  setInterval(pollDemandes, 5 * 60 * 1000);
+
   function renderModuleNav() {
     moduleNav.innerHTML = '';
     moduleOrder.forEach((mod) => {
@@ -253,7 +284,7 @@
       const item = document.createElement('div');
       item.className = 'nav-item' + (mod.id === activeModuleId ? ' active' : '') + (allowed ? '' : ' locked');
       item.innerHTML = `<span class="icon">${mod.icon}</span><span class="label">${mod.label}</span>` +
-        (allowed ? '' : '<span class="soon">🔒</span>');
+        (allowed ? '' : '<span class="soon">🔒</span>') + (allowed && mod.id === 'email' ? demandesBadgeHtml() : '');
       item.draggable = true;
       item.dataset.modId = mod.id;
       item.title = allowed ? mod.label : "Tu n'as pas accès à ce module — demande à un administrateur.";

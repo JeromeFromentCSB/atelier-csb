@@ -138,6 +138,11 @@
   .msg-row:hover .msg-pin{ opacity:.45; }
   .msg-pin:hover{ opacity:.8 !important; }
   .msg-pin.pinned{ opacity:1; filter:none; }
+  .msg-del{ flex-shrink:0; font-size:.78rem; opacity:0; cursor:pointer; margin-top:5px; filter:grayscale(1); }
+  .msg-row:hover .msg-del{ opacity:.5; }
+  .msg-del:hover{ opacity:1 !important; filter:none; }
+  .btn.danger-soft{ border-color:#E9C9C1; color:var(--silk-red); }
+  .btn.danger-soft:hover{ background:var(--silk-red-bg); }
   .msg-section-head{
     display:flex; align-items:center; gap:6px; padding:9px 14px 5px; font-family:sans-serif;
     font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
@@ -169,6 +174,16 @@
   }
   .detail-body iframe{ width:100%; border:none; background:var(--white); }
   .attach-list{ display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  /* Aperçu d'une pièce jointe, affiché sous le mail */
+  .att-preview{ margin-top:10px; border:1.5px solid var(--line); border-radius:var(--radius); background:var(--white); overflow:hidden; }
+  .att-preview:empty{ display:none; }
+  .att-preview-head{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 12px; border-bottom:1.5px solid var(--line); font-family:sans-serif; font-size:.78rem; font-weight:700; background:var(--paper-2); }
+  .att-preview-head .fn{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .att-preview-body{ display:flex; justify-content:center; padding:10px; background:#f3efe6; }
+  .att-preview-body img{ max-width:100%; max-height:80vh; box-shadow:var(--shadow); background:var(--white); }
+  .att-preview-body embed{ width:100%; height:80vh; border:none; }
+  .att-preview-body pre{ width:100%; max-height:70vh; margin:0; padding:14px; background:var(--white); overflow:auto; font-size:.78rem; white-space:pre-wrap; }
+  .att-preview-empty{ color:var(--muted); font-family:sans-serif; font-size:.8rem; text-align:center; padding:24px; }
   .attach-chip{
     display:flex; align-items:center; gap:8px; padding:8px 12px; border:1.5px solid var(--line);
     border-radius:8px; background:var(--white); cursor:pointer; font-family:sans-serif; font-size:.75rem;
@@ -191,6 +206,43 @@
   #previewBody embed{ width:100%; height:100%; border:none; }
   #previewBody pre{ width:100%; height:100%; margin:0; padding:14px; background:var(--white); overflow:auto; font-size:.78rem; white-space:pre-wrap; }
   #previewEmpty{ color:var(--muted); font-family:sans-serif; font-size:.8rem; text-align:center; padding:30px; }
+
+  /* ---------- Demandes (prix / commandes) ---------- */
+  .dm-folders-head{ padding:4px 16px 4px; font-family:sans-serif; font-size:.66rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .dm-folders-sep{ height:1px; background:#d8cfbd; margin:8px 12px; }
+  .dm-n{ margin-left:auto; min-width:18px; padding:0 6px; border-radius:999px; background:#A89F90; color:#fff; font-size:.66rem; font-weight:700; line-height:17px; text-align:center; }
+  .dm-n.hot{ background:var(--silk-red); }
+  .dm-pad{ padding:16px; font-family:sans-serif; color:var(--muted); }
+  .dm-row{ box-shadow:inset 3px 0 0 var(--dm-c, transparent); }
+  .dm-row.selected{ background:#fdf3d0; }
+  .dm-check{ margin-top:8px; flex-shrink:0; }
+  .dm-tags{ display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }
+  .dm-tag{ font-size:.64rem; font-weight:700; padding:1px 7px; border-radius:999px; background:var(--paper-2); color:var(--muted); white-space:nowrap; font-family:sans-serif; }
+  .dm-tag.warn{ background:#FFE9D6; color:#B5452F; }
+  .dm-tag.ok{ background:#E3F2E4; color:#2E7D32; }
+  .dm-bulk{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:8px 14px; border-bottom:1px solid var(--line); font-family:sans-serif; font-size:.74rem; background:#faf7ee; }
+  .dm-bulk label{ display:flex; align-items:center; gap:4px; margin-right:auto; }
+  .dm-hint{ padding:6px 14px; font-family:sans-serif; font-size:.72rem; color:var(--muted); border-bottom:1px solid var(--line); background:#faf7ee; }
+  .dm-actions{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:14px; }
+  .dm-sep{ width:1px; align-self:stretch; background:var(--line); margin:0 2px; }
+  .dm-banner{ background:#FFF6E0; border:1px solid #EBD59A; border-radius:10px; padding:9px 13px; font-family:sans-serif; font-size:.8rem; margin-bottom:14px; }
+  .dm-banner a{ color:var(--silk-red); font-weight:600; }
+  .dm-cards{ display:flex; flex-wrap:wrap; gap:12px; margin-bottom:14px; }
+  .dm-card{ flex:1 1 260px; background:var(--white); border:1.5px solid var(--line); border-radius:var(--radius); padding:11px 14px; font-family:sans-serif; font-size:.8rem; line-height:1.5; }
+  .dm-card-h{ font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:4px; }
+  .dm-muted{ color:var(--muted); font-size:.74rem; }
+  .dm-client-search{ position:relative; margin-top:8px; }
+  .dm-client-search .search{ min-width:0; width:100%; }
+  .dm-suggest{ position:absolute; z-index:20; left:0; right:0; top:100%; margin-top:3px; background:#fff; border:1.5px solid var(--line); border-radius:10px; box-shadow:var(--shadow); max-height:260px; overflow-y:auto; display:none; }
+  .dm-suggest.show{ display:block; }
+  .dm-suggest > div{ padding:7px 11px; cursor:pointer; border-bottom:1px solid var(--line); }
+  .dm-suggest > div:hover{ background:var(--paper-2); }
+  .dm-msg{ background:var(--white); border:1.5px solid var(--line); border-radius:var(--radius); padding:9px 13px; margin-bottom:10px; }
+  .dm-msg.mine{ background:#faf7ee; }
+  .dm-msg-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; cursor:pointer; font-family:sans-serif; font-size:.8rem; }
+  .dm-msg-body{ margin-top:8px; border-top:1px solid var(--line); padding-top:8px; }
+  .dm-frame{ width:100%; min-height:100px; border:none; background:#fff; }
+  .detail-toolbar{ flex-wrap:wrap; align-items:center; }
 
   ::-webkit-scrollbar{ height:10px; width:10px; }
   ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
@@ -237,6 +289,10 @@
       <input type="password" id="appPasswordInput" placeholder="xxxx xxxx xxxx xxxx">
     </div>
     <div class="row">
+      <label>Alerte « sans réponse »</label>
+      <span>quand le client attend une réponse depuis <input type="number" id="dmNoReplyDays" min="1" max="60" style="width:60px; padding:5px 8px; border:1.5px solid var(--line); border-radius:6px;"> jour(s)</span>
+    </div>
+    <div class="row">
       <button class="btn primary" id="saveCredsBtn">Enregistrer et se connecter</button>
       <button class="btn danger" id="disconnectBtn" style="display:none; border-color:var(--silk-red); color:var(--silk-red); background:#fff;">Se déconnecter</button>
       <span id="credsMsg" style="color:var(--silk-green);"></span>
@@ -246,6 +302,7 @@
 
 <div id="emailBody">
   <div id="foldersPane">
+    <div id="dmFolders"></div>
     <div id="folderList"></div>
   </div>
   <div class="pane-resizer" id="foldersResizer" title="Glisser pour redimensionner"></div>
@@ -264,8 +321,8 @@
       <div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l'afficher ici.</div>
     </div>
   </div>
-  <div class="pane-resizer" id="previewResizer" title="Glisser pour redimensionner"></div>
-  <div id="previewPane">
+  <div class="pane-resizer" id="previewResizer" style="display:none;"></div>
+  <div id="previewPane" style="display:none;">
     <div id="previewHead" style="display:none;">
       <span class="fn" id="previewFilename"></span>
       <button class="btn ghost icon" id="previewCloseBtn">✕</button>
@@ -276,6 +333,9 @@
   </div>
 </div>
 
+<script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-demandes.js"></script>
 <script>
 function escapeHtml(s){
   return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -489,13 +549,14 @@ async function loadFolders(){
 function renderFolders(){
   const el = document.getElementById('folderList');
   el.innerHTML = folders.map(f => `
-    <div class="folder-item ${f.path === currentMailbox ? 'active' : ''}" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}">
+    <div class="folder-item ${f.path === currentMailbox && !dmView ? 'active' : ''}" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}">
       <span class="ic">${folderIcon(f)}</span>
       <span class="nm">${escapeHtml(folderLabel(f))}</span>
     </div>
   `).join('');
   el.querySelectorAll('.folder-item').forEach(item => {
     item.addEventListener('click', () => {
+      dmLeaveView();
       currentMailbox = item.dataset.path;
       renderFolders();
       selectedMessageId = null;
@@ -601,9 +662,10 @@ async function loadMessages(append){
   moreBtn.textContent = 'Charger plus';
   moreBtn.style.display = hasMoreMessages ? 'block' : 'none';
 }
-document.getElementById('refreshBtn').addEventListener('click', () => loadMessages(false));
+document.getElementById('refreshBtn').addEventListener('click', () => { if(dmView) dmLoad(true); else loadMessages(false); });
 document.getElementById('loadMoreBtn').addEventListener('click', () => loadMessages(true));
-document.getElementById('searchInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') loadMessages(false); });
+document.getElementById('searchInput').addEventListener('keydown', (e) => { if(e.key === 'Enter'){ if(dmView) dmRenderList(); else loadMessages(false); } });
+document.getElementById('searchInput').addEventListener('input', () => { if(dmView) dmRenderList(); });
 
 const threadToggleBtn = document.getElementById('threadToggleBtn');
 threadToggleBtn.classList.toggle('active', threadingEnabled);
@@ -631,6 +693,7 @@ function msgRowHtml(m){
         <div class="msg-snippet">${escapeHtml(m.snippet)}</div>
       </div>
       <span class="msg-pin ${pinned ? 'pinned' : ''}" data-action="toggle-pin" data-id="${m.id}" title="${pinned ? 'Désépingler' : 'Épingler'}">📌</span>
+      ${isTrashFolder() ? '' : `<span class="msg-del" data-action="delete" data-id="${m.id}" title="Supprimer (Corbeille)">🗑️</span>`}
     </div>
   `;
 }
@@ -678,6 +741,9 @@ function wireMsgRows(listEl){
   listEl.querySelectorAll('[data-action="toggle-read"]').forEach(el => {
     el.addEventListener('click', (e) => { e.stopPropagation(); toggleReadStatus(parseInt(el.dataset.id, 10)); });
   });
+  listEl.querySelectorAll('[data-action="delete"]').forEach(el => {
+    el.addEventListener('click', (e) => { e.stopPropagation(); deleteMessage(parseInt(el.dataset.id, 10)); });
+  });
   listEl.querySelectorAll('[data-action="toggle-pin"]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -711,6 +777,7 @@ function wireMsgRows(listEl){
 
 let currentThreads = [];
 function renderList(){
+  if(dmView){ dmRenderList(); return; }
   const listEl = document.getElementById('msgList');
   const emptyEl = document.getElementById('listEmpty');
   if(!messages.length){
@@ -784,7 +851,10 @@ function wireBodyIframe(){
       // entre le haut du cadre et le bas de la fenêtre.
       const top = iframe.getBoundingClientRect().top;
       const availableHeight = window.innerHeight - top - 26;
-      iframe.style.height = Math.max(contentHeight, availableHeight) + 'px';
+      // sans pièce jointe, le cadre descend jusqu'en bas de la fenêtre ; avec, il s'arrête au
+      // contenu pour laisser les pièces jointes juste en dessous
+      const hasAtt = !!document.getElementById('attachList');
+      iframe.style.height = (hasAtt ? Math.max(contentHeight, 120) : Math.max(contentHeight, availableHeight)) + 'px';
     }catch(e){}
   }
   currentBodyResizeFn = resizeToContent;
@@ -827,20 +897,22 @@ async function openMessage(id){
     const isTrash = folders.some(f => f.path === currentMailbox && f.specialUse === '\\Trash');
     pane.innerHTML = `
       <div class="detail-toolbar">
-        ${isTrash ? '' : '<button class="btn ghost icon" id="deleteMsgBtn" title="Supprimer (déplace vers la Corbeille)">🗑️</button>'}
+        ${isTrash ? '' : '<button class="btn ghost danger-soft" id="deleteMsgBtn" title="Déplace le mail vers la Corbeille (récupérable) — touche Suppr">🗑️ Supprimer</button>'}
         <button class="btn ghost icon" id="toggleReadBtn" title="Marquer comme non lu">✉️</button>
+        ${dmMailToolbarHtml()}
       </div>
       <h2 class="detail-subject">${escapeHtml(m.subject)}</h2>
       <div class="detail-meta"><strong>${escapeHtml(m.from.name)}</strong> ${m.from.email !== m.from.name ? '&lt;' + escapeHtml(m.from.email) + '&gt;' : ''}</div>
       <div class="detail-meta">À : ${escapeHtml(m.to || '')}</div>
       <div class="detail-meta">${m.date ? new Date(m.date).toLocaleString('fr-FR') : ''}</div>
-      ${currentAttachments.length ? `<div class="attach-list" id="attachList"></div>` : ''}
       <div class="detail-body">${bodyHtml}</div>
+      ${currentAttachments.length ? `<div class="attach-list" id="attachList"></div><div class="att-preview"></div>` : ''}
     `;
     wireBodyIframe();
     const deleteBtn = document.getElementById('deleteMsgBtn');
     if(deleteBtn) deleteBtn.addEventListener('click', () => deleteMessage(id));
     document.getElementById('toggleReadBtn').addEventListener('click', () => toggleReadStatus(id));
+    dmWireMailToolbar(id);
     if(currentAttachments.length){
       const attachListEl = document.getElementById('attachList');
       attachListEl.innerHTML = currentAttachments.map((a, i) => `
@@ -858,6 +930,13 @@ async function openMessage(id){
   }
 }
 
+function isTrashFolder(){ return folders.some(f => f.path === currentMailbox && f.specialUse === '\\Trash'); }
+// Touche Suppr : supprime le mail ouvert (hors saisie de texte)
+document.addEventListener('keydown', (e) => {
+  if(e.key !== 'Delete' || (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]'))) return;
+  if(dmView && dmSelId){ const t = dmFind(dmSelId); if(t) dmDelete(t); return; }
+  if(!dmView && selectedMessageId && !isTrashFolder()) deleteMessage(selectedMessageId);
+});
 async function deleteMessage(id){
   if(!confirm('Déplacer ce mail vers la Corbeille ?')) return;
   try{
@@ -895,47 +974,37 @@ function attachIcon(contentType){
 
 function closePreview(){
   if(currentPreviewUrl){ URL.revokeObjectURL(currentPreviewUrl); currentPreviewUrl = null; }
-  document.getElementById('previewHead').style.display = 'none';
-  document.getElementById('previewBody').innerHTML = '<div id="previewEmpty">Clique sur une pièce jointe pour l\'afficher ici.</div>';
+  document.querySelectorAll('.att-preview').forEach(p => { p.innerHTML = ''; });
   document.querySelectorAll('.attach-chip.selected').forEach(c => c.classList.remove('selected'));
 }
 document.getElementById('previewCloseBtn').addEventListener('click', closePreview);
 
+// Aperçu d'une pièce jointe sous le mail ; un second clic sur la même pièce jointe le referme.
 function previewAttachment(idx){
   const a = currentAttachments[idx];
   if(!a) return;
-  document.querySelectorAll('.attach-chip').forEach(c => c.classList.remove('selected'));
   const chip = document.querySelector(`.attach-chip[data-idx="${idx}"]`);
-  if(chip) chip.classList.add('selected');
-
-  document.getElementById('previewHead').style.display = 'flex';
-  document.getElementById('previewFilename').textContent = a.filename;
-  const bodyEl = document.getElementById('previewBody');
-
+  const wasOpen = chip && chip.classList.contains('selected');
+  closePreview();
+  if(wasOpen || !chip) return;
+  chip.classList.add('selected');
+  const zone = chip.closest('.attach-list').nextElementSibling;
+  if(!zone || !zone.classList.contains('att-preview')) return;
+  zone.innerHTML = `<div class="att-preview-head"><span class="fn">${escapeHtml(a.filename)}</span><span style="display:flex; gap:6px;"><a class="btn ghost" id="attDownload" download="${escapeHtml(a.filename)}" style="text-decoration:none;">⭳ Enregistrer</a><button class="btn ghost icon" id="attClose">✕</button></span></div><div class="att-preview-body"></div>`;
+  const bodyEl = zone.querySelector('.att-preview-body');
+  zone.querySelector('#attClose').addEventListener('click', closePreview);
   try{
     if(!a.contentBase64) throw new Error('Contenu de la pièce jointe introuvable.');
     const bytes = b64ToBytes(a.contentBase64);
-    if(currentPreviewUrl){ URL.revokeObjectURL(currentPreviewUrl); }
-    const blob = new Blob([bytes], { type: a.contentType });
-    currentPreviewUrl = URL.createObjectURL(blob);
-
-    if(a.contentType.startsWith('image/')){
-      bodyEl.innerHTML = `<img src="${currentPreviewUrl}" alt="${escapeHtml(a.filename)}">`;
-    } else if(a.contentType === 'application/pdf'){
-      bodyEl.innerHTML = `<embed src="${currentPreviewUrl}" type="application/pdf">`;
-    } else if(a.contentType.startsWith('text/')){
-      const text = new TextDecoder('utf-8').decode(bytes);
-      bodyEl.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
-    } else {
-      bodyEl.innerHTML = `
-        <div id="previewEmpty">
-          <div style="font-size:2.4rem; margin-bottom:10px;">${attachIcon(a.contentType)}</div>
-          Aperçu non disponible pour ce type de fichier.<br>
-          <a href="${currentPreviewUrl}" download="${escapeHtml(a.filename)}" class="btn primary" style="display:inline-block; margin-top:14px; text-decoration:none;">⭳ Enregistrer le fichier</a>
-        </div>`;
-    }
+    currentPreviewUrl = URL.createObjectURL(new Blob([bytes], { type: a.contentType }));
+    zone.querySelector('#attDownload').href = currentPreviewUrl;
+    if(a.contentType.startsWith('image/')) bodyEl.innerHTML = `<img src="${currentPreviewUrl}" alt="${escapeHtml(a.filename)}">`;
+    else if(a.contentType === 'application/pdf') bodyEl.innerHTML = `<embed src="${currentPreviewUrl}" type="application/pdf">`;
+    else if(a.contentType.startsWith('text/')) bodyEl.innerHTML = `<pre>${escapeHtml(new TextDecoder('utf-8').decode(bytes))}</pre>`;
+    else bodyEl.innerHTML = `<div class="att-preview-empty"><div style="font-size:2.2rem; margin-bottom:8px;">${attachIcon(a.contentType)}</div>Aperçu non disponible pour ce type de fichier : utilise « Enregistrer ».</div>`;
+    zone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }catch(e){
-    bodyEl.innerHTML = `<div id="previewEmpty" style="color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
+    bodyEl.innerHTML = `<div class="att-preview-empty" style="color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -972,7 +1041,6 @@ function initPaneResizer(resizerId, paneId, side, storageKey, defaultPercent, mi
 }
 initPaneResizer('foldersResizer', 'foldersPane', 'left', 'csb_email_folders_w', 0.13, 160, 400);
 initPaneResizer('listResizer', 'listPane', 'left', 'csb_email_list_w', 0.24, 260, 600);
-initPaneResizer('previewResizer', 'previewPane', 'right', 'csb_email_preview_w', 0.3, 300, 800);
 
 function updateHeaderHeight(){
   const h = document.getElementById('pageHeader').offsetHeight;
@@ -981,6 +1049,461 @@ function updateHeaderHeight(){
 window.addEventListener('resize', updateHeaderHeight);
 new ResizeObserver(updateHeaderHeight).observe(document.getElementById('pageHeader'));
 
+// ================== Demandes de prix et commandes (libellés Gmail, voir src/shared/csb-demandes.js) ==================
+// Dans la colonne des dossiers : « Demandes à traiter », « Sans réponse », « À trier » (mails qui
+// ressemblent à une demande, pas encore classés) et « Traitées ». Chaque demande regroupe toute la
+// conversation ; elle se classe (prix / commande), change d'état et devient un devis ou une commande
+// dans le module Devis en un clic. Sur un mail ordinaire, les mêmes boutons permettent de le classer
+// ou de le marquer « Traité » (anciens mails déjà traités).
+const DM = window.CSBDemandes;
+let dmView = null;              // vue Demandes affichée (null = dossier mail normal)
+let dmData = { threads: [], suggestions: [], mailbox: null, myEmail: '' };
+let dmLoading = false, dmError = '', dmLoadedAt = 0;
+let dmSelId = null;
+let dmChecked = new Set();      // mails cochés dans « À trier » (traitement groupé)
+const dmClientCache = {};       // email → client Axonaut (ou null)
+const dmBodyCache = {};         // uid → message complet
+let dmDevisLinks = {};          // threadId → [{ id, numero, statut }]
+const DM_VIEWS = {
+  atraiter:    { label: 'Demandes à traiter', icon: '📥' },
+  sansreponse: { label: 'Sans réponse',       icon: '⚠️' },
+  atrier:      { label: 'À trier',            icon: '🔎' },
+  traitees:    { label: 'Traitées',           icon: '✅' }
+};
+const DM_STATUT_DEVIS = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Commande', facture: 'Facturé', refuse: 'Refusé', annule: 'Annulé' };
+const dmHasHost = () => !!(window.csbHost && window.csbHost.demandesSearch);
+const dmIsMine = m => dmData.myEmail && m.from.email === dmData.myEmail;
+const dmFmtFull = iso => iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+const dmNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+// ---------- Axonaut (même clé et même relais que les autres modules) ----------
+async function dmAxonaut(path){
+  const cfg = (window.csbHost && window.csbHost.getConfig) ? await window.csbHost.getConfig() : null;
+  const ax = cfg && (cfg.csb_envoi_axonaut_api_config || {});
+  const col = cfg && (cfg.csb_envoi_axonaut_config || {});
+  if(!ax || !ax.apiKey) throw new Error('Clé API Axonaut non configurée');
+  const proxy = ((col && col.workerUrl) || 'https://axonaut-proxy.atelier-csb.workers.dev').replace(/\/+$/, '');
+  const res = await fetch(proxy + '?path=' + encodeURIComponent(path), { headers: { 'Content-Type': 'application/json', 'x-axonaut-key': ax.apiKey } });
+  if(!res.ok) throw new Error('Axonaut HTTP ' + res.status);
+  return res.json();
+}
+const dmArr = d => Array.isArray(d) ? d : (d && Array.isArray(d.data) ? d.data : []);
+const dmClientFromCompany = c => ({ id: c.id, name: c.name || '', street: c.address_street || '', zip: c.address_zip_code || '', city: c.address_city || '', country: c.address_country || '', siret: c.siret || '', tva: c.intracommunity_number || '' });
+const DM_OVERRIDE_KEY = 'csb_demandes_client_override';
+function dmOverrides(){ try{ return JSON.parse(localStorage.getItem(DM_OVERRIDE_KEY)) || {}; }catch(e){ return {}; } }
+function dmSetOverride(email, client){ const o = dmOverrides(); o[email] = client; try{ localStorage.setItem(DM_OVERRIDE_KEY, JSON.stringify(o)); }catch(e){} }
+const dmClientOf = t => { const o = dmOverrides()[t.contactEmail]; return o !== undefined ? o : dmClientCache[t.contactEmail]; };
+const dmClientName = t => { const c = dmClientOf(t); return c ? c.name : ''; };
+async function dmResolveClients(list){
+  const emails = [...new Set(list.map(t => t.contactEmail).filter(e => e && !(e in dmClientCache)))];
+  for(const email of emails){
+    try{
+      const emp = dmArr(await dmAxonaut('/employees?email=' + encodeURIComponent(email))).find(e => (e.email || '').toLowerCase() === email && e.company_id);
+      dmClientCache[email] = emp ? dmClientFromCompany(await dmAxonaut('/companies/' + emp.company_id)) : null;
+    }catch(e){ dmClientCache[email] = null; }
+  }
+  if(emails.length){ if(dmView) dmRenderList(); if(dmView && dmSelId) dmRenderDetail(); }
+}
+// Devis déjà créés depuis une demande (collection PocketBase « devis », champ data.source)
+async function dmLoadDevisLinks(){
+  if(!window.CSBAuth || !CSBAuth.authedFetch) return;
+  try{
+    const url = CSBAuth.getPbUrl().replace(/\/+$/, '') + '/api/collections/devis/records?perPage=500&fields=id,numero,statut,data&filter=' + encodeURIComponent("data.source.threadId != ''");
+    const res = await CSBAuth.authedFetch(url);
+    if(!res.ok) return;
+    const links = {};
+    ((await res.json()).items || []).forEach(r => {
+      const tid = r.data && r.data.source && r.data.source.threadId;
+      if(tid) (links[tid] = links[tid] || []).push({ id: r.id, numero: r.numero, statut: r.statut, title: r.data.title || '' });
+    });
+    dmDevisLinks = links;
+  }catch(e){}
+}
+
+// ---------- Chargement et compteurs ----------
+async function dmLoad(force){
+  if(dmLoading || !dmHasHost()) return;
+  if(!force && Date.now() - dmLoadedAt < 20000) return;
+  dmLoading = true; dmError = '';
+  if(dmView) dmRenderList();
+  try{
+    const d = await DM.load(window.csbHost, { suggestions: true });
+    dmData = d;
+    dmLoadedAt = Date.now();
+    await dmLoadDevisLinks();
+    dmResolveClients(d.threads.concat(d.suggestions));
+  }catch(e){ dmError = e.message; }
+  dmLoading = false;
+  dmRenderFolders();
+  dmNotifyCounts();
+  if(dmView){ dmRenderList(); if(dmSelId) dmRenderDetail(); }
+}
+function dmNotifyCounts(){
+  const c = DM.counts(dmData.threads);
+  if(window.parent !== window) window.parent.postMessage({ type: 'csb:demandes-counts', counts: c }, '*');
+}
+function dmRenderFolders(){
+  const box = document.getElementById('dmFolders');
+  if(!box) return;
+  if(!dmHasHost()){ box.innerHTML = ''; return; }
+  const c = DM.counts(dmData.threads);
+  const n = { atraiter: c.atraiter, sansreponse: c.noReply, atrier: dmData.suggestions.length, traitees: '' };
+  box.innerHTML = `<div class="dm-folders-head">Demandes${dmLoading ? ' …' : ''}</div>` + Object.entries(DM_VIEWS).map(([k, v]) => `
+    <div class="folder-item ${dmView === k ? 'active' : ''}" data-dmview="${k}">
+      <span class="ic">${v.icon}</span><span class="nm">${v.label}</span>${n[k] ? `<span class="dm-n ${k === 'sansreponse' || (k === 'atraiter' && c.unread) ? 'hot' : ''}">${n[k]}</span>` : ''}
+    </div>`).join('') + '<div class="dm-folders-sep"></div>';
+  box.querySelectorAll('[data-dmview]').forEach(el => el.addEventListener('click', () => dmOpenView(el.dataset.dmview)));
+}
+function dmOpenView(view){
+  dmView = view; dmSelId = null; dmChecked = new Set();
+  selectedMessageId = null; closePreview();
+  document.querySelectorAll('#folderList .folder-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('loadMoreBtn').style.display = 'none';
+  document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Choisis une demande dans la liste.</div>';
+  dmRenderFolders();
+  dmRenderList();
+  dmLoad(false);
+}
+function dmLeaveView(){ if(!dmView) return; dmView = null; dmSelId = null; dmRenderFolders(); }
+
+// ---------- Liste ----------
+function dmVisibleThreads(){
+  const q = dmNorm(document.getElementById('searchInput').value.trim());
+  const match = t => !q || dmNorm([t.subject, t.contactName, t.contactEmail, dmClientName(t)].join(' ')).includes(q);
+  if(dmView === 'atrier') return dmData.suggestions.filter(match);
+  return dmData.threads.filter(t => {
+    if(dmView === 'atraiter' && !['nouveau', 'lu', 'encours'].includes(t.etat)) return false;
+    if(dmView === 'sansreponse' && !t.noReply) return false;
+    if(dmView === 'traitees' && !['traite', 'sanssuite'].includes(t.etat)) return false;
+    return match(t);
+  });
+}
+function dmRenderList(){
+  const listEl = document.getElementById('msgList'), emptyEl = document.getElementById('listEmpty');
+  emptyEl.style.display = 'none'; listEl.style.display = 'block';
+  if(!dmHasHost()){ listEl.innerHTML = '<div class="hint dm-pad">Disponible uniquement dans l\'application installée (version à jour).</div>'; return; }
+  if(dmError){ listEl.innerHTML = `<div class="hint dm-pad" style="color:var(--silk-red);">${escapeHtml(dmError)}</div>`; return; }
+  if(dmLoading && !dmLoadedAt){ listEl.innerHTML = '<div class="hint dm-pad">Lecture de la boîte mail…</div>'; return; }
+  const items = dmVisibleThreads();
+  const v = DM_VIEWS[dmView];
+  let head = `<div class="msg-section-head plain">${v.icon} ${v.label} · ${items.length}${dmLoading ? ' · actualisation…' : ''}</div>`;
+  if(dmView === 'atrier'){
+    head += `<div class="dm-bulk">
+      <label><input type="checkbox" id="dmCheckAll" ${items.length && items.every(t => dmChecked.has(t.id)) ? 'checked' : ''}> Tout cocher</label>
+      <button class="btn ghost" id="dmBulkTraite" ${dmChecked.size ? '' : 'disabled'} title="Pour les mails déjà traités : ils ne seront plus proposés">✅ Traité (${dmChecked.size})</button>
+      <button class="btn ghost" id="dmBulkIgnore" ${dmChecked.size ? '' : 'disabled'} title="Ce ne sont pas des demandes">✕ Pas une demande</button>
+      <button class="btn ghost danger-soft" id="dmBulkDelete" ${dmChecked.size ? '' : 'disabled'} title="Mettre à la Corbeille (récupérable)">🗑️</button>
+    </div>`;
+  }
+  if(dmView === 'sansreponse') head += `<div class="dm-hint">Le client attend une réponse depuis au moins ${DM.noReplyDays()} jour(s) (réglable dans ⚙︎).</div>`;
+  if(!items.length){ listEl.innerHTML = head + `<div class="hint dm-pad">${dmView === 'atrier' ? 'Aucun mail à trier.' : 'Aucune demande ici.'}</div>`; return; }
+  listEl.innerHTML = head + items.map(t => {
+    const et = DM.ETATS[t.etat];
+    const links = dmDevisLinks[t.id] || [];
+    const name = dmClientName(t) || t.contactName;
+    return `<div class="msg-row dm-row ${t.unread ? 'unread' : ''} ${dmSelId === t.id ? 'selected' : ''}" data-tid="${escapeHtml(t.id)}" style="--dm-c:${dmView === 'atrier' ? 'transparent' : et.c};">
+      ${dmView === 'atrier' ? `<input type="checkbox" class="dm-check" data-tid="${escapeHtml(t.id)}" ${dmChecked.has(t.id) ? 'checked' : ''}>` : `<span class="msg-dot ${t.unread ? 'unread' : ''}"></span>`}
+      <span class="msg-avatar" style="background:${avatarColorFor(name)};">${escapeHtml(initialFor(name))}</span>
+      <div class="msg-main">
+        <div class="msg-top"><span class="msg-from">${escapeHtml(name)}</span><span class="msg-date">${t.hasAttachment ? '📎 ' : ''}${formatDate(t.lastDate ? new Date(t.lastDate) : null)}</span></div>
+        <div class="msg-subject">${escapeHtml(t.subject)}</div>
+        <div class="dm-tags">${dmView === 'atrier' ? '<span class="dm-tag">proposé</span>' : `<span class="dm-tag">${DM.TYPES[t.type]}</span><span class="dm-tag" style="background:${et.light}; color:${et.c};">${et.icon} ${et.label}</span>`}${t.msgs.length > 1 ? `<span class="dm-tag">${t.msgs.length} messages</span>` : ''}${t.noReply && dmView !== 'atrier' ? `<span class="dm-tag warn">⚠ sans réponse depuis ${t.waitDays} j</span>` : ''}${links.length ? '<span class="dm-tag ok">📝 devis</span>' : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('.dm-row').forEach(row => row.addEventListener('click', e => { if(e.target.closest('.dm-check')) return; dmSelId = row.dataset.tid; dmRenderList(); dmRenderDetail(); }));
+  listEl.querySelectorAll('.dm-check').forEach(cb => cb.addEventListener('change', () => { if(cb.checked) dmChecked.add(cb.dataset.tid); else dmChecked.delete(cb.dataset.tid); dmRenderList(); }));
+  const all = document.getElementById('dmCheckAll');
+  if(all) all.addEventListener('change', () => { dmChecked = all.checked ? new Set(items.map(t => t.id)) : new Set(); dmRenderList(); });
+  const bt = document.getElementById('dmBulkTraite');
+  if(bt) bt.addEventListener('click', () => dmBulk('traite'));
+  const bi = document.getElementById('dmBulkIgnore');
+  if(bi) bi.addEventListener('click', () => dmBulk('ignore'));
+  const bd = document.getElementById('dmBulkDelete');
+  if(bd) bd.addEventListener('click', () => dmBulk('delete'));
+}
+async function dmBulk(kind){
+  const list = dmData.suggestions.filter(t => dmChecked.has(t.id));
+  if(!list.length) return;
+  if(!confirm(`${kind === 'traite' ? 'Marquer comme traités' : kind === 'delete' ? 'Mettre à la Corbeille' : 'Écarter (pas une demande)'} ${list.length} mail(s) ?`)) return;
+  try{
+    const uids = list.flatMap(t => t.msgs.map(m => m.uid));
+    if(kind === 'delete') await window.csbHost.emailMoveToTrash(uids.join(','), dmData.mailbox);
+    else await window.csbHost.emailLabels(uids, [kind === 'traite' ? DM.L.traite : DM.L.ignore], []);
+    if(kind === 'traite') await window.csbHost.emailSetFlags(uids.join(','), dmData.mailbox, ['\\Seen'], []);
+    dmData.suggestions = dmData.suggestions.filter(t => !dmChecked.has(t.id));
+    if(dmChecked.has(dmSelId)){ dmSelId = null; document.getElementById('detailContent').innerHTML = ''; }
+    dmChecked = new Set();
+    dmRenderFolders(); dmRenderList();
+  }catch(e){ alert('Action impossible : ' + e.message); }
+}
+function dmFind(id){ return dmData.threads.find(t => t.id === id) || dmData.suggestions.find(t => t.id === id); }
+
+// ---------- Fiche d'une demande ----------
+function dmActionsHtml(t, isSug){
+  const b = (act, label, cls, title) => `<button class="btn ${cls || 'ghost'}" data-dm="${act}" ${title ? `title="${escapeHtml(title)}"` : ''}>${label}</button>`;
+  if(isSug) return b('type:prix', "💶 C'est une demande de prix", 'primary') + b('type:commande', "📦 C'est une commande", 'primary') +
+    b('etat:traite', '✅ Déjà traité', '', 'Ancien mail déjà traité : ne plus le proposer') + b('ignore', "✕ Pas une demande", '', 'Ne plus proposer ce mail') +
+    '<span class="dm-sep"></span>' + b('delete', '🗑️ Supprimer', 'danger-soft', 'Déplace le mail vers la Corbeille (récupérable)');
+  return b('create:prix', '📝 Créer le devis', t.type !== 'commande' ? 'primary' : '') + b('create:commande', '📦 Créer la commande', t.type === 'commande' ? 'primary' : '') +
+    '<span class="dm-sep"></span>' +
+    (t.type === 'prix' ? b('untype:prix', '💶 Demande de prix ✓', 'active', 'Cliquer pour retirer « Demande de prix »') : b('type:prix', '→ Demande de prix')) +
+    (t.type === 'commande' ? b('untype:commande', '📦 Commande ✓', 'active', 'Cliquer pour retirer « Commande »') : b('type:commande', '→ Commande')) +
+    b('untype:all', '✕ Retirer des demandes', '', "Ce n'est plus une demande : retire tous ses libellés (type et état)") +
+    '<span class="dm-sep"></span>' +
+    (t.etat !== 'encours' ? b('etat:encours', '⏳ En cours') : '') + (t.etat !== 'traite' ? b('etat:traite', '✅ Traité') : '') +
+    (t.etat !== 'sanssuite' ? b('etat:sanssuite', '🗄 Sans suite') : '') + (['encours', 'traite', 'sanssuite'].includes(t.etat) ? b('etat:rouvrir', t.etat === 'traite' ? '↩ Retirer « Traité »' : t.etat === 'sanssuite' ? '↩ Retirer « Sans suite »' : '↩ Retirer « En cours »', '', 'Remet la demande à traiter') : '') +
+    b(t.unread ? 'read' : 'unread', t.unread ? '✉️ Marquer comme lu' : '✉️ Marquer comme non lu') +
+    '<span class="dm-sep"></span>' + b('delete', '🗑️ Supprimer', 'danger-soft', 'Déplace toute la conversation vers la Corbeille (récupérable)');
+}
+function dmRenderDetail(){
+  const t = dmFind(dmSelId);
+  const pane = document.getElementById('detailContent');
+  if(!t){ pane.innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Demande introuvable (actualise).</div>'; return; }
+  closePreview(); currentAttachments = [];
+  const isSug = !dmData.threads.includes(t);
+  const et = DM.ETATS[t.etat];
+  const client = dmClientOf(t);
+  const links = dmDevisLinks[t.id] || [];
+  pane.innerHTML = `
+    <h2 class="detail-subject">${escapeHtml(t.subject)}</h2>
+    <div class="dm-tags" style="margin-bottom:10px;">${isSug ? '<span class="dm-tag">À trier</span>' : `<span class="dm-tag" style="background:${et.light}; color:${et.c};">${et.icon} ${et.label}</span><span class="dm-tag">${DM.TYPES[t.type]}</span>`}${t.noReply ? `<span class="dm-tag warn">⚠ le client attend une réponse depuis ${t.waitDays} jour(s)</span>` : ''}</div>
+    <div class="dm-actions">${dmActionsHtml(t, isSug)}</div>
+    ${links.length ? `<div class="dm-banner">📝 Créé depuis cette demande : ${links.map(l => `<a href="#" data-devis="${escapeHtml(l.id)}">${escapeHtml(l.numero || 'brouillon')}${l.title ? ' — ' + escapeHtml(l.title) : ''} (${escapeHtml(DM_STATUT_DEVIS[l.statut] || l.statut)})</a>`).join(' · ')}</div>` : ''}
+    <div class="dm-cards">
+      <div class="dm-card"><div class="dm-card-h">Client</div>
+        ${client ? `<b>${escapeHtml(client.name)}</b><div class="dm-muted">${escapeHtml([client.street, [client.zip, client.city].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</div>`
+          : `<div class="dm-muted">${t.contactEmail in dmClientCache ? 'Expéditeur inconnu dans Axonaut' : 'Recherche du client…'} : <b>${escapeHtml(t.contactName)}</b> &lt;${escapeHtml(t.contactEmail)}&gt;</div>`}
+        <div class="dm-client-search"><input type="text" id="dmClientSearch" class="search" placeholder="🔎 ${client ? 'Changer de client…' : 'Choisir le client Axonaut…'}" autocomplete="off"><div class="dm-suggest" id="dmClientSuggest"></div></div>
+        ${client ? '' : '<div class="dm-muted" style="margin-top:4px;">Client absent d\'Axonaut ? Le devis pourra créer sa fiche (« Nouveau client »).</div>'}
+      </div>
+      <div class="dm-card"><div class="dm-card-h">Échange</div>
+        Reçu le <b>${dmFmtFull(t.firstDate)}</b>${t.msgs.length > 1 ? `<br>Dernier message le ${dmFmtFull(t.lastDate)}${t.lastIsMine ? ' (ta réponse)' : ''}` : ''}<br>${t.msgs.length} message(s)${t.hasAttachment ? ' · 📎' : ''}
+      </div>
+    </div>
+    ${t.msgs.map(m => `
+      <div class="dm-msg ${dmIsMine(m) ? 'mine' : ''}">
+        <div class="dm-msg-head" data-toggle="${m.uid}">
+          <b>${escapeHtml(dmIsMine(m) ? 'Moi' : (m.from.name || m.from.email))}</b><span class="dm-muted">${escapeHtml(m.from.email)}</span>
+          ${m.unread && !dmIsMine(m) ? '<span class="msg-dot unread" style="margin-top:0;"></span>' : ''}${m.hasAttachment ? ' 📎' : ''}
+          <span class="dm-muted" style="margin-left:auto;">${dmFmtFull(m.date)}</span>
+        </div>
+        <div class="dm-msg-body" id="dmBody${m.uid}" style="display:none;"></div>
+      </div>`).join('')}`;
+  pane.querySelectorAll('[data-dm]').forEach(b => b.addEventListener('click', () => dmAction(t, b.dataset.dm)));
+  pane.querySelectorAll('[data-devis]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); dmOpenDevis(a.dataset.devis); }));
+  pane.querySelectorAll('[data-toggle]').forEach(h => h.addEventListener('click', () => dmToggleMsg(t, Number(h.dataset.toggle))));
+  dmWireClientSearch(t);
+  const lastExt = [...t.msgs].reverse().find(m => !dmIsMine(m)) || t.msgs[t.msgs.length - 1];
+  if(lastExt) dmToggleMsg(t, lastExt.uid, true);
+}
+async function dmGetMessage(uid){
+  if(!dmBodyCache[uid]) dmBodyCache[uid] = window.csbHost.emailGetMessage(uid, dmData.mailbox).catch(e => { delete dmBodyCache[uid]; throw e; });
+  return dmBodyCache[uid];
+}
+async function dmToggleMsg(t, uid, forceOpen){
+  const box = document.getElementById('dmBody' + uid);
+  if(!box) return;
+  if(box.style.display !== 'none' && !forceOpen){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  if(box.dataset.loaded) return;
+  box.innerHTML = '<div class="dm-muted">Chargement…</div>';
+  try{
+    const msg = await dmGetMessage(uid);
+    box.dataset.loaded = '1';
+    const m = t.msgs.find(x => x.uid === uid);
+    if(m && m.unread){ m.unread = false; dmAfterChange(t, false); }
+    // pièces jointes : affichées dans le volet de droite, comme pour un mail ordinaire
+    const base = currentAttachments.length;
+    currentAttachments = currentAttachments.concat(msg.attachments || []);
+    const doc = msg.html || `<pre style="white-space:pre-wrap; font-family:inherit;">${escapeHtml(msg.text || '')}</pre>`;
+    box.innerHTML = `<iframe class="dm-frame" sandbox="allow-same-origin"></iframe>
+      ${(msg.attachments || []).length ? `<div class="attach-list">${msg.attachments.map((a, i) => `<div class="attach-chip" data-idx="${base + i}"><span class="ic">${attachIcon(a.contentType)}</span><span class="meta"><span class="fn">${escapeHtml(a.filename)}</span><span class="sz">${formatSize(a.size)}</span></span></div>`).join('')}</div><div class="att-preview"></div>` : ''}`;
+    const fr = box.querySelector('iframe');
+    fr.srcdoc = `<style>html,body{margin:0;padding:6px;font-family:sans-serif;font-size:14px}img{max-width:100%!important;height:auto!important}*{max-width:100%;box-sizing:border-box}</style>${doc}`;
+    fr.addEventListener('load', () => { try{ fr.style.height = Math.min(1200, fr.contentWindow.document.documentElement.scrollHeight + 16) + 'px'; }catch(e){} });
+    box.querySelectorAll('.attach-chip').forEach(chip => chip.addEventListener('click', () => previewAttachment(parseInt(chip.dataset.idx, 10))));
+  }catch(e){ box.innerHTML = `<div style="color:var(--silk-red);">Message illisible : ${escapeHtml(e.message)}</div>`; }
+}
+function dmWireClientSearch(t){
+  const inp = document.getElementById('dmClientSearch'), box = document.getElementById('dmClientSuggest');
+  if(!inp) return;
+  let timer = null;
+  inp.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = inp.value.trim();
+    if(q.length < 2){ box.classList.remove('show'); return; }
+    timer = setTimeout(async () => {
+      try{
+        const arr = dmArr(await dmAxonaut('/companies?search=' + encodeURIComponent(q))).slice(0, 12);
+        box.innerHTML = arr.length ? arr.map(c => `<div data-id="${c.id}">${escapeHtml(c.name)} <span class="dm-muted">${escapeHtml(c.address_city || '')}</span></div>`).join('') : '<div class="dm-muted">Aucun client trouvé.</div>';
+        box.classList.add('show');
+        box.querySelectorAll('[data-id]').forEach(el => el.addEventListener('mousedown', () => {
+          dmSetOverride(t.contactEmail, dmClientFromCompany(arr.find(x => String(x.id) === el.dataset.id)));
+          box.classList.remove('show'); dmRenderDetail(); dmRenderList();
+        }));
+      }catch(e){ box.innerHTML = `<div style="color:var(--silk-red);">${escapeHtml(e.message)}</div>`; box.classList.add('show'); }
+    }, 300);
+  });
+  inp.addEventListener('blur', () => setTimeout(() => box.classList.remove('show'), 150));
+}
+
+// ---------- Actions ----------
+async function dmLabels(t, add, remove){
+  await window.csbHost.emailLabels(t.msgs.map(m => m.uid), add, remove);
+  add.forEach(l => t.labels.add(l)); remove.forEach(l => t.labels.delete(l));
+}
+async function dmSetSeen(t, seen){
+  const ext = t.msgs.filter(m => !dmIsMine(m));
+  if(!ext.length) return;
+  await window.csbHost.emailSetFlags(ext.map(m => m.uid).join(','), dmData.mailbox, seen ? ['\\Seen'] : [], seen ? [] : ['\\Seen']);
+  if(seen) ext.forEach(m => { m.unread = false; }); else ext[ext.length - 1].unread = true;
+}
+// Après un changement : recalcule l'état, déplace la demande entre « À trier » et les demandes
+function dmAfterChange(t, rerender){
+  DM.refresh(t, dmData.myEmail);
+  const tagged = t.labels.has(DM.L.prix) || t.labels.has(DM.L.commande) || t.labels.has(DM.L.root);
+  if(dmData.suggestions.includes(t) && (tagged || t.labels.has(DM.L.traite) || t.labels.has(DM.L.ignore))) dmData.suggestions = dmData.suggestions.filter(x => x !== t);
+  if(tagged && !dmData.threads.includes(t)) dmData.threads.unshift(t);
+  if(!tagged && dmData.threads.includes(t)){
+    dmData.threads = dmData.threads.filter(x => x !== t);
+    if(dmView && dmSelId === t.id){ dmSelId = null; closePreview(); document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">✔ Retiré des demandes.</div>'; }
+  }
+  dmRenderFolders(); dmNotifyCounts();
+  if(!dmView) return; // mail ouvert depuis un dossier ordinaire : la liste des mails ne change pas
+  dmRenderList();
+  if(rerender !== false && dmSelId) dmRenderDetail();
+}
+async function dmAction(t, action){
+  const [kind, val] = action.split(':');
+  try{
+    if(kind === 'type') await dmLabels(t, [DM.L[val]], [val === 'prix' ? DM.L.commande : DM.L.prix]);
+    else if(kind === 'untype'){
+      // « Demande de prix » / « Commande » retiré ; « all » = la conversation sort complètement des demandes
+      const remove = val === 'all' ? [DM.L.root, DM.L.prix, DM.L.commande].concat(DM.STATE_LABELS) : [DM.L[val], DM.L.root];
+      await dmLabels(t, [], remove);
+    }
+    else if(kind === 'ignore'){
+      await dmLabels(t, [DM.L.ignore], []);
+      if(dmView){ dmSelId = null; document.getElementById('detailContent').innerHTML = ''; }
+    }else if(kind === 'etat'){
+      if(val === 'rouvrir') await dmLabels(t, [], DM.STATE_LABELS);
+      else await dmLabels(t, [DM.L[val]], DM.STATE_LABELS.filter(l => l !== DM.L[val]));
+      if(val === 'traite' || val === 'sanssuite') await dmSetSeen(t, true);
+      if(val === 'traite' && dmView && dmData.suggestions.includes(t)){ dmSelId = null; document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">✔ Marqué comme traité.</div>'; }
+    }else if(kind === 'read' || kind === 'unread') await dmSetSeen(t, kind === 'read');
+    else if(kind === 'create'){ await dmCreateDevis(t, val); return; }
+    else if(kind === 'delete'){ await dmDelete(t); return; }
+    dmAfterChange(t, !!dmSelId);
+  }catch(e){ alert('Action impossible : ' + e.message); }
+}
+// Supprimer une demande : toute la conversation part dans la Corbeille Gmail (récupérable)
+async function dmDelete(t){
+  const n = t.msgs.length;
+  if(!confirm(n > 1 ? `Mettre les ${n} mails de cette conversation à la Corbeille ?` : 'Mettre ce mail à la Corbeille ?')) return;
+  try{
+    await window.csbHost.emailMoveToTrash(t.msgs.map(m => m.uid).join(','), dmData.mailbox);
+    dmData.threads = dmData.threads.filter(x => x !== t);
+    dmData.suggestions = dmData.suggestions.filter(x => x !== t);
+    dmChecked.delete(t.id);
+    if(dmSelId === t.id){ dmSelId = null; closePreview(); document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">✔ Mis à la Corbeille.</div>'; }
+    dmRenderFolders(); dmNotifyCounts(); dmRenderList();
+  }catch(e){ alert('Suppression impossible : ' + e.message); }
+}
+function dmOpenDevis(recId){
+  if(window.parent === window){ alert("Disponible dans l'application Atelier CSB."); return; }
+  window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { recId } }, '*');
+}
+// Envoie la demande au module Devis, qui crée le devis (client, objet, mails et pièces jointes
+// dans les documents, lignes proposées d'après le texte des mails)
+async function dmCreateDevis(t, kind){
+  if(window.parent === window){ alert("Disponible dans l'application Atelier CSB."); return; }
+  const links = dmDevisLinks[t.id] || [];
+  if(links.length && !confirm(`Un devis a déjà été créé depuis cette demande (${links[0].numero || 'brouillon'}). En créer un autre ?`)) return;
+  const btns = document.querySelectorAll('#detailContent [data-dm^="create"]');
+  btns.forEach(b => { b.disabled = true; });
+  try{
+    const ext = t.msgs.filter(m => !dmIsMine(m));
+    const mails = [];
+    for(const m of ext){
+      const full = await dmGetMessage(m.uid);
+      mails.push({ from: full.from, date: full.date, subject: full.subject, html: full.html, text: full.text,
+        attachments: (full.attachments || []).map(a => ({ filename: a.filename, contentType: a.contentType, contentBase64: a.contentBase64 })) });
+    }
+    window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { fromMail: {
+      kind, threadId: t.id, subject: t.subject, email: t.contactEmail, name: t.contactName, date: t.firstDate,
+      client: dmClientOf(t) || null, mails } } }, '*');
+    await dmLabels(t, [DM.L[kind], DM.L.traite], [kind === 'commande' ? DM.L.prix : DM.L.commande, DM.L.encours, DM.L.sanssuite]);
+    await dmSetSeen(t, true);
+    (dmDevisLinks[t.id] = dmDevisLinks[t.id] || []).push({ id: '', numero: '', statut: 'brouillon', title: t.subject });
+    dmAfterChange(t);
+    setTimeout(() => { dmLoadDevisLinks().then(() => { if(dmView){ dmRenderList(); if(dmSelId === t.id) dmRenderDetail(); } }); }, 6000);
+  }catch(e){ alert('Création impossible : ' + e.message); }
+  finally{ btns.forEach(b => { b.disabled = false; }); }
+}
+
+// ---------- Sur un mail ordinaire : le classer, le marquer traité, créer le devis ----------
+function dmMailToolbarHtml(){
+  if(!dmHasHost()) return '';
+  return `<span class="dm-sep"></span><span id="dmMailBtns" style="display:contents;"><span class="dm-muted">…</span></span>`;
+}
+// Boutons du mail ouvert : l'état actuel de sa conversation (libellés Gmail) est lu d'abord ; un
+// bouton allumé (✓) retire le libellé, un bouton éteint le pose.
+async function dmWireMailToolbar(uid){
+  const box = document.getElementById('dmMailBtns');
+  if(!box) return;
+  let t = null;
+  const render = () => {
+    if(!document.getElementById('dmMailBtns') || selectedMessageId !== uid) return;
+    const has = l => t.labels.has(l);
+    const btn = (on, act, label, title) => `<button class="btn ghost ${on ? 'active' : ''}" data-dmmail="${act}" title="${escapeHtml(title)}">${label}${on ? ' ✓' : ''}</button>`;
+    box.innerHTML =
+      btn(has(DM.L.prix), has(DM.L.prix) ? 'untype:prix' : 'type:prix', '💶 Demande de prix', has(DM.L.prix) ? 'Cliquer pour retirer « Demande de prix »' : 'Classer dans les demandes de prix') +
+      btn(has(DM.L.commande), has(DM.L.commande) ? 'untype:commande' : 'type:commande', '📦 Commande', has(DM.L.commande) ? 'Cliquer pour retirer « Commande »' : 'Classer dans les commandes') +
+      btn(has(DM.L.traite), has(DM.L.traite) ? 'etat:rouvrir' : 'etat:traite', '✅ Traité', has(DM.L.traite) ? 'Cliquer pour retirer « Traité »' : 'Mail déjà traité : marqué « Traité »') +
+      `<button class="btn ghost" data-dmmail="create:prix" title="Créer un devis depuis ce mail">📝 Créer le devis</button>`;
+    box.querySelectorAll('[data-dmmail]').forEach(b => b.addEventListener('click', async () => {
+      box.querySelectorAll('button').forEach(x => { x.disabled = true; });
+      await dmAction(t, b.dataset.dmmail);
+      render();
+    }));
+  };
+  try{
+    const res = await window.csbHost.demandesThreadOf(uid, currentMailbox);
+    if(!dmData.myEmail){ const st = await window.csbHost.emailStatus(); dmData.myEmail = (st.email || '').toLowerCase(); }
+    dmData.mailbox = res.mailbox;
+    const fresh = DM.buildThreads(res.items, dmData.myEmail)[0];
+    t = dmFind(res.threadId);
+    if(t){ t.msgs = fresh.msgs; t.labels = fresh.labels; DM.refresh(t, dmData.myEmail); } else t = fresh;
+    render();
+  }catch(e){
+    if(document.getElementById('dmMailBtns')) box.innerHTML = '<span class="dm-muted">Classement indisponible</span>';
+  }
+}
+
+// ---------- Réglage : délai d'alerte « sans réponse » ----------
+function dmInitSettings(){
+  const inp = document.getElementById('dmNoReplyDays');
+  if(!inp) return;
+  inp.value = DM.noReplyDays();
+  inp.addEventListener('change', () => {
+    const n = Math.max(1, parseInt(inp.value, 10) || 2);
+    DM.setNoReplyDays(n); inp.value = n;
+    dmData.threads.forEach(t => DM.refresh(t, dmData.myEmail));
+    dmRenderFolders(); dmNotifyCounts(); if(dmView) dmRenderList();
+  });
+}
+// Ouverture demandée depuis un autre module (lien « Voir la demande » d'un devis)
+window.addEventListener('message', event => {
+  const msg = event.data;
+  if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload || !msg.payload.openDemande) return;
+  const tid = String(msg.payload.openDemande);
+  const go = () => { const t = dmFind(tid); dmOpenView(t && ['traite', 'sanssuite'].includes(t.etat) ? 'traitees' : 'atraiter'); dmSelId = tid; dmRenderList(); dmRenderDetail(); };
+  if(dmLoadedAt) go(); else { dmLoad(true).then(go); }
+});
+dmInitSettings();
+setInterval(() => { if(dmHasHost() && document.visibilityState === 'visible') dmLoad(true); }, 3 * 60 * 1000);
+
 // ---------- Démarrage ----------
 (async function init(){
   updateHeaderHeight();
@@ -988,6 +1511,7 @@ new ResizeObserver(updateHeaderHeight).observe(document.getElementById('pageHead
   if(status.connected){
     loadFolders();
     loadMessages();
+    dmLoad(true);
   }
 })();
 </script>

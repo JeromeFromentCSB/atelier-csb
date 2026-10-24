@@ -2,6 +2,16 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.55', items: [
+    "Email : gestion des demandes de prix et commandes — section « Demandes » (à traiter, sans réponse, à trier, traitées), conversations regroupées, client Axonaut retrouvé, états (nouveau, lu, en cours, traité, sans suite) enregistrés en libellés Gmail (visibles dans Spark)",
+    "Email : sur chaque mail, boutons Demande de prix / Commande / Traité (réversibles) et « Créer le devis » ; « À trier » propose les mails qui ressemblent à une demande, avec traitement groupé",
+    "Email : alerte « sans réponse » (délai réglable) et compteur des demandes à côté du module Email dans la colonne de gauche",
+    "Email : pièces jointes affichées sous le mail, bouton « Supprimer » (et touche Suppr, corbeille au survol), liste des mails plus rapide",
+    "Devis créé depuis un mail : client, objet, mails et pièces jointes repris ; lignes proposées d'après les bons de commande joints (CD0… + CD3…/CD4…, une ligne par variante) ou le texte du mail, avec plusieurs articles Axonaut proposés et mémorisation des corrections",
+    "Gestion Commande : onglet « 📊 Statistiques » — chiffre d'affaires par mois, année ou dates choisies, pour un client ou tous, HT ou TTC, comparaison avec l'année précédente, détail par période et par client avec le reste dû",
+    "Pense-bête : priorités ☆ / ⭐ importante / 🔴 urgente (en rouge), urgentes en tête de liste",
+    "Casaques : import des vignettes posées sur la feuille Excel, libellé des couleurs complet, et choix de la colonne à utiliser quand une colonne manque (mémorisé)",
+  ]},
   { v: '0.2.54', items: [
     "Gestion Commande : nouvel onglet « 💶 Factures » — liste des factures Axonaut (non réglées par défaut) avec filtres réglées / non réglées, dates, client, montant et numéro, détail de la facture à droite",
     "Factures : montants en HT et en TTC (ligne, total de la liste, reste dû) ; retard de paiement encadré en vert (< 15 jours), orange (15 à 30 jours) ou rouge (> 30 jours)",

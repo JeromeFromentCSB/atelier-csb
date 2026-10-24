@@ -215,6 +215,16 @@
   .modal.wide{ width:680px; }
   .modal textarea{ width:100%; min-height:190px; font-family:inherit; }
   .chk-line{ display:flex; gap:8px; align-items:center; font-size:13px; margin-top:6px; }
+  /* Devis créé depuis un mail : lignes proposées */
+  .dm-prop{ width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; background:#fff; border-radius:8px; }
+  .dm-prop td, .dm-prop th{ padding:4px 6px; border-bottom:1px solid #EFE6D2; text-align:left; vertical-align:middle; }
+  .dm-prop th{ font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; }
+  .dm-cands{ display:flex; flex-wrap:wrap; gap:3px; margin-top:3px; }
+  .dm-cands button{ border:1px solid var(--line); background:#FBF9F5; border-radius:999px; padding:1px 8px; font-size:11px; cursor:pointer; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dm-cands button:hover{ border-color:var(--accent); background:var(--accent-light); }
+  .dm-cands button.on{ border-color:var(--ok); background:#E3F2E4; color:var(--ok); font-weight:700; }
+  .dm-cands .lbl{ font-size:11px; color:var(--muted); margin-right:2px; }
+  .dm-prop input[type=number]{ width:70px; } .dm-prop input[type=text]{ width:100%; } .dm-prop select{ max-width:260px; }
 </style>
 </head>
 <body>
@@ -1259,6 +1269,7 @@ function renderEditor(){
     <div class="actions-bar" id="actionsBar"></div>
     <div id="axBanner"></div>
     <div id="importBanner"></div>
+    <div id="dmBanner">${dmSourceBannerHtml(d)}</div>
 
     <div class="ed-tabs">
       <button class="ed-tab ${editorTab === 'infos' ? 'on' : ''}" data-tab="infos">📋 Informations</button>
@@ -1377,6 +1388,7 @@ function renderEditor(){
   renderSuivi();
   renderProduction();
   renderImportBanner();
+  dmWireSourceBanner();
   if(d.suivi && d.suivi.token) refreshSuivi(d).then(() => { if(current === d) renderSuivi(); renderDraftList(); });
   document.getElementById('suiviRefresh').addEventListener('click', async () => { await refreshSuivi(current, true); renderSuivi(); renderDraftList(); });
   if(isLocked(d)) applyReadOnly();
@@ -3320,6 +3332,7 @@ async function init(){
     renderDraftList();
     loadAxonautQuotes().then(() => { if(pendingAxQuote){ const id = pendingAxQuote; pendingAxQuote = null; openAxQuoteById(id); } });
     if(pendingOpenRecId){ const id = pendingOpenRecId; pendingOpenRecId = null; openRecordById(id); }
+    if(pendingFromMail){ const pm = pendingFromMail; pendingFromMail = null; settingsReady.then(() => dmCreateFromMail(pm)); }
     settingsReady.then(pollSuivi);
     setInterval(async () => { await loadModuleSettings(); pollSuivi(); }, 2 * 60 * 1000);
     const pollIfStale = () => { if(document.visibilityState === 'visible' && Date.now() - lastPollAt > 30000) pollSuivi(); };
@@ -3361,7 +3374,8 @@ async function openRecordById(recId){
 window.addEventListener('message', (event) => {
   const msg = event.data;
   if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload) return;
-  if(msg.payload.axQuotationId) openAxQuoteById(msg.payload.axQuotationId);
+  if(msg.payload.fromMail) dmCreateFromMail(msg.payload.fromMail);
+  else if(msg.payload.axQuotationId) openAxQuoteById(msg.payload.axQuotationId);
   else openRecordById(msg.payload.recId);
 });
 let pendingAxQuote = null;
@@ -3380,6 +3394,392 @@ function openAxQuoteById(qid){
     if(el) el.scrollIntoView({ block: 'nearest' });
   });
 }
+// ================== Devis créé depuis un mail (demande de prix ou commande, module Email) ==================
+// Le module Email envoie la demande (client, objet, mails et pièces jointes) ; on crée le brouillon,
+// on range mails et pièces jointes dans les documents « Demande de prix », et on propose les lignes :
+//  - d'après les bons de commande joints (PDF Sage « Commande - CD… ») : le bon CD0… donne les
+//    prestations demandées (référence, quantité, prix), le bon CD3…/CD4… le détail (modèle,
+//    couleurs, tailles) ; les deux sont combinés, une ligne par variante de couleurs ;
+//  - sinon d'après le texte du mail (« 20 casaques », « Polo : 12 »…).
+// L'article Axonaut est reconnu d'après les désignations ; une correction faite ici est mémorisée
+// (réglages du module, pour tous les postes) et resservira pour les prochains bons.
+let pendingFromMail = null;
+const dmFmtFull = iso => iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+function dmB64File(a){
+  const bin = atob(a.contentBase64 || ''); const bytes = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new File([bytes], a.filename || 'piece-jointe', { type: a.contentType || 'application/octet-stream' });
+}
+function dmMailText(m){
+  if(m.text) return m.text;
+  const div = document.createElement('div');
+  div.innerHTML = String(m.html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h\d)>/gi, '\n');
+  return div.textContent || '';
+}
+const dmNum = s => parseFloat(String(s).replace(/\.\.\.$/, '').replace(/\s/g, '').replace(',', '.'));
+const dmIsNum = s => /^\d{1,7}([.,]\d*)?(\.\.\.)?$/.test(String(s).trim());
+const dmCap = s => String(s || '').trim().replace(/^./, c => c.toUpperCase());
+
+// ---------- Lecture des bons de commande PDF (Sage) ----------
+function dmPdfRows(items){
+  const rows = [];
+  items.slice().sort((a, b) => b.y - a.y || a.x - b.x).forEach(it => {
+    const r = rows.find(r => Math.abs(r.y - it.y) <= 2);
+    if(r) r.cells.push(it); else rows.push({ y: it.y, cells: [it] });
+  });
+  rows.forEach(r => r.cells.sort((a, b) => a.x - b.x));
+  return rows.sort((a, b) => b.y - a.y);
+}
+function dmParseOrder(pages){
+  const out = { numero: '', recipient: '', items: [], sections: [] };
+  let item = null, section = '', buf = [];
+  const flush = (lines) => lines.forEach(l => {
+    if(item && item.lastY - l.y <= 26){ item.sub.push(l.t); item.lastY = l.y; }
+    else { section = l.t; out.sections.push(l.t); item = null; }
+  });
+  pages.forEach((items, pi) => {
+    const rows = dmPdfRows(items);
+    const hi = rows.findIndex(r => r.cells.some(c => /^Référence$/i.test(c.s.trim())) && r.cells.some(c => /^Désignation$/i.test(c.s.trim())));
+    if(hi < 0) return;
+    const head = rows[hi].cells;
+    const colX = re => { const c = head.find(c => re.test(c.s.trim())); return c ? c.x : null; };
+    const refX = colX(/^Référence$/i), qX = colX(/^(Quantité|Qté)$/i), puX = colX(/^P\.?U\.?/i), mX = colX(/^Montant/i);
+    const refLimit = refX + 40;
+    if(pi === 0){
+      // numéro du bon et destinataire (bloc d'adresse sous le numéro)
+      for(const r of rows.slice(0, hi)){
+        const n = r.cells.find(c => /^CDE?\d{3,6}$/.test(c.s.trim()));
+        if(n && !out.numero){ out.numero = n.s.trim(); out._nx = n.x; out._ny = r.y; }
+      }
+      if(out.numero){
+        for(const r of rows.slice(0, hi)){
+          if(r.y >= out._ny) continue;
+          const c = r.cells.find(c => Math.abs(c.x - out._nx) <= 25 && /[a-zà-ÿ]/i.test(c.s) && !/^(N°|SIRET|Tél|Tel|Capital|R\.C\.S|Fax|Mail)/i.test(c.s.trim()));
+          if(c){ out.recipient = c.s.trim(); break; }
+        }
+      }
+    }
+    for(const r of rows.slice(hi + 1)){
+      const txt = r.cells.map(c => c.s).join(' ');
+      if(/^(Code|Facture de bien|Pénalités|RESERVE|Total)/i.test(r.cells[0].s.trim()) || r.cells.some(c => /^Base HT$/i.test(c.s.trim()))) break;
+      const ref = r.cells.find(c => c.x < refLimit && /^[A-Za-z0-9][\w.\-]*(\.\.\.)?$/.test(c.s.trim()));
+      const inCol = (c, x, before, after) => x != null && c.x >= x - before && c.x <= x + after;
+      let qty = null, pu = null;
+      const words = [];
+      r.cells.forEach(c => {
+        if(c === ref) return;
+        const s = c.s.trim();
+        if(dmIsNum(s) && inCol(c, qX, 30, 35)){ if(qty == null) qty = dmNum(s); return; }
+        if(dmIsNum(s) && inCol(c, puX, 20, 40)){ if(pu == null) pu = dmNum(s); return; }
+        if(dmIsNum(s) && c.x > (qX || 9999) - 30) return; // remises, montants, TVA
+        if(c.x >= refLimit) words.push(s);
+      });
+      const desig = words.join(' ').trim();
+      if(ref){
+        const above = buf.filter(b => b.y - r.y <= 5);
+        flush(buf.filter(b => b.y - r.y > 5));
+        item = { ref: ref.s.trim().replace(/\.\.\.$/, ''), desig: above.map(b => b.t).concat(desig ? [desig] : []).join(' ').trim(), qty: qty || 1, pu, sub: [], section, lastY: r.y };
+        out.items.push(item); buf = [];
+      }else if(desig) buf.push({ y: r.y, t: desig });
+      void txt;
+    }
+    flush(buf); buf = [];
+  });
+  out.items.forEach(it => {
+    it.variants = it.sub.filter(s => /^[-–•]\s*/.test(s)).map(s => s.replace(/^[-–•]\s*/, '').trim());
+    it.sizes = it.sub.filter(s => /\btaille\b.*\bx\s*\d+/i.test(s));
+    it.details = it.sub.filter(s => !/^[-–•]\s*/.test(s) && !/\btaille\b.*\bx\s*\d+/i.test(s));
+    delete it.lastY;
+  });
+  return out;
+}
+// Combine le bon CD0 (prestations demandées) et le bon CD3/CD4 (détail) en lignes de devis
+function dmCombineOrders(demande, detail, products){
+  const det = detail ? detail.items.slice() : [];
+  const used = new Set();
+  const tokOverlap = (a, b) => { const tb = new Set(dmTokens(b)); return dmTokens(a).filter(w => tb.has(w)).length; };
+  const refMap = (moduleSettings.dmRefMap) || {};
+  const rows = [];
+  demande.items.forEach(a => {
+    // article du détail : même quantité de préférence, puis désignation la plus proche
+    let best = null, bestScore = -1;
+    det.forEach((b, i) => {
+      if(used.has(i)) return;
+      const score = (Math.abs(b.qty - a.qty) < 0.001 ? 10 : 0) + tokOverlap(a.desig, [b.desig].concat(b.details).join(' '));
+      if(score > bestScore){ bestScore = score; best = i; }
+    });
+    if(best != null && bestScore <= 0) best = null;
+    // tous les articles du détail sont déjà pris : on réutilise le plus proche (ex. un sweat brodé
+    // « cœur et dos » qui correspond à deux prestations du bon)
+    if(best == null && det.length){
+      let s2 = 0;
+      det.forEach((x, i) => { const sc = tokOverlap(a.desig, [x.desig].concat(x.details).join(' ')) + (Math.abs(x.qty - a.qty) < 0.001 ? 2 : 0); if(sc > s2){ s2 = sc; best = i; } });
+    }
+    const b = best != null ? det[best] : null;
+    if(best != null) used.add(best);
+    // variantes de couleurs : celles de l'article, sinon celles d'un article du détail resté sans
+    // prestation (ex. les bonnets fournis, pour la pose des galons) si leur nombre tombe juste
+    let variants = b && b.variants.length >= 2 && a.qty % b.variants.length === 0 ? b.variants : [];
+    let ctx = b;
+    if(!variants.length && a.qty > 1){
+      const other = det.find((x, i) => !used.has(i) && x.variants.length >= 2 && a.qty % x.variants.length === 0);
+      if(other){ variants = other.variants; ctx = other; }
+    }
+    const header = ctx ? ctx.desig.replace(/\s*:\s*$/, '') : '';
+    const key = a.ref + '|' + (b ? b.ref : '');
+    const known = refMap[key] && products.find(p => String(p.id) === String(refMap[key]));
+    const prod = known || dmMatchProduct([b ? b.desig : '', a.desig, ctx && ctx !== b ? ctx.desig : ''].join(' '), products);
+    const base = { key, matchText: [b ? b.desig : '', a.desig, ctx && ctx !== b ? ctx.desig : ''].join(' ').trim(), cd0Ref: a.ref, cd0Price: a.pu, productId: prod ? prod.id : null, productName: prod ? prod.name : '', productCode: prod ? prod.product_code || '' : '', on: true };
+    const price = prod && Number(prod.price) > 0 ? Number(prod.price) : (a.pu || 0);
+    // le bon compte parfois à l'unité ce que l'article Axonaut vend par lot (8 galons à 4,30 € =
+    // 4 « poses de 2 galons » à 8,60 €) : si le prix de l'article est un multiple exact, on divise
+    let qtyTotal = a.qty;
+    if(prod && Number(prod.price) > 0 && a.pu > 0){
+      const k = Math.round(Number(prod.price) / a.pu);
+      if(k >= 2 && Math.abs(Number(prod.price) / a.pu - k) < 0.05 && qtyTotal % k === 0) qtyTotal = qtyTotal / k;
+    }
+    const detailLines = b ? [b.desig].concat(b.details, b.sizes) : [];
+    if(variants.length && qtyTotal % variants.length !== 0) variants = [];
+    if(variants.length){
+      const q = qtyTotal / variants.length;
+      variants.forEach(v => rows.push(Object.assign({}, base, { qty: q, label: prod ? prod.name : a.desig, price, description: [header, dmCap(v)].filter(Boolean).join(' : ') + (b && b !== ctx ? '\n' + b.desig : '') })));
+    }else{
+      rows.push(Object.assign({}, base, { qty: qtyTotal, label: prod ? prod.name : a.desig, price, description: detailLines.filter(Boolean).join('\n') || a.desig }));
+    }
+  });
+  return rows;
+}
+async function dmOrderProposals(mails, products){
+  if(!(window.csbHost && window.csbHost.pdfText)) return null;
+  const pdfs = [];
+  (mails || []).forEach(m => (m.attachments || []).forEach(a => { if(/\.pdf$/i.test(a.filename || '') || a.contentType === 'application/pdf') pdfs.push(a); }));
+  const parsed = [];
+  for(const a of pdfs.filter(a => /commande|CDE?\d/i.test(a.filename || ''))){
+    try{ const o = dmParseOrder(await window.csbHost.pdfText(a.contentBase64, 6)); if(o.items.length) parsed.push(Object.assign(o, { filename: a.filename })); }catch(e){ console.warn('PDF illisible', a.filename, e); }
+  }
+  if(!parsed.length) return null;
+  const numOf = o => (o.numero || (o.filename.match(/CDE?\d+/i) || [''])[0]).toUpperCase();
+  const demande = parsed.find(o => /^CD0/.test(numOf(o))) || parsed[0];
+  const detail = parsed.find(o => o !== demande && /^CDE?[1-9]/.test(numOf(o))) || parsed.find(o => o !== demande) || null;
+  const short = o => numOf(o).replace(/^CDE?/, '');
+  return {
+    title: ['Cde ' + short(demande), detail ? short(detail) : '', (detail && (detail.recipient || detail.sections[0])) || demande.sections[0] || ''].filter(Boolean).join(' / '),
+    rows: dmCombineOrders(demande, detail, products),
+    from: [demande.filename, detail && detail.filename].filter(Boolean).join(' + ')
+  };
+}
+
+// ---------- Lignes trouvées dans le texte du mail ----------
+const DM_STOP_FIRST = /^(euros?|eur|€|%|h|heures?|jours?|j|semaines?|mois|ans?|années?|cm|mm|m|kg|g|rue|avenue|av|bd|boulevard|chemin|allée|place|route|impasse|cordialement|bonjour|merci|janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre|minutes?|min|ttc|ht|fois|personnes?|ans|étages?|numéro|n°)$/i;
+const DM_STOP_LABEL = /^(quantit[ée]s?|qt[ée]s?|total|tel|t[ée]l[ée]phone|portable|fax|date|prix|tarif|code postal|cp|siret|tva|n°|num[ée]ro|ref|r[ée]f[ée]rence|commande|devis)$/i;
+const DM_SMALL = new Set(['de', 'des', 'du', 'd', 'la', 'le', 'les', 'l', 'un', 'une', 'et', 'ou', 'avec', 'pour', 'en', 'au', 'aux', 'sur', 'a', 'à', 'par', 'chez', 'fournis', 'fourni', 'client', 'personnalise', 'personnalisee']);
+function dmTokens(s){ return norm(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length >= 2 && !DM_SMALL.has(w)).map(w => w.length > 3 ? w.replace(/(s|x)$/, '') : w); }
+function dmExtractLines(text){
+  const out = [];
+  const add = (qty, label) => {
+    qty = parseInt(qty, 10);
+    label = String(label || '').replace(/^(de |d'|d’)/i, '').replace(/[\s.,;:!?)\-]+$/, '').trim();
+    if(!qty || qty > 9999 || (qty >= 1900 && qty <= 2100) || label.length < 3) return;
+    const first = label.split(/\s+/)[0];
+    if(DM_STOP_FIRST.test(first) || DM_STOP_LABEL.test(label)) return;
+    const key = qty + '|' + norm(label);
+    if(!out.some(o => o.key === key)) out.push({ key, qty, label });
+  };
+  const lines = String(text || '').split(/\r?\n/).map(l => l.replace(/\s+/g, ' ').trim());
+  for(const line of lines){
+    if(/^(>|le .{4,80} a écrit|on .{4,80} wrote|-{3,}|_{3,}|de ?: |from ?: |envoyé ?: |cordialement|bien cordialement|bien à vous)/i.test(line)) break;
+    if(!line) continue;
+    const re1 = /(?:^|[\s(•\-*:;,])(\d{1,4})\s*(?:x|×|pcs?\.?|pi[eè]ces?|ex\.?|exemplaires?|unit[ée]s?)?\s+((?:de\s+|d['’])?[a-zà-ÿ][\wà-ÿ'’\-]*(?:\s+(?!et\b|ou\b|pour\b|avec\b|svp\b|merci\b)[\wà-ÿ'’\-]+){0,5})/gi;
+    let m;
+    while((m = re1.exec(line))) add(m[1], m[2]);
+    const re2 = /([a-zà-ÿ][\wà-ÿ'’\- ]{2,40}?)\s*(?::|=|\bx\b|×)\s*(\d{1,4})\b(?!\s*(?:€|eur|%|cm|mm|h\b|\/|[.,]\d))/gi;
+    while((m = re2.exec(line))) add(m[2], m[1]);
+  }
+  return out.slice(0, 20);
+}
+// Articles Axonaut classés du plus au moins ressemblant à une désignation (mots en commun, ou code
+// article cité tel quel) — sert à choisir l'article d'office et à proposer d'autres possibilités.
+function dmRankProducts(label, products, n){
+  const lt = dmTokens(label);
+  if(!lt.length) return [];
+  const ranked = [];
+  for(const p of products){
+    const code = norm(p.product_code || '').replace(/[^a-z0-9]/g, '');
+    if(code.length >= 4 && lt.includes(code)){ ranked.push({ p, score: 2 }); continue; }
+    const pt = new Set(dmTokens((p.name || '') + ' ' + (p.product_code || '')));
+    const common = lt.filter(w => pt.has(w));
+    if(!common.length || !common.some(w => w.length >= 3)) continue;
+    ranked.push({ p, score: common.length / Math.max(pt.size, 1) + common.length / lt.length * 0.3 });
+  }
+  return ranked.sort((a, b) => b.score - a.score).slice(0, n || 6);
+}
+function dmMatchProduct(label, products){
+  const best = dmRankProducts(label, products, 1)[0];
+  return best && (best.score >= 0.45) && dmTokens(best.p.name + ' ' + best.p.product_code).some(w => w.length >= 4 && dmTokens(label).includes(w)) || (best && best.score === 2) ? best.p : null;
+}
+async function dmLoadProductsQuick(){
+  try{ return await Promise.race([loadProducts(), new Promise((_, rej) => setTimeout(() => rej(new Error('délai')), 15000))]); }catch(e){ return []; }
+}
+function dmTextProposals(texts, products){
+  return dmExtractLines(texts.join('\n')).map(f => {
+    const p = products.length ? dmMatchProduct(f.label, products) : null;
+    return { qty: f.qty, matchText: f.label, label: p ? p.name : f.label, description: p ? f.label : '', price: p && p.price != null ? Number(p.price) : 0, productId: p ? p.id : null, productName: p ? p.name : '', productCode: p ? p.product_code || '' : '', key: '', on: true };
+  });
+}
+
+// ---------- Création ----------
+async function dmCreateFromMail(p){
+  if(!draftsLoaded){ pendingFromMail = p; return; }
+  if(!CSBAuth.can('devis', 'creer')){ alert("Tu n'as pas le droit de créer des devis — demande à un administrateur."); return; }
+  if(!abandonEditIfNeeded()) return;
+  const d = newDraft();
+  d.title = p.subject || '';
+  d.client = p.client || null;
+  d.source = { kind: p.kind, threadId: p.threadId, subject: p.subject, email: p.email, name: p.name, date: p.date, proposals: null };
+  d.historique = [{ date: new Date().toISOString(), user: userName(), action: `Création depuis ${p.kind === 'commande' ? 'la commande' : 'la demande de prix'} reçue par mail le ${dmFmtFull(p.date)} (${p.name || p.email})` }];
+  editorTab = 'infos';
+  openDraft(d, null, '');
+  setSaveState('Création depuis le mail…');
+  await saveCurrent();
+  if(!currentRecId || current !== d){ alert("Le devis n'a pas pu être enregistré."); return; }
+  // lignes proposées : bons de commande joints, sinon texte des mails
+  const products = await dmLoadProductsQuick();
+  let props = [], from = 'mail';
+  try{
+    const order = await dmOrderProposals(p.mails, products);
+    if(order && order.rows.length){ props = order.rows; from = order.from; if(order.title) d.title = order.title; }
+  }catch(e){ console.warn('bons de commande', e); }
+  if(!props.length) props = dmTextProposals((p.mails || []).map(dmMailText), products);
+  if(current === d){ d.source.proposals = props; d.source.proposalsFrom = from; await saveCurrent(); renderEditor(); }
+  // mails et pièces jointes dans les documents « Demande de prix »
+  const files = [];
+  (p.mails || []).forEach((m, i) => {
+    const head = `<p style="font:13px sans-serif;color:#555;border-bottom:1px solid #ddd;padding-bottom:6px;"><b>${escapeHtml((m.from && (m.from.name || m.from.email)) || '')}</b> &lt;${escapeHtml((m.from && m.from.email) || '')}&gt; — ${dmFmtFull(m.date)}<br>Objet : ${escapeHtml(m.subject || '')}</p>`;
+    files.push(new File([`<!doctype html><meta charset="utf-8">${head}${m.html || '<pre style="white-space:pre-wrap">' + escapeHtml(m.text || '') + '</pre>'}`], `mail_${String(m.date || '').slice(0, 10)}_${i + 1}.html`, { type: 'text/html' }));
+    (m.attachments || []).forEach(a => files.push(dmB64File(a)));
+  });
+  if(files.length && isAdmin() && current === d){
+    try{ await uploadDocuments(files, 'demande_prix'); }catch(e){ console.warn('documents', e); }
+  }
+}
+
+// ---------- Bandeau d'origine et lignes proposées ----------
+const dmProdLabel = p => (p.product_code ? p.product_code + ' — ' : '') + (p.name || '');
+function dmSourceBannerHtml(d){
+  if(!d || !d.source) return '';
+  const s = d.source;
+  const props = Array.isArray(s.proposals) ? s.proposals : null;
+  const canAdd = props && props.length && !isLocked(d);
+  const fromPdf = s.proposalsFrom && s.proposalsFrom !== 'mail';
+  return `<div class="banner">📥 ${s.kind === 'commande' ? 'Commande reçue' : 'Demande de prix reçue'} par mail le ${dmFmtFull(s.date)} de <b>${escapeHtml(s.name || s.email || '')}</b> — « ${escapeHtml(s.subject || '')} » · <a href="#" id="dmBackToMail">Voir le mail</a>
+    ${s.kind === 'commande' && d.statut === 'brouillon' ? '<br>Ajoute les lignes de la commande, puis valide le devis pour le passer en commande.' : ''}
+    ${props === null ? '<br><span class="hint" style="margin:0;">Lecture des pièces jointes et du mail…</span>' : ''}
+    ${props && !props.length && !s.proposalsDone ? '<br><span class="hint" style="margin:0;">Aucune ligne reconnue dans le mail ni dans ses pièces jointes.</span>' : ''}
+    ${canAdd ? `<div style="margin-top:8px; font-weight:700;">🧾 Lignes proposées ${fromPdf ? 'd\'après ' + escapeHtml(s.proposalsFrom) : 'd\'après le texte du mail'} — vérifie, puis ajoute-les au devis</div>
+      <table class="dm-prop"><thead><tr><th></th><th>Qté</th><th>Article Axonaut</th><th>Détail (description de la ligne)</th><th>Prix HT</th></tr></thead><tbody>
+      ${props.map((x, i) => `<tr><td><input type="checkbox" data-pi="${i}" data-f="on" ${x.on ? 'checked' : ''}></td>
+        <td><input type="number" min="0" step="any" data-pi="${i}" data-f="qty" value="${x.qty}"></td>
+        <td><input type="text" list="dmProdList" data-pi="${i}" data-f="product" value="${escapeHtml(x.productId ? (x.productCode ? x.productCode + ' — ' : '') + x.productName : '')}" placeholder="ligne libre : ${escapeHtml(x.label || '')}"><div class="dm-cands" data-cands="${i}"></div>${x.cd0Ref ? `<div class="hint" style="margin:2px 0 0;">bon : ${escapeHtml(x.cd0Ref)}${x.cd0Price != null ? ' · ' + eur(x.cd0Price) : ''}</div>` : ''}</td>
+        <td><textarea rows="2" data-pi="${i}" data-f="description" style="width:100%; min-height:38px; font:inherit; font-size:12px;">${escapeHtml(x.description || '')}</textarea></td>
+        <td><input type="number" min="0" step="0.01" data-pi="${i}" data-f="price" value="${x.price != null ? x.price : ''}" style="width:80px;"></td></tr>`).join('')}
+      </tbody></table><datalist id="dmProdList"></datalist>
+      <div style="margin-top:8px; display:flex; gap:8px; align-items:center;"><button class="btn primary small" id="dmAddLines">＋ Ajouter les lignes cochées</button><button class="btn small" id="dmDropLines">Ignorer</button><span class="hint" style="margin:0;">Un article choisi ou corrigé ici est retenu pour les prochains bons.</span></div>` : ''}
+  </div>`;
+}
+function dmWireSourceBanner(){
+  const a = document.getElementById('dmBackToMail');
+  if(a) a.addEventListener('click', e => {
+    e.preventDefault();
+    if(window.parent === window || !current || !current.source) return;
+    window.parent.postMessage({ type: 'csb:open-module', module: 'email', payload: { openDemande: current.source.threadId } }, '*');
+  });
+  const box = document.getElementById('dmBanner');
+  if(!box || !current || !current.source || !Array.isArray(current.source.proposals) || !current.source.proposals.length) return;
+  const props = current.source.proposals;
+  let products = [];
+  // propositions d'articles Axonaut pour chaque ligne (clic = choisir)
+  const renderCands = (i) => {
+    const x = props[i], el = box.querySelector(`[data-cands="${i}"]`);
+    if(!x || !el || !products.length) return;
+    const ranked = dmRankProducts(x.matchText || [x.label, x.description].join(' '), products, 5).map(r => r.p);
+    const cur = x.productId ? products.find(p => String(p.id) === String(x.productId)) : null;
+    const list = (cur ? [cur] : []).concat(ranked.filter(p => !cur || String(p.id) !== String(cur.id))).slice(0, 5);
+    el.innerHTML = list.length ? '<span class="lbl">' + (cur ? 'ou :' : 'Articles possibles :') + '</span>' + list.map(p => `<button type="button" data-pick="${p.id}" class="${cur && String(cur.id) === String(p.id) ? 'on' : ''}" title="${escapeHtml(p.name)}${Number(p.price) > 0 ? ' — ' + eur(p.price) + ' HT' : ''}">${escapeHtml([p.product_code, p.name].filter(Boolean).join(' — '))}${Number(p.price) > 0 ? ' · ' + eur(p.price) : ''}</button>`).join('') + (cur ? '<button type="button" data-pick="">✕ ligne libre</button>' : '')
+      : '<span class="lbl">Aucun article Axonaut ressemblant — tape dans le champ pour chercher.</span>';
+    el.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
+      const p = b.dataset.pick ? products.find(pp => String(pp.id) === b.dataset.pick) : null;
+      applyProduct(i, p);
+      const inp = box.querySelector(`[data-pi="${i}"][data-f="product"]`);
+      if(inp) inp.value = p ? dmProdLabel(p) : '';
+    }));
+  };
+  const applyProduct = (i, p) => {
+    const x = props[i]; if(!x) return;
+    if(p){
+      const changedProd = String(p.id) !== String(x.productId);
+      x.productId = p.id; x.productName = p.name; x.productCode = p.product_code || ''; x.picked = true;
+      if(changedProd && Number(p.price) > 0){ x.price = Number(p.price); const pr = box.querySelector(`[data-pi="${i}"][data-f="price"]`); if(pr) pr.value = x.price; }
+    }else{ x.productId = null; x.productName = ''; x.productCode = ''; x.picked = true; }
+    renderCands(i);
+  };
+  dmLoadProductsQuick().then(list => {
+    products = list;
+    const dl = document.getElementById('dmProdList');
+    if(dl) dl.innerHTML = list.map(p => `<option value="${escapeHtml(dmProdLabel(p))}">`).join('');
+    props.forEach((_, i) => renderCands(i));
+  });
+  const findProd = v => { v = String(v || '').trim(); if(!v) return null; return products.find(p => dmProdLabel(p) === v) || products.find(p => norm(p.product_code) === norm(v.split(' — ')[0])) || null; };
+  box.querySelectorAll('[data-pi]').forEach(el => el.addEventListener('change', () => {
+    const x = props[Number(el.dataset.pi)]; if(!x) return;
+    const f = el.dataset.f;
+    if(f === 'on') x.on = el.checked;
+    else if(f === 'qty') x.qty = Math.max(0, dmNum(el.value) || 0);
+    else if(f === 'price') x.price = dmNum(el.value) || 0;
+    else if(f === 'description') x.description = el.value;
+    else if(f === 'product'){
+      const p = findProd(el.value);
+      if(p) applyProduct(Number(el.dataset.pi), p);
+      else if(!el.value.trim()) applyProduct(Number(el.dataset.pi), null);
+    }
+  }));
+  const close = () => { current.source.proposals = []; current.source.proposalsDone = true; box.innerHTML = dmSourceBannerHtml(current); dmWireSourceBanner(); changed(); };
+  const drop = document.getElementById('dmDropLines');
+  if(drop) drop.addEventListener('click', close);
+  const addBtn = document.getElementById('dmAddLines');
+  if(addBtn) addBtn.addEventListener('click', async () => {
+    const chosen = props.filter(x => x.on && x.qty > 0);
+    if(!chosen.length){ alert('Coche au moins une ligne (avec une quantité).'); return; }
+    if(!products.length) products = await dmLoadProductsQuick();
+    const tax = (taxRates && taxRates.includes(20)) ? 20 : ((taxRates && taxRates[0]) || 20);
+    const learned = {};
+    chosen.forEach(x => {
+      const prod = x.productId ? products.find(pp => String(pp.id) === String(x.productId)) : null;
+      let line;
+      if(prod){ line = lineFromProduct(prod); line.description = x.description || line.description; }
+      else line = { type: 'free', productId: null, productCode: '', name: x.label || 'Ligne', description: x.description || '', quantity: 1, price: 0, taxRate: tax, unit: '', discountPercent: 0, cost: '' };
+      line.quantity = x.qty;
+      if(x.price != null && x.price !== '') line.price = Number(x.price);
+      current.lines.push(line);
+      if(x.key && prod){ const k = learned[x.key] = learned[x.key] || {}; k[prod.id] = (k[prod.id] || 0) + 1; }
+    });
+    // pour chaque article du bon, l'article Axonaut le plus souvent retenu
+    Object.keys(learned).forEach(k => { learned[k] = Object.entries(learned[k]).sort((a, b) => b[1] - a[1])[0][0]; });
+    // correspondances bon de commande → article Axonaut, retenues pour tous les postes
+    if(Object.keys(learned).length){
+      try{
+        await loadModuleSettings();
+        moduleSettings.dmRefMap = Object.assign({}, moduleSettings.dmRefMap || {}, learned);
+        await saveSharedSetting(MODULE_SETTINGS_KEY, moduleSettings);
+      }catch(e){ console.warn('correspondances', e); }
+    }
+    current.source.proposals = []; current.source.proposalsDone = true;
+    addHisto(`${chosen.length} ligne(s) ajoutée(s) depuis ${current.source.proposalsFrom && current.source.proposalsFrom !== 'mail' ? 'les bons de commande joints' : 'le mail'}`);
+    editorTab = 'lignes';
+    changed();
+    renderEditor();
+  });
+}
+
 let started = false;
 CSBAuth.onChange(() => {
   if(!CSBAuth.currentUser()) return;

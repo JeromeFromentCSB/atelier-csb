@@ -709,6 +709,20 @@ function emailWriteCreds(partial) {
 }
 
 let cachedImapClient = null;
+// Deuxième connexion IMAP, réservée aux tâches de fond (demandes, compteur) : une connexion IMAP
+// ne traite qu'un dossier à la fois, donc sans elle la liste des mails attendait leur fin.
+let cachedImapBgClient = null;
+async function getImapBgClient() {
+  if (cachedImapBgClient && cachedImapBgClient.usable) return cachedImapBgClient;
+  const creds = emailReadCreds();
+  if (!creds.email || !creds.appPassword) throw new Error('Email non connecté.');
+  const client = new ImapFlow({ host: creds.host || 'imap.gmail.com', port: creds.port || 993, secure: true, auth: { user: creds.email, pass: creds.appPassword }, logger: false });
+  await client.connect();
+  cachedImapBgClient = client;
+  client.on('close', () => { if (cachedImapBgClient === client) cachedImapBgClient = null; });
+  client.on('error', () => { if (cachedImapBgClient === client) cachedImapBgClient = null; });
+  return client;
+}
 async function getImapClient() {
   const creds = emailReadCreds();
   if (!creds.email || !creds.appPassword) {
@@ -741,6 +755,7 @@ function bodyStructureHasAttachment(struct) {
 ipcMain.handle('csb:email-set-credentials', (_event, { email, appPassword, host, port }) => {
   emailWriteCreds({ email, appPassword, host: host || undefined, port: port || undefined });
   cachedImapClient = null;
+  if (cachedImapBgClient) { try { cachedImapBgClient.logout(); } catch (e) {} cachedImapBgClient = null; }
   return { ok: true };
 });
 // Envoi d'un email (devis aux clients) avec le même compte et le même mot de passe
@@ -771,6 +786,7 @@ ipcMain.handle('csb:email-disconnect', async () => {
   emailWriteCreds({ email: '', appPassword: '' });
   if (cachedImapClient) { try { await cachedImapClient.logout(); } catch (e) {} }
   cachedImapClient = null;
+  if (cachedImapBgClient) { try { await cachedImapBgClient.logout(); } catch (e) {} cachedImapBgClient = null; }
   return { ok: true };
 });
 ipcMain.handle('csb:email-test-connection', async () => {
@@ -876,9 +892,10 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset 
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const recentUids = await client.search({ since: thirtyDaysAgo }, { uid: true });
       if (off === 0) {
-        const olderUids = await client.search({ before: thirtyDaysAgo }, { uid: true });
+        // les UID croissent avec l'arrivée des mails : s'il existe un UID plus petit que le premier
+        // mail récent, il y a des mails plus anciens — sans refaire une recherche dans tout le dossier
         targetUids = recentUids.slice().reverse();
-        hasMore = olderUids.length > 0;
+        hasMore = recentUids.length ? (client.mailbox && client.mailbox.exists > recentUids.length) : (client.mailbox && client.mailbox.exists > 0);
       } else {
         const olderUids = await client.search({ before: thirtyDaysAgo }, { uid: true });
         const olderOffset = Math.max(0, off - recentUids.length);
@@ -965,8 +982,133 @@ ipcMain.handle('csb:email-get-message', async (_event, { uid, mailbox }) => {
   }
 });
 
+// ---------- Demandes (module Devis) : recherche Gmail, conversations et libellés ----------
+// Les demandes de prix et commandes reçues par mail sont repérées par des libellés Gmail
+// (« Demandes/Prix », « Demandes/Commande », « Demandes/Traite »…), posés depuis l'appli ou
+// depuis Spark : l'état reste donc dans la boîte mail elle-même, visible des deux côtés.
+// On travaille dans « Tous les messages » pour voir aussi nos réponses dans les conversations.
+async function gmailAllMailPath(client) {
+  const list = await client.list();
+  const all = list.find((f) => f.specialUse === '\\All');
+  return all ? all.path : 'INBOX';
+}
+function demandeSummary(msg) {
+  const env = msg.envelope || {};
+  const from = (env.from && env.from[0]) || {};
+  return {
+    uid: msg.uid,
+    threadId: msg.threadId ? String(msg.threadId) : null,
+    labels: msg.labels ? [...msg.labels] : [],
+    subject: env.subject || '(sans objet)',
+    from: { name: from.name || from.address || '', email: (from.address || '').toLowerCase() },
+    to: (env.to || []).map((a) => (a.address || '').toLowerCase()).filter(Boolean),
+    date: env.date ? new Date(env.date).toISOString() : null,
+    unread: !(msg.flags && msg.flags.has('\\Seen')),
+    hasAttachment: bodyStructureHasAttachment(msg.bodyStructure)
+  };
+}
+const DEMANDE_FETCH = { envelope: true, flags: true, labels: true, threadId: true, bodyStructure: true };
+// Recherche avec la syntaxe de la barre de recherche Gmail (ex. « label:Demandes-Prix »).
+ipcMain.handle('csb:demandes-search', async (_event, { gmraw, limit }) => {
+  const client = await getImapBgClient();
+  const mailbox = await gmailAllMailPath(client);
+  const lock = await client.getMailboxLock(mailbox);
+  try {
+    const uids = (await client.search({ gmraw }, { uid: true })) || [];
+    const take = uids.slice(-(limit || 300));
+    const items = [];
+    if (take.length) for await (const msg of client.fetch(take, DEMANDE_FETCH, { uid: true })) items.push(demandeSummary(msg));
+    return { mailbox, items };
+  } finally {
+    lock.release();
+  }
+});
+// Tous les messages des conversations demandées (y compris nos réponses et les relances).
+ipcMain.handle('csb:demandes-threads', async (_event, { threadIds }) => {
+  const client = await getImapBgClient();
+  const mailbox = await gmailAllMailPath(client);
+  const lock = await client.getMailboxLock(mailbox);
+  try {
+    const uids = new Set();
+    const ids = (threadIds || []).map(String);
+    for (let i = 0; i < ids.length; i += 40) {
+      const chunk = ids.slice(i, i + 40);
+      const query = chunk.length === 1 ? { threadId: chunk[0] } : { or: chunk.map((id) => ({ threadId: id })) };
+      const found = (await client.search(query, { uid: true })) || [];
+      found.forEach((u) => uids.add(u));
+    }
+    const items = [];
+    if (uids.size) for await (const msg of client.fetch([...uids], DEMANDE_FETCH, { uid: true })) items.push(demandeSummary(msg));
+    return { mailbox, items };
+  } finally {
+    lock.release();
+  }
+});
+// Texte d'un PDF (pièce jointe d'une demande) avec la position de chaque morceau de texte, pour
+// relire les tableaux des bons de commande (colonnes Référence / Désignation / Quantité…).
+let pdfjsPromise = null;
+ipcMain.handle('csb:pdf-text', async (_event, { base64, maxPages }) => {
+  if (!pdfjsPromise) pdfjsPromise = import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs = await pdfjsPromise;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(Buffer.from(base64, 'base64')), useSystemFonts: true, disableFontFace: true, isEvalSupported: false, verbosity: 0 }).promise;
+  const pages = [];
+  for (let i = 1; i <= Math.min(doc.numPages, maxPages || 10); i++) {
+    const page = await doc.getPage(i);
+    const tc = await page.getTextContent();
+    pages.push(tc.items.filter((it) => it.str && it.str.trim()).map((it) => ({ s: it.str, x: Math.round(it.transform[4]), y: Math.round(it.transform[5]) })));
+  }
+  await doc.destroy();
+  return pages;
+});
+// Conversation d'un mail ouvert dans un dossier quelconque (module Email) : renvoie tous ses
+// messages vus depuis « Tous les messages », pour y poser les libellés des demandes.
+ipcMain.handle('csb:demandes-thread-of', async (_event, { uid, mailbox }) => {
+  const client = await getImapClient();
+  let threadId = null;
+  let lock = await client.getMailboxLock(mailbox || 'INBOX');
+  try {
+    const msg = await client.fetchOne(String(uid), { threadId: true }, { uid: true });
+    threadId = msg && msg.threadId ? String(msg.threadId) : null;
+  } finally {
+    lock.release();
+  }
+  if (!threadId) throw new Error('Conversation introuvable pour ce mail.');
+  const all = await gmailAllMailPath(client);
+  lock = await client.getMailboxLock(all);
+  try {
+    const uids = (await client.search({ threadId }, { uid: true })) || [];
+    const items = [];
+    if (uids.length) for await (const m of client.fetch(uids, DEMANDE_FETCH, { uid: true })) items.push(demandeSummary(m));
+    return { mailbox: all, threadId, items };
+  } finally {
+    lock.release();
+  }
+});
+// Ajoute / retire des libellés Gmail (créés au besoin) sur des messages.
+ipcMain.handle('csb:email-labels', async (_event, { uids, add, remove }) => {
+  if (!uids || !uids.length) return { ok: true };
+  const client = await getImapBgClient();
+  const mailbox = await gmailAllMailPath(client);
+  if (add && add.length) {
+    const existing = new Set((await client.list()).map((f) => f.path));
+    for (const label of add) {
+      if (!existing.has(label)) { try { await client.mailboxCreate(label); } catch (e) { /* déjà créé entre-temps */ } }
+    }
+  }
+  const lock = await client.getMailboxLock(mailbox);
+  try {
+    const range = uids.map(String).join(',');
+    if (add && add.length) await client.messageFlagsAdd(range, add, { uid: true, useLabels: true });
+    if (remove && remove.length) await client.messageFlagsRemove(range, remove, { uid: true, useLabels: true });
+    return { ok: true };
+  } finally {
+    lock.release();
+  }
+});
+
 app.on('before-quit', async () => {
   if (cachedImapClient) { try { await cachedImapClient.logout(); } catch (e) {} }
+  if (cachedImapBgClient) { try { await cachedImapBgClient.logout(); } catch (e) {} }
 });
 
 // ---------- Vectorisation (VTracer) ----------
