@@ -192,6 +192,7 @@
   .doc-thumb-box iframe{ width:240px; height:240px; border:none; transform:scale(.5); transform-origin:0 0; pointer-events:none; background:#fff; }
   .doc-thumb-name{ font-size:11px; margin-top:3px; overflow-wrap:anywhere; max-height:2.6em; overflow:hidden; }
   .doc-thumb-del{ position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--danger); color:#fff; border:2px solid #fff; font-size:12px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; }
+  .doc-thumb-move{ position:absolute; top:-6px; left:-6px; width:20px; height:20px; border-radius:50%; background:#2D5B9A; color:#fff; border:2px solid #fff; font-size:11px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .doc-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; margin-bottom:6px; font-size:13px; cursor:pointer; }
   .doc-row:hover{ background:#FBF9F5; }
   #prodComment{ width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; resize:vertical; background:#fff; }
@@ -224,6 +225,10 @@
   .dm-cands button:hover{ border-color:var(--accent); background:var(--accent-light); }
   .dm-cands button.on{ border-color:var(--ok); background:#E3F2E4; color:var(--ok); font-weight:700; }
   .dm-cands .lbl{ font-size:11px; color:var(--muted); margin-right:2px; }
+  .dm-kw{ display:flex; flex-wrap:wrap; gap:3px; width:100%; margin-top:2px; }
+  .dm-cands button.kw{ background:#F2F5FA; border-color:#C9D6EA; color:#1F3A66; }
+  .dm-cands button.kw.on{ background:#1F3A66; color:#fff; }
+  .dm-kw-list{ display:flex; flex-wrap:wrap; gap:3px; width:100%; max-height:150px; overflow-y:auto; padding:4px; margin-top:2px; border:1px solid #C9D6EA; border-radius:8px; background:#fff; }
   .dm-prop input[type=number]{ width:70px; } .dm-prop input[type=text]{ width:100%; } .dm-prop select{ max-width:260px; }
 </style>
 </head>
@@ -2122,11 +2127,31 @@ async function deleteDocument(id, filename, category){
     loadDocuments();
   }catch(e){ alert('Erreur : ' + e.message); }
 }
+// Passe un document de « Fabrication » à « Demande de prix » (ou l'inverse) : le fichier change de
+// dossier réseau et sa référence change de catégorie.
+const DOC_OTHER = { fabrication: 'demande_prix', demande_prix: 'fabrication' };
+async function moveDocument(id, filename, from){
+  const to = DOC_OTHER[from];
+  if(!isAdmin()){ alert('Réservé aux administrateurs.'); return; }
+  if(!confirm(`Passer ce document en « ${CATEGORY_LABELS[to]} » ?`)) return;
+  try{
+    if(!(await ensureDocsFolderAccess(from, true)) || !(await ensureDocsFolderAccess(to, true))) throw new Error('accès aux deux dossiers nécessaire');
+    const file = await (await docsHandles[from].getFileHandle(filename)).getFile();
+    const fh = await docsHandles[to].getFileHandle(filename, { create: true });
+    const w = await fh.createWritable(); await w.write(file); await w.close();
+    const res = await CSBAuth.authedFetch(docsBase() + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: to }) });
+    if(!res.ok){ try{ await docsHandles[to].removeEntry(filename); }catch(e){} throw new Error('PocketBase HTTP ' + res.status); }
+    try{ await docsHandles[from].removeEntry(filename); }catch(e){ console.warn('Ancien fichier non supprimé', e); }
+    loadDocuments();
+  }catch(e){ alert('Déplacement impossible : ' + e.message); }
+}
 function renderDocList(box, docs, category, emptyText){
   if(!docs.length){ box.innerHTML = `<div class="hint">${emptyText}</div>`; return; }
-  box.innerHTML = docs.map(d => `<div class="doc-row" data-id="${d.id}" data-file="${escapeHtml(d.filename)}"><span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>${isAdmin() ? '<button class="iconbtn" data-del title="Supprimer">🗑</button>' : ''}</div>`).join('');
+  box.innerHTML = docs.map(d => `<div class="doc-row" data-id="${d.id}" data-file="${escapeHtml(d.filename)}"><span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>${isAdmin() ? `<span style="display:flex; gap:4px;"><button class="iconbtn" data-move title="Passer en « ${CATEGORY_LABELS[DOC_OTHER[category]]} »">⇄</button><button class="iconbtn" data-del title="Supprimer">🗑</button></span>` : ''}</div>`).join('');
   box.querySelectorAll('.doc-row').forEach(row => {
-    row.addEventListener('click', e => { if(!e.target.closest('[data-del]')) openDocument(row.dataset.file, category); });
+    row.addEventListener('click', e => { if(!e.target.closest('[data-del], [data-move]')) openDocument(row.dataset.file, category); });
+    const mv = row.querySelector('[data-move]');
+    if(mv) mv.addEventListener('click', e => { e.stopPropagation(); moveDocument(row.dataset.id, row.dataset.file, category); });
     const del = row.querySelector('[data-del]');
     if(del) del.addEventListener('click', e => { e.stopPropagation(); deleteDocument(row.dataset.id, row.dataset.file, category); });
   });
@@ -2135,9 +2160,11 @@ async function renderDocThumbs(box, docs, category, emptyText){
   if(!docs.length){ box.innerHTML = `<div class="hint">${emptyText}</div>`; return; }
   box.innerHTML = '<div class="doc-thumbs">' + docs.map(d => `<div class="doc-thumb" data-id="${d.id}" data-file="${escapeHtml(d.filename)}" title="${escapeHtml(d.original_filename || d.filename)}">
       <div class="doc-thumb-box">📄</div><div class="doc-thumb-name">${escapeHtml(d.original_filename || d.filename)}</div>
-      ${isAdmin() ? '<button type="button" class="doc-thumb-del" title="Supprimer">✕</button>' : ''}</div>`).join('') + '</div>';
+      ${isAdmin() ? `<button type="button" class="doc-thumb-del" title="Supprimer">✕</button><button type="button" class="doc-thumb-move" title="Passer en « ${CATEGORY_LABELS[DOC_OTHER[category]]} »">⇄</button>` : ''}</div>`).join('') + '</div>';
   box.querySelectorAll('.doc-thumb').forEach(card => {
-    card.addEventListener('click', e => { if(!e.target.closest('.doc-thumb-del')) openDocument(card.dataset.file, category); });
+    card.addEventListener('click', e => { if(!e.target.closest('.doc-thumb-del, .doc-thumb-move')) openDocument(card.dataset.file, category); });
+    const mv = card.querySelector('.doc-thumb-move');
+    if(mv) mv.addEventListener('click', e => { e.stopPropagation(); moveDocument(card.dataset.id, card.dataset.file, category); });
     const del = card.querySelector('.doc-thumb-del');
     if(del) del.addEventListener('click', e => { e.stopPropagation(); deleteDocument(card.dataset.id, card.dataset.file, category); });
   });
@@ -3613,6 +3640,22 @@ function dmRankProducts(label, products, n){
   }
   return ranked.sort((a, b) => b.score - a.score).slice(0, n || 6);
 }
+// Tous les articles qui contiennent un mot (dans le nom), ou dont le code commence comme lui
+// (« broderie » → aussi BRODCASQUETTE, BRODDOS…)
+function dmKeywordProducts(word, products){
+  const w4 = word.slice(0, 4);
+  return products.filter(p => {
+    if(dmTokens(p.name || '').includes(word)) return true;
+    const code = norm(p.product_code || '').replace(/[^a-z0-9]/g, '');
+    return word.length >= 5 && code.startsWith(w4);
+  }).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'fr'));
+}
+// Mots d'une ligne qui se retrouvent dans des articles Axonaut (pour « tous les articles : broderie »)
+function dmLineKeywords(text, products){
+  return [...new Set(dmTokens(text))].filter(w => w.length >= 4 && !/^\d/.test(w))
+    .map(w => ({ w, list: dmKeywordProducts(w, products) })).filter(k => k.list.length)
+    .sort((a, b) => b.list.length - a.list.length).slice(0, 6);
+}
 function dmMatchProduct(label, products){
   const best = dmRankProducts(label, products, 1)[0];
   return best && (best.score >= 0.45) && dmTokens(best.p.name + ' ' + best.p.product_code).some(w => w.length >= 4 && dmTokens(label).includes(w)) || (best && best.score === 2) ? best.p : null;
@@ -3698,6 +3741,7 @@ function dmWireSourceBanner(){
   const props = current.source.proposals;
   let products = [];
   // propositions d'articles Axonaut pour chaque ligne (clic = choisir)
+  const kwOpen = {}; // mot déplié par ligne
   const renderCands = (i) => {
     const x = props[i], el = box.querySelector(`[data-cands="${i}"]`);
     if(!x || !el || !products.length) return;
@@ -3706,6 +3750,15 @@ function dmWireSourceBanner(){
     const list = (cur ? [cur] : []).concat(ranked.filter(p => !cur || String(p.id) !== String(cur.id))).slice(0, 5);
     el.innerHTML = list.length ? '<span class="lbl">' + (cur ? 'ou :' : 'Articles possibles :') + '</span>' + list.map(p => `<button type="button" data-pick="${p.id}" class="${cur && String(cur.id) === String(p.id) ? 'on' : ''}" title="${escapeHtml(p.name)}${Number(p.price) > 0 ? ' — ' + eur(p.price) + ' HT' : ''}">${escapeHtml([p.product_code, p.name].filter(Boolean).join(' — '))}${Number(p.price) > 0 ? ' · ' + eur(p.price) : ''}</button>`).join('') + (cur ? '<button type="button" data-pick="">✕ ligne libre</button>' : '')
       : '<span class="lbl">Aucun article Axonaut ressemblant — tape dans le champ pour chercher.</span>';
+    // par mot : tous les articles qui contiennent ce mot
+    const kws = dmLineKeywords([x.matchText, x.label, x.description].filter(Boolean).join(' '), products);
+    const open = kwOpen[i];
+    if(kws.length){
+      el.innerHTML += '<div class="dm-kw"><span class="lbl">Tous les articles :</span>' + kws.map(k => `<button type="button" data-kw="${escapeHtml(k.w)}" class="kw ${open === k.w ? 'on' : ''}">« ${escapeHtml(k.w)} » (${k.list.length})</button>`).join('') + '</div>';
+      const sel = open && kws.find(k => k.w === open);
+      if(sel) el.innerHTML += '<div class="dm-kw-list">' + sel.list.map(p => `<button type="button" data-pick="${p.id}" class="${cur && String(cur.id) === String(p.id) ? 'on' : ''}" title="${escapeHtml(p.name)}">${escapeHtml([p.product_code, p.name].filter(Boolean).join(' — '))}${Number(p.price) > 0 ? ' · ' + eur(p.price) : ''}</button>`).join('') + '</div>';
+    }
+    el.querySelectorAll('[data-kw]').forEach(b => b.addEventListener('click', () => { kwOpen[i] = kwOpen[i] === b.dataset.kw ? null : b.dataset.kw; renderCands(i); }));
     el.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
       const p = b.dataset.pick ? products.find(pp => String(pp.id) === b.dataset.pick) : null;
       applyProduct(i, p);

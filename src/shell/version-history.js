@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.56', items: [
+    "Devis créé depuis un mail : « Tous les articles » par mot (ex. tous ceux qui contiennent « broderie », codes BROD… compris) pour choisir l'article Axonaut de chaque ligne",
+    "Documents : bouton ⇄ pour passer un document de « Fabrication » en « Demande de prix » et inversement (module Devis et Gestion Commande, administrateurs)",
+  ]},
   { v: '0.2.55', items: [
     "Email : gestion des demandes de prix et commandes — section « Demandes » (à traiter, sans réponse, à trier, traitées), conversations regroupées, client Axonaut retrouvé, états (nouveau, lu, en cours, traité, sans suite) enregistrés en libellés Gmail (visibles dans Spark)",
     "Email : sur chaque mail, boutons Demande de prix / Commande / Traité (réversibles) et « Créer le devis » ; « À trier » propose les mails qui ressemblent à une demande, avec traitement groupé",

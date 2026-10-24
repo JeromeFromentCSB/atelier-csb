@@ -295,6 +295,7 @@
   .doc-thumb-box iframe{ width:260px; height:260px; border:none; transform:scale(.5); transform-origin:0 0; pointer-events:none; background:#fff; }
   .doc-thumb-name{ font-size:.68rem; margin-top:3px; overflow-wrap:anywhere; max-height:2.6em; overflow:hidden; }
   .doc-thumb-del{
+  .doc-thumb-move{ position:absolute; top:-6px; left:-6px; width:20px; height:20px; border-radius:50%; background:#2D5B9A; color:#fff; border:2px solid #fff; font-size:11px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
     position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--silk-red,#c0392b);
     color:#fff; border:2px solid #fff; font-size:12px; line-height:1; cursor:pointer; padding:0;
     display:flex; align-items:center; justify-content:center;
@@ -4404,13 +4405,15 @@ function renderDocList(box, docs, category, reload, emptyText){
   box.innerHTML = docs.map(d => `
     <div class="devis-doc-row" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}">
       <span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>
-      ${isAdminUser() ? `<button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button>` : ''}
+      ${isAdminUser() ? `<span style="display:flex; gap:4px;">${docMoveBtn(category, 'data-move-doc')}<button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button></span>` : ''}
     </div>`).join('');
   box.querySelectorAll('.devis-doc-row').forEach(row => {
     row.addEventListener('click', (e) => {
-      if(e.target.closest('[data-del-doc]')) return;
+      if(e.target.closest('[data-del-doc], [data-move-doc]')) return;
       openDevisDocument(row.dataset.filename, category);
     });
+    const mvDoc = row.querySelector('[data-move-doc]');
+    if(mvDoc) mvDoc.addEventListener('click', (e) => { e.stopPropagation(); docMove(row.dataset.docId, row.dataset.filename, category, reload); });
     const delDoc = row.querySelector('[data-del-doc]');
     if(delDoc) delDoc.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -4435,13 +4438,15 @@ async function renderDocThumbs(box, docs, category, reload, emptyText){
     <div class="doc-thumb" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}" title="${escapeHtml(d.original_filename || d.filename)}">
       <div class="doc-thumb-box">📄</div>
       <div class="doc-thumb-name">${escapeHtml(d.original_filename || d.filename)}</div>
-      ${isAdminUser() ? '<button type="button" class="doc-thumb-del" title="Supprimer">✕</button>' : ''}
+      ${isAdminUser() ? `<button type="button" class="doc-thumb-del" title="Supprimer">✕</button><button type="button" class="doc-thumb-move" title="Passer en « ${CATEGORY_FOLDER_LABELS[DOC_OTHER[category]]} »">⇄</button>` : ''}
     </div>`).join('') + '</div>';
   box.querySelectorAll('.doc-thumb').forEach(card => {
     card.addEventListener('click', (e) => {
-      if(e.target.closest('.doc-thumb-del')) return;
+      if(e.target.closest('.doc-thumb-del, .doc-thumb-move')) return;
       openDevisDocument(card.dataset.filename, category);
     });
+    const mvThumb = card.querySelector('.doc-thumb-move');
+    if(mvThumb) mvThumb.addEventListener('click', (e) => { e.stopPropagation(); docMove(card.dataset.docId, card.dataset.filename, category, reload); });
     const delThumb = card.querySelector('.doc-thumb-del');
     if(delThumb) delThumb.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -6574,6 +6579,27 @@ async function docCreate(body){
   if(!res.ok) throw new Error('PocketBase create HTTP ' + res.status + ' — ' + (await res.text()).slice(0,300));
   return await res.json();
 }
+// Passe un document de « Fabrication » à « Demande de prix » (ou l'inverse) : le fichier change de
+// dossier réseau et sa référence PocketBase change de catégorie.
+const DOC_OTHER = { fabrication: 'demande_prix', demande_prix: 'fabrication' };
+async function docMove(id, filename, from, done){
+  const to = DOC_OTHER[from];
+  if(!isAdminUser()){ alert('Réservé aux administrateurs.'); return; }
+  if(!confirm(`Passer ce document en « ${CATEGORY_FOLDER_LABELS[to]} » ?`)) return;
+  try{
+    if(!(await ensureDocsFolderAccess(from, true)) || !(await ensureDocsFolderAccess(to, true))) throw new Error('accès aux deux dossiers nécessaire');
+    const file = await (await docsHandles[from].getFileHandle(filename)).getFile();
+    const fh = await docsHandles[to].getFileHandle(filename, { create: true });
+    const w = await fh.createWritable(); await w.write(file); await w.close();
+    const cfg = getConfig();
+    const url = cfg.url.replace(/\/+$/,'') + '/api/collections/' + encodeURIComponent(cfg.docsCollection || 'devis_documents') + '/records/' + id;
+    const res = await CSBAuth.authedFetch(url, { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ category: to }) });
+    if(!res.ok){ try{ await docsHandles[to].removeEntry(filename); }catch(e){} throw new Error('PocketBase HTTP ' + res.status); }
+    try{ await docsHandles[from].removeEntry(filename); }catch(e){ console.warn('Ancien fichier non supprimé', e); }
+    done();
+  }catch(e){ alert('Déplacement impossible : ' + e.message); }
+}
+const docMoveBtn = (category, attrs) => `<button class="iconbtn" ${attrs} title="Passer en « ${CATEGORY_FOLDER_LABELS[DOC_OTHER[category]]} »">⇄</button>`;
 async function docDelete(id){
   if(!isAdminUser()) throw new Error('suppression de documents réservée aux administrateurs');
   const cfg = getConfig();
@@ -6746,16 +6772,18 @@ async function loadDevisDocuments(q){
     const renderRow = (d) => `
       <div class="devis-doc-row" data-doc-id="${d.id}" data-filename="${escapeHtml(d.filename)}" data-category="${escapeHtml(d.category)}">
         <span>📄 ${escapeHtml(d.original_filename || d.filename)}</span>
-        ${isAdminUser() ? `<button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button>` : ''}
+        ${isAdminUser() ? `<span style="display:flex; gap:4px;">${docMoveBtn(d.category, 'data-move-doc')}<button class="iconbtn iconbtn-delete" data-del-doc="${d.id}" title="Supprimer">🗑</button></span>` : ''}
       </div>`;
     fabList.innerHTML = fab.length ? fab.map(renderRow).join('') : '<div class="hint" style="font-size:.78rem;">Aucun document.</div>';
     dpList.innerHTML = canSeeDemandePrix ? (dp.length ? dp.map(renderRow).join('') : '<div class="hint" style="font-size:.78rem;">Aucun document.</div>') : '';
     [fabList, dpList].forEach(list => {
       list.querySelectorAll('.devis-doc-row').forEach(row => {
         row.addEventListener('click', (e) => {
-          if(e.target.closest('[data-del-doc]')) return;
+          if(e.target.closest('[data-del-doc], [data-move-doc]')) return;
           openDevisDocument(row.dataset.filename, row.dataset.category);
         });
+        const mvDoc = row.querySelector('[data-move-doc]');
+        if(mvDoc) mvDoc.addEventListener('click', (e) => { e.stopPropagation(); docMove(row.dataset.docId, row.dataset.filename, row.dataset.category, () => loadDevisDocuments(q)); });
       });
       list.querySelectorAll('[data-del-doc]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
