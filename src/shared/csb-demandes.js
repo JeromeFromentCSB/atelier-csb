@@ -8,12 +8,11 @@
     traite: 'Demandes/Traite', sanssuite: 'Demandes/Sans-suite', ignore: 'Demandes/Ignore'
   };
   const STATE_LABELS = [L.encours, L.traite, L.sanssuite];
+  // Un mail est soit sans classement (par défaut), soit « À traiter », soit « Traité ». Les anciens
+  // libellés (Prix, Commande, En cours, Sans suite) restent reconnus : à traiter / traité.
   const ETATS = {
-    nouveau:   { label: 'Nouveau',    icon: '🆕', c: '#B5452F', light: '#FBE7E4' },
-    lu:        { label: 'Lu',         icon: '👀', c: '#2D5B9A', light: '#E3ECF8' },
-    encours:   { label: 'En cours',   icon: '⏳', c: '#B26A00', light: '#FFF1D6' },
-    traite:    { label: 'Traité',     icon: '✅', c: '#2E7D32', light: '#E3F2E4' },
-    sanssuite: { label: 'Sans suite', icon: '🗄', c: '#9E9E9E', light: '#EEEEEE' }
+    atraiter: { label: 'À traiter', icon: '📥', c: '#B5452F', light: '#FBE7E4' },
+    traite:   { label: 'Traité',    icon: '✅', c: '#2E7D32', light: '#E3F2E4' }
   };
   const TYPES = { prix: '💶 Demande de prix', commande: '📦 Commande', aclasser: '❔ À classer' };
   // Recherches Gmail (syntaxe de la barre de recherche ; « Demandes/Prix » s'écrit demandes-prix)
@@ -57,16 +56,16 @@
     const isMine = (m) => !!myEmail && m.from.email === myEmail;
     t.type = t.labels.has(L.commande) ? 'commande' : t.labels.has(L.prix) ? 'prix' : 'aclasser';
     t.unread = t.msgs.some((m) => !isMine(m) && m.unread);
-    t.etat = t.labels.has(L.traite) ? 'traite' : t.labels.has(L.sanssuite) ? 'sanssuite' : t.labels.has(L.encours) ? 'encours' : t.unread ? 'nouveau' : 'lu';
+    t.etat = (t.labels.has(L.traite) || t.labels.has(L.sanssuite)) ? 'traite' : 'atraiter';
     // Sans réponse : le dernier message vient du client et date de plus de N jours
-    const open = ['nouveau', 'lu', 'encours'].includes(t.etat);
+    const open = t.etat === 'atraiter';
     const last = t.msgs[t.msgs.length - 1];
     t.waitDays = open && last && !isMine(last) && last.date ? Math.floor((Date.now() - new Date(last.date)) / 86400000) : 0;
     t.noReply = t.waitDays >= (limit || noReplyDays());
     return t;
   }
   function counts(threads) {
-    const open = threads.filter((t) => ['nouveau', 'lu', 'encours'].includes(t.etat));
+    const open = threads.filter((t) => t.etat === 'atraiter');
     return { atraiter: open.length, unread: open.filter((t) => t.unread).length, noReply: open.filter((t) => t.noReply).length };
   }
   // Charge les demandes (et, au besoin, les mails proposés « À trier »)

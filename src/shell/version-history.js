@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.57', items: [
+    "Email : classement simplifié — un mail est sans classement, « 📥 À traiter » ou « ✅ Traité » (boutons réversibles) ; la section Demandes ne garde que « À traiter » et « Traitées »",
+    "Email : icône 📥 / ✅ dans la liste des mails pour voir l'état de chaque mail (et de sa conversation)",
+    "Email : un mail traité rangé dans un dossier sort des demandes traitées",
+    "Créer le devis depuis un mail : en-tête seulement (client, objet, origine) avec le mail et ses pièces jointes dans les documents — plus de lignes proposées, plus de bouton « Créer la commande »",
+  ]},
   { v: '0.2.56', items: [
     "Devis créé depuis un mail : « Tous les articles » par mot (ex. tous ceux qui contiennent « broderie », codes BROD… compris) pour choisir l'article Axonaut de chaque ligne",
     "Documents : bouton ⇄ pour passer un document de « Fabrication » en « Demande de prix » et inversement (module Devis et Gestion Commande, administrateurs)",

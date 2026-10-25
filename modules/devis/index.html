@@ -3678,22 +3678,19 @@ async function dmCreateFromMail(p){
   const d = newDraft();
   d.title = p.subject || '';
   d.client = p.client || null;
-  d.source = { kind: p.kind, threadId: p.threadId, subject: p.subject, email: p.email, name: p.name, date: p.date, proposals: null };
+  // en-tête seulement (client, objet, origine) : les lignes sont saisies à la main
+  d.source = { kind: p.kind, threadId: p.threadId, subject: p.subject, email: p.email, name: p.name, date: p.date, proposals: [], proposalsDone: true };
   d.historique = [{ date: new Date().toISOString(), user: userName(), action: `Création depuis ${p.kind === 'commande' ? 'la commande' : 'la demande de prix'} reçue par mail le ${dmFmtFull(p.date)} (${p.name || p.email})` }];
   editorTab = 'infos';
   openDraft(d, null, '');
   setSaveState('Création depuis le mail…');
   await saveCurrent();
   if(!currentRecId || current !== d){ alert("Le devis n'a pas pu être enregistré."); return; }
-  // lignes proposées : bons de commande joints, sinon texte des mails
-  const products = await dmLoadProductsQuick();
-  let props = [], from = 'mail';
+  // objet du devis d'après les bons de commande joints (« Cde 0457 / 3842 / client »), s'il y en a
   try{
-    const order = await dmOrderProposals(p.mails, products);
-    if(order && order.rows.length){ props = order.rows; from = order.from; if(order.title) d.title = order.title; }
+    const order = await dmOrderProposals(p.mails, []);
+    if(order && order.title && current === d){ d.title = order.title; await saveCurrent(); renderEditor(); }
   }catch(e){ console.warn('bons de commande', e); }
-  if(!props.length) props = dmTextProposals((p.mails || []).map(dmMailText), products);
-  if(current === d){ d.source.proposals = props; d.source.proposalsFrom = from; await saveCurrent(); renderEditor(); }
   // mails et pièces jointes dans les documents « Demande de prix »
   const files = [];
   (p.mails || []).forEach((m, i) => {

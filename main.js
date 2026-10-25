@@ -907,7 +907,7 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset 
     }
     const results = [];
     if (targetUids.length) {
-      for await (const msg of client.fetch(targetUids, { envelope: true, flags: true, bodyStructure: true }, { uid: true })) {
+      for await (const msg of client.fetch(targetUids, { envelope: true, flags: true, bodyStructure: true, labels: true, threadId: true }, { uid: true })) {
         const from = (msg.envelope.from && msg.envelope.from[0]) || {};
         results.push({
           uid: msg.uid,
@@ -915,7 +915,9 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset 
           from: { name: from.name || from.address || '', email: from.address || '' },
           date: msg.envelope.date ? new Date(msg.envelope.date).toISOString() : null,
           unread: !(msg.flags && msg.flags.has('\\Seen')),
-          hasAttachment: bodyStructureHasAttachment(msg.bodyStructure)
+          hasAttachment: bodyStructureHasAttachment(msg.bodyStructure),
+          labels: msg.labels ? [...msg.labels] : [],
+          threadId: msg.threadId ? String(msg.threadId) : null
         });
       }
     }
@@ -935,7 +937,7 @@ ipcMain.handle('csb:email-get-by-uids', async (_event, { uids, mailbox }) => {
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
   try {
     const results = [];
-    for await (const msg of client.fetch(uids.map(String), { envelope: true, flags: true, bodyStructure: true }, { uid: true })) {
+    for await (const msg of client.fetch(uids.map(String), { envelope: true, flags: true, bodyStructure: true, labels: true, threadId: true }, { uid: true })) {
       const from = (msg.envelope.from && msg.envelope.from[0]) || {};
       results.push({
         uid: msg.uid,
@@ -943,7 +945,9 @@ ipcMain.handle('csb:email-get-by-uids', async (_event, { uids, mailbox }) => {
         from: { name: from.name || from.address || '', email: from.address || '' },
         date: msg.envelope.date ? new Date(msg.envelope.date).toISOString() : null,
         unread: !(msg.flags && msg.flags.has('\\Seen')),
-        hasAttachment: bodyStructureHasAttachment(msg.bodyStructure)
+        hasAttachment: bodyStructureHasAttachment(msg.bodyStructure),
+        labels: msg.labels ? [...msg.labels] : [],
+        threadId: msg.threadId ? String(msg.threadId) : null
       });
     }
     return results;

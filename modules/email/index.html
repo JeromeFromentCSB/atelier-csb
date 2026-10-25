@@ -122,6 +122,7 @@
   .msg-snippet{ font-size:.72rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .msg-snippet:empty{ display:none; }
   .msg-attach-icon{ font-size:.68rem; }
+  .mail-state{ display:inline-block; font-size:.68rem; padding:0 4px; border-radius:6px; line-height:15px; }
   .msg-dot{
     flex-shrink:0; width:9px; height:9px; border-radius:50%; margin-top:7px; cursor:pointer;
     background:transparent; border:1.5px solid var(--line);
@@ -287,10 +288,6 @@
     <div class="row">
       <label>Mot de passe d'application</label>
       <input type="password" id="appPasswordInput" placeholder="xxxx xxxx xxxx xxxx">
-    </div>
-    <div class="row">
-      <label>Alerte « sans réponse »</label>
-      <span>quand le client attend une réponse depuis <input type="number" id="dmNoReplyDays" min="1" max="60" style="width:60px; padding:5px 8px; border:1.5px solid var(--line); border-radius:6px;"> jour(s)</span>
     </div>
     <div class="row">
       <button class="btn primary" id="saveCredsBtn">Enregistrer et se connecter</button>
@@ -585,7 +582,21 @@ async function moveMessageToFolder(id, targetPath){
   const row = document.querySelector(`.msg-row[data-id="${id}"]`);
   if(row) row.style.opacity = '.4';
   try{
+    // mail « Traité » rangé dans un dossier : il sort des demandes traitées (libellés retirés)
+    const local = messages.find(m => m.id === id);
+    let treatedThread = null;
+    if(local && mailStateEtat(local) === 'traite' && window.csbHost && window.csbHost.demandesThreadOf){
+      try{ treatedThread = await window.csbHost.demandesThreadOf(id, currentMailbox); }catch(e){ console.warn('conversation introuvable', e); }
+    }
     await requireCsbHost().emailMoveToFolder(id, currentMailbox, targetPath);
+    if(treatedThread && treatedThread.items.length){
+      try{
+        await window.csbHost.emailLabels(treatedThread.items.map(m => m.uid), [], [DM.L.root, DM.L.prix, DM.L.commande].concat(DM.STATE_LABELS));
+        dmStateByThread[treatedThread.threadId] = null;
+        dmData.threads = dmData.threads.filter(t => t.id !== treatedThread.threadId);
+        dmRenderFolders(); dmNotifyCounts();
+      }catch(e){ console.warn('libellés non retirés', e); }
+    }
     messages = messages.filter(m => m.id !== id);
     if(selectedMessageId === id){
       selectedMessageId = null;
@@ -621,7 +632,9 @@ async function loadMessages(append){
       from: m.from,
       subject: m.subject,
       date: m.date ? new Date(m.date) : null,
-      hasAttachment: m.hasAttachment
+      hasAttachment: m.hasAttachment,
+      labels: m.labels || [],
+      threadId: m.threadId || null
     }));
     if(append){
       const existingIds = new Set(messages.map(m => m.id));
@@ -640,7 +653,7 @@ async function loadMessages(append){
         extra.forEach(m => {
           messages.push({
             id: m.uid, snippet: '', unread: m.unread, from: m.from, subject: m.subject,
-            date: m.date ? new Date(m.date) : null, hasAttachment: m.hasAttachment
+            date: m.date ? new Date(m.date) : null, hasAttachment: m.hasAttachment, labels: m.labels || [], threadId: m.threadId || null
           });
         });
       }catch(e){ console.warn('Impossible de récupérer certains mails épinglés', e); }
@@ -687,7 +700,7 @@ function msgRowHtml(m){
       <div class="msg-main">
         <div class="msg-top">
           <span class="msg-from">${escapeHtml(m.from.name)}</span>
-          <span class="msg-date">${m.hasAttachment ? '<span class="msg-attach-icon" title="Contient une pièce jointe">📎</span> ' : ''}${formatDate(m.date)}</span>
+          <span class="msg-date">${mailStateIcon(m)}${m.hasAttachment ? '<span class="msg-attach-icon" title="Contient une pièce jointe">📎</span> ' : ''}${formatDate(m.date)}</span>
         </div>
         <div class="msg-subject">${escapeHtml(m.subject)}</div>
         <div class="msg-snippet">${escapeHtml(m.snippet)}</div>
@@ -712,7 +725,7 @@ function threadRowHtml(thread){
       <div class="msg-main">
         <div class="msg-top">
           <span class="msg-from">${escapeHtml(fromLabel)}</span>
-          <span class="msg-date">${count > 1 ? `<span class="thread-count">${count}</span> ` : ''}${formatDate(m.date)}</span>
+          <span class="msg-date">${mailStateIcon(m, thread.messages)}${count > 1 ? `<span class="thread-count">${count}</span> ` : ''}${formatDate(m.date)}</span>
         </div>
         <div class="msg-subject">${escapeHtml(m.subject)}</div>
       </div>
@@ -1066,8 +1079,6 @@ const dmBodyCache = {};         // uid → message complet
 let dmDevisLinks = {};          // threadId → [{ id, numero, statut }]
 const DM_VIEWS = {
   atraiter:    { label: 'Demandes à traiter', icon: '📥' },
-  sansreponse: { label: 'Sans réponse',       icon: '⚠️' },
-  atrier:      { label: 'À trier',            icon: '🔎' },
   traitees:    { label: 'Traitées',           icon: '✅' }
 };
 const DM_STATUT_DEVIS = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Commande', facture: 'Facturé', refuse: 'Refusé', annule: 'Annulé' };
@@ -1127,7 +1138,7 @@ async function dmLoad(force){
   dmLoading = true; dmError = '';
   if(dmView) dmRenderList();
   try{
-    const d = await DM.load(window.csbHost, { suggestions: true });
+    const d = await DM.load(window.csbHost, { suggestions: false });
     dmData = d;
     dmLoadedAt = Date.now();
     await dmLoadDevisLinks();
@@ -1137,6 +1148,7 @@ async function dmLoad(force){
   dmRenderFolders();
   dmNotifyCounts();
   if(dmView){ dmRenderList(); if(dmSelId) dmRenderDetail(); }
+  else renderList();
 }
 function dmNotifyCounts(){
   const c = DM.counts(dmData.threads);
@@ -1153,6 +1165,29 @@ function dmRenderFolders(){
       <span class="ic">${v.icon}</span><span class="nm">${v.label}</span>${n[k] ? `<span class="dm-n ${k === 'sansreponse' || (k === 'atraiter' && c.unread) ? 'hot' : ''}">${n[k]}</span>` : ''}
     </div>`).join('') + '<div class="dm-folders-sep"></div>';
   box.querySelectorAll('[data-dmview]').forEach(el => el.addEventListener('click', () => dmOpenView(el.dataset.dmview)));
+}
+// Icône d'état d'un mail dans la liste : 📥 à traiter, ✅ traité (état de sa conversation)
+const dmStateByThread = {}; // état connu après un classement fait ici (null = plus classé)
+function mailStateIcon(m, others){
+  const etat = mailStateEtat(m, others);
+  if(!etat || !DM.ETATS[etat]) return '';
+  const e = DM.ETATS[etat];
+  return `<span class="mail-state" title="${e.label}" style="background:${e.light}; color:${e.c};">${e.icon}</span> `;
+}
+// État d'un mail (celui de sa conversation) : 'atraiter', 'traite' ou rien
+function mailStateEtat(m, others){
+  let etat;
+  if(m.threadId && m.threadId in dmStateByThread) etat = dmStateByThread[m.threadId];
+  else{
+    const t = m.threadId && dmData.threads.find(x => x.id === m.threadId);
+    if(t) etat = t.etat;
+    else{
+      const labels = new Set((others || [m]).flatMap(x => x.labels || []));
+      if(labels.has(DM.L.traite) || labels.has(DM.L.sanssuite)) etat = 'traite';
+      else if(labels.has(DM.L.root) || labels.has(DM.L.prix) || labels.has(DM.L.commande) || labels.has(DM.L.encours)) etat = 'atraiter';
+    }
+  }
+  return etat || null;
 }
 function dmOpenView(view){
   dmView = view; dmSelId = null; dmChecked = new Set();
@@ -1172,9 +1207,9 @@ function dmVisibleThreads(){
   const match = t => !q || dmNorm([t.subject, t.contactName, t.contactEmail, dmClientName(t)].join(' ')).includes(q);
   if(dmView === 'atrier') return dmData.suggestions.filter(match);
   return dmData.threads.filter(t => {
-    if(dmView === 'atraiter' && !['nouveau', 'lu', 'encours'].includes(t.etat)) return false;
+    if(dmView === 'atraiter' && t.etat !== 'atraiter') return false;
     if(dmView === 'sansreponse' && !t.noReply) return false;
-    if(dmView === 'traitees' && !['traite', 'sanssuite'].includes(t.etat)) return false;
+    if(dmView === 'traitees' && t.etat !== 'traite') return false;
     return match(t);
   });
 }
@@ -1190,6 +1225,7 @@ function dmRenderList(){
   if(dmView === 'atrier'){
     head += `<div class="dm-bulk">
       <label><input type="checkbox" id="dmCheckAll" ${items.length && items.every(t => dmChecked.has(t.id)) ? 'checked' : ''}> Tout cocher</label>
+      <button class="btn ghost" id="dmBulkTodo" ${dmChecked.size ? '' : 'disabled'} title="Mettre dans les demandes à traiter">📥 À traiter (${dmChecked.size})</button>
       <button class="btn ghost" id="dmBulkTraite" ${dmChecked.size ? '' : 'disabled'} title="Pour les mails déjà traités : ils ne seront plus proposés">✅ Traité (${dmChecked.size})</button>
       <button class="btn ghost" id="dmBulkIgnore" ${dmChecked.size ? '' : 'disabled'} title="Ce ne sont pas des demandes">✕ Pas une demande</button>
       <button class="btn ghost danger-soft" id="dmBulkDelete" ${dmChecked.size ? '' : 'disabled'} title="Mettre à la Corbeille (récupérable)">🗑️</button>
@@ -1207,7 +1243,7 @@ function dmRenderList(){
       <div class="msg-main">
         <div class="msg-top"><span class="msg-from">${escapeHtml(name)}</span><span class="msg-date">${t.hasAttachment ? '📎 ' : ''}${formatDate(t.lastDate ? new Date(t.lastDate) : null)}</span></div>
         <div class="msg-subject">${escapeHtml(t.subject)}</div>
-        <div class="dm-tags">${dmView === 'atrier' ? '<span class="dm-tag">proposé</span>' : `<span class="dm-tag">${DM.TYPES[t.type]}</span><span class="dm-tag" style="background:${et.light}; color:${et.c};">${et.icon} ${et.label}</span>`}${t.msgs.length > 1 ? `<span class="dm-tag">${t.msgs.length} messages</span>` : ''}${t.noReply && dmView !== 'atrier' ? `<span class="dm-tag warn">⚠ sans réponse depuis ${t.waitDays} j</span>` : ''}${links.length ? '<span class="dm-tag ok">📝 devis</span>' : ''}</div>
+        <div class="dm-tags">${dmView === 'atrier' ? '<span class="dm-tag">proposé</span>' : `<span class="dm-tag" style="background:${et.light}; color:${et.c};">${et.icon} ${et.label}</span>`}${t.msgs.length > 1 ? `<span class="dm-tag">${t.msgs.length} messages</span>` : ''}${links.length ? '<span class="dm-tag ok">📝 devis</span>' : ''}</div>
       </div>
     </div>`;
   }).join('');
@@ -1215,6 +1251,8 @@ function dmRenderList(){
   listEl.querySelectorAll('.dm-check').forEach(cb => cb.addEventListener('change', () => { if(cb.checked) dmChecked.add(cb.dataset.tid); else dmChecked.delete(cb.dataset.tid); dmRenderList(); }));
   const all = document.getElementById('dmCheckAll');
   if(all) all.addEventListener('change', () => { dmChecked = all.checked ? new Set(items.map(t => t.id)) : new Set(); dmRenderList(); });
+  const bto = document.getElementById('dmBulkTodo');
+  if(bto) bto.addEventListener('click', () => dmBulk('todo'));
   const bt = document.getElementById('dmBulkTraite');
   if(bt) bt.addEventListener('click', () => dmBulk('traite'));
   const bi = document.getElementById('dmBulkIgnore');
@@ -1225,12 +1263,13 @@ function dmRenderList(){
 async function dmBulk(kind){
   const list = dmData.suggestions.filter(t => dmChecked.has(t.id));
   if(!list.length) return;
-  if(!confirm(`${kind === 'traite' ? 'Marquer comme traités' : kind === 'delete' ? 'Mettre à la Corbeille' : 'Écarter (pas une demande)'} ${list.length} mail(s) ?`)) return;
+  if(!confirm(`${kind === 'traite' ? 'Marquer comme traités' : kind === 'todo' ? 'Mettre à traiter' : kind === 'delete' ? 'Mettre à la Corbeille' : 'Écarter (pas une demande)'} ${list.length} mail(s) ?`)) return;
   try{
     const uids = list.flatMap(t => t.msgs.map(m => m.uid));
     if(kind === 'delete') await window.csbHost.emailMoveToTrash(uids.join(','), dmData.mailbox);
-    else await window.csbHost.emailLabels(uids, [kind === 'traite' ? DM.L.traite : DM.L.ignore], []);
+    else await window.csbHost.emailLabels(uids, kind === 'traite' ? [DM.L.root, DM.L.traite] : kind === 'todo' ? [DM.L.root] : [DM.L.ignore], []);
     if(kind === 'traite') await window.csbHost.emailSetFlags(uids.join(','), dmData.mailbox, ['\\Seen'], []);
+    if(kind === 'todo' || kind === 'traite') list.forEach(t => { t.labels.add(DM.L.root); if(kind === 'traite') t.labels.add(DM.L.traite); DM.refresh(t, dmData.myEmail); dmData.threads.unshift(t); });
     dmData.suggestions = dmData.suggestions.filter(t => !dmChecked.has(t.id));
     if(dmChecked.has(dmSelId)){ dmSelId = null; document.getElementById('detailContent').innerHTML = ''; }
     dmChecked = new Set();
@@ -1242,19 +1281,15 @@ function dmFind(id){ return dmData.threads.find(t => t.id === id) || dmData.sugg
 // ---------- Fiche d'une demande ----------
 function dmActionsHtml(t, isSug){
   const b = (act, label, cls, title) => `<button class="btn ${cls || 'ghost'}" data-dm="${act}" ${title ? `title="${escapeHtml(title)}"` : ''}>${label}</button>`;
-  if(isSug) return b('type:prix', "💶 C'est une demande de prix", 'primary') + b('type:commande', "📦 C'est une commande", 'primary') +
-    b('etat:traite', '✅ Déjà traité', '', 'Ancien mail déjà traité : ne plus le proposer') + b('ignore', "✕ Pas une demande", '', 'Ne plus proposer ce mail') +
-    '<span class="dm-sep"></span>' + b('delete', '🗑️ Supprimer', 'danger-soft', 'Déplace le mail vers la Corbeille (récupérable)');
-  return b('create:prix', '📝 Créer le devis', t.type !== 'commande' ? 'primary' : '') + b('create:commande', '📦 Créer la commande', t.type === 'commande' ? 'primary' : '') +
+  const del = '<span class="dm-sep"></span>' + b('delete', '🗑️ Supprimer', 'danger-soft', 'Déplace vers la Corbeille (récupérable)');
+  if(isSug) return b('etat:atraiter', '📥 À traiter', 'primary', 'Mettre ce mail dans les demandes à traiter') +
+    b('etat:traite', '✅ Déjà traité', '', 'Ancien mail déjà traité : ne plus le proposer') + b('ignore', '✕ Pas une demande', '', 'Ne plus proposer ce mail') + del;
+  const aT = t.etat === 'atraiter', tr = t.etat === 'traite';
+  return b('create:prix', '📝 Créer le devis', 'primary') +
     '<span class="dm-sep"></span>' +
-    (t.type === 'prix' ? b('untype:prix', '💶 Demande de prix ✓', 'active', 'Cliquer pour retirer « Demande de prix »') : b('type:prix', '→ Demande de prix')) +
-    (t.type === 'commande' ? b('untype:commande', '📦 Commande ✓', 'active', 'Cliquer pour retirer « Commande »') : b('type:commande', '→ Commande')) +
-    b('untype:all', '✕ Retirer des demandes', '', "Ce n'est plus une demande : retire tous ses libellés (type et état)") +
-    '<span class="dm-sep"></span>' +
-    (t.etat !== 'encours' ? b('etat:encours', '⏳ En cours') : '') + (t.etat !== 'traite' ? b('etat:traite', '✅ Traité') : '') +
-    (t.etat !== 'sanssuite' ? b('etat:sanssuite', '🗄 Sans suite') : '') + (['encours', 'traite', 'sanssuite'].includes(t.etat) ? b('etat:rouvrir', t.etat === 'traite' ? '↩ Retirer « Traité »' : t.etat === 'sanssuite' ? '↩ Retirer « Sans suite »' : '↩ Retirer « En cours »', '', 'Remet la demande à traiter') : '') +
-    b(t.unread ? 'read' : 'unread', t.unread ? '✉️ Marquer comme lu' : '✉️ Marquer comme non lu') +
-    '<span class="dm-sep"></span>' + b('delete', '🗑️ Supprimer', 'danger-soft', 'Déplace toute la conversation vers la Corbeille (récupérable)');
+    b(aT ? 'untype:all' : 'etat:atraiter', '📥 À traiter' + (aT ? ' ✓' : ''), aT ? 'active' : '', aT ? 'Cliquer pour retirer « À traiter » (le mail sort des demandes)' : 'Remettre à traiter') +
+    b(tr ? 'untype:all' : 'etat:traite', '✅ Traité' + (tr ? ' ✓' : ''), tr ? 'active' : '', tr ? 'Cliquer pour retirer « Traité » (le mail sort des demandes)' : 'Marquer comme traité') +
+    b(t.unread ? 'read' : 'unread', t.unread ? '✉️ Marquer comme lu' : '✉️ Marquer comme non lu') + del;
 }
 function dmRenderDetail(){
   const t = dmFind(dmSelId);
@@ -1267,7 +1302,7 @@ function dmRenderDetail(){
   const links = dmDevisLinks[t.id] || [];
   pane.innerHTML = `
     <h2 class="detail-subject">${escapeHtml(t.subject)}</h2>
-    <div class="dm-tags" style="margin-bottom:10px;">${isSug ? '<span class="dm-tag">À trier</span>' : `<span class="dm-tag" style="background:${et.light}; color:${et.c};">${et.icon} ${et.label}</span><span class="dm-tag">${DM.TYPES[t.type]}</span>`}${t.noReply ? `<span class="dm-tag warn">⚠ le client attend une réponse depuis ${t.waitDays} jour(s)</span>` : ''}</div>
+    <div class="dm-tags" style="margin-bottom:10px;">${isSug ? '<span class="dm-tag">À trier</span>' : `<span class="dm-tag" style="background:${et.light}; color:${et.c};">${et.icon} ${et.label}</span>`}</div>
     <div class="dm-actions">${dmActionsHtml(t, isSug)}</div>
     ${links.length ? `<div class="dm-banner">📝 Créé depuis cette demande : ${links.map(l => `<a href="#" data-devis="${escapeHtml(l.id)}">${escapeHtml(l.numero || 'brouillon')}${l.title ? ' — ' + escapeHtml(l.title) : ''} (${escapeHtml(DM_STATUT_DEVIS[l.statut] || l.statut)})</a>`).join(' · ')}</div>` : ''}
     <div class="dm-cards">
@@ -1369,19 +1404,20 @@ function dmAfterChange(t, rerender){
     dmData.threads = dmData.threads.filter(x => x !== t);
     if(dmView && dmSelId === t.id){ dmSelId = null; closePreview(); document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">✔ Retiré des demandes.</div>'; }
   }
+  dmStateByThread[t.id] = tagged ? t.etat : null;
   dmRenderFolders(); dmNotifyCounts();
-  if(!dmView) return; // mail ouvert depuis un dossier ordinaire : la liste des mails ne change pas
+  if(!dmView){ renderList(); return; } // mail ouvert depuis un dossier ordinaire : seule son icône change
   dmRenderList();
   if(rerender !== false && dmSelId) dmRenderDetail();
 }
 async function dmAction(t, action){
   const [kind, val] = action.split(':');
   try{
-    if(kind === 'type') await dmLabels(t, [DM.L[val]], [val === 'prix' ? DM.L.commande : DM.L.prix]);
+    if(kind === 'etat' && (val === 'atraiter' || val === 'rouvrir')){ await dmLabels(t, [DM.L.root], DM.STATE_LABELS); }
+    else if(kind === 'etat' && val === 'traite'){ await dmLabels(t, [DM.L.root, DM.L.traite], [DM.L.encours, DM.L.sanssuite]); await dmSetSeen(t, true); }
     else if(kind === 'untype'){
-      // « Demande de prix » / « Commande » retiré ; « all » = la conversation sort complètement des demandes
-      const remove = val === 'all' ? [DM.L.root, DM.L.prix, DM.L.commande].concat(DM.STATE_LABELS) : [DM.L[val], DM.L.root];
-      await dmLabels(t, [], remove);
+      // retour à « rien » : la conversation sort des demandes (tous ses libellés de demande retirés)
+      await dmLabels(t, [], [DM.L.root, DM.L.prix, DM.L.commande].concat(DM.STATE_LABELS));
     }
     else if(kind === 'ignore'){
       await dmLabels(t, [DM.L.ignore], []);
@@ -1433,7 +1469,7 @@ async function dmCreateDevis(t, kind){
     window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { fromMail: {
       kind, threadId: t.id, subject: t.subject, email: t.contactEmail, name: t.contactName, date: t.firstDate,
       client: dmClientOf(t) || null, mails } } }, '*');
-    await dmLabels(t, [DM.L[kind], DM.L.traite], [kind === 'commande' ? DM.L.prix : DM.L.commande, DM.L.encours, DM.L.sanssuite]);
+    await dmLabels(t, [DM.L.root, DM.L.traite], [DM.L.encours, DM.L.sanssuite]);
     await dmSetSeen(t, true);
     (dmDevisLinks[t.id] = dmDevisLinks[t.id] || []).push({ id: '', numero: '', statut: 'brouillon', title: t.subject });
     dmAfterChange(t);
@@ -1457,10 +1493,11 @@ async function dmWireMailToolbar(uid){
     if(!document.getElementById('dmMailBtns') || selectedMessageId !== uid) return;
     const has = l => t.labels.has(l);
     const btn = (on, act, label, title) => `<button class="btn ghost ${on ? 'active' : ''}" data-dmmail="${act}" title="${escapeHtml(title)}">${label}${on ? ' ✓' : ''}</button>`;
+    const tr = has(DM.L.traite) || has(DM.L.sanssuite);
+    const aT = !tr && (has(DM.L.root) || has(DM.L.prix) || has(DM.L.commande));
     box.innerHTML =
-      btn(has(DM.L.prix), has(DM.L.prix) ? 'untype:prix' : 'type:prix', '💶 Demande de prix', has(DM.L.prix) ? 'Cliquer pour retirer « Demande de prix »' : 'Classer dans les demandes de prix') +
-      btn(has(DM.L.commande), has(DM.L.commande) ? 'untype:commande' : 'type:commande', '📦 Commande', has(DM.L.commande) ? 'Cliquer pour retirer « Commande »' : 'Classer dans les commandes') +
-      btn(has(DM.L.traite), has(DM.L.traite) ? 'etat:rouvrir' : 'etat:traite', '✅ Traité', has(DM.L.traite) ? 'Cliquer pour retirer « Traité »' : 'Mail déjà traité : marqué « Traité »') +
+      btn(aT, aT ? 'untype:all' : 'etat:atraiter', '📥 À traiter', aT ? 'Cliquer pour retirer « À traiter »' : 'Mettre ce mail dans les demandes à traiter') +
+      btn(tr, tr ? 'untype:all' : 'etat:traite', '✅ Traité', tr ? 'Cliquer pour retirer « Traité »' : 'Marquer ce mail comme traité') +
       `<button class="btn ghost" data-dmmail="create:prix" title="Créer un devis depuis ce mail">📝 Créer le devis</button>`;
     box.querySelectorAll('[data-dmmail]').forEach(b => b.addEventListener('click', async () => {
       box.querySelectorAll('button').forEach(x => { x.disabled = true; });
@@ -1498,7 +1535,7 @@ window.addEventListener('message', event => {
   const msg = event.data;
   if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload || !msg.payload.openDemande) return;
   const tid = String(msg.payload.openDemande);
-  const go = () => { const t = dmFind(tid); dmOpenView(t && ['traite', 'sanssuite'].includes(t.etat) ? 'traitees' : 'atraiter'); dmSelId = tid; dmRenderList(); dmRenderDetail(); };
+  const go = () => { const t = dmFind(tid); dmOpenView(t && t.etat === 'traite' ? 'traitees' : 'atraiter'); dmSelId = tid; dmRenderList(); dmRenderDetail(); };
   if(dmLoadedAt) go(); else { dmLoad(true).then(go); }
 });
 dmInitSettings();

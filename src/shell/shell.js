@@ -252,8 +252,8 @@
   function demandesBadgeHtml() {
     const c = demandesCounts;
     if (!c || !c.atraiter) return '';
-    const hot = c.unread || c.noReply;
-    const tip = `${c.atraiter} demande(s) à traiter` + (c.unread ? ` · ${c.unread} avec un message non lu` : '') + (c.noReply ? ` · ${c.noReply} sans réponse` : '');
+    const hot = c.unread;
+    const tip = `${c.atraiter} demande(s) à traiter` + (c.unread ? ` · ${c.unread} avec un message non lu` : '');
     return `<span class="nav-badge${hot ? ' hot' : ''}" title="${tip}">${c.atraiter}</span>`;
   }
   function setDemandesCounts(c) {
