@@ -96,8 +96,8 @@ const canCost = () => CSBAuth.isAdmin() || CSBAuth.can('articles', 'prix_achat')
 // que si elle a été modifiée, pour ne pas perdre une mise en forme faite dans Axonaut.
 function htmlToText(html){
   const div = document.createElement('div');
-  div.innerHTML = String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p[^>]*>/gi, '\n').replace(/<\/?p[^>]*>/gi, '');
-  return div.textContent.replace(/\n{3,}/g, '\n\n').trim();
+  div.innerHTML = String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(div|p|li|tr|h[1-6])(\s[^>]*)?>/gi, '\n');
+  return div.textContent.replace(/\n{2,}/g, '\n').trim();
 }
 const textToHtml = t => esc(t).replace(/\n/g, '<br>');
 // Type de produit : Axonaut le renvoie en texte, mais l'enregistre avec un code (vérifié sur un

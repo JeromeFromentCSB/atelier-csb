@@ -216,6 +216,13 @@
   .modal.wide{ width:680px; }
   .modal textarea{ width:100%; min-height:190px; font-family:inherit; }
   .chk-line{ display:flex; gap:8px; align-items:center; font-size:13px; margin-top:6px; }
+  .send-att-zone{ border:1.5px dashed var(--line); border-radius:10px; padding:8px 10px; background:#FBF9F5; outline:none; }
+  .send-att-zone.over, .send-att-zone:focus{ border-color:var(--accent); background:var(--accent-light); }
+  .send-att{ display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 0; }
+  .send-att .sz{ color:var(--muted); font-size:12px; }
+  .send-att button{ border:none; background:none; color:var(--danger); cursor:pointer; font-size:14px; padding:0 4px; }
+  .send-att-docs{ margin-top:6px; padding-top:6px; border-top:1px solid var(--line); }
+  .send-att-docs label{ display:flex; gap:6px; align-items:center; font-size:13px; padding:2px 0; cursor:pointer; }
   /* Devis créé depuis un mail : lignes proposées */
   .dm-prop{ width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; background:#fff; border-radius:8px; }
   .dm-prop td, .dm-prop th{ padding:4px 6px; border-bottom:1px solid #EFE6D2; text-align:left; vertical-align:middle; }
@@ -338,6 +345,20 @@
     <label class="chk-line"><input type="checkbox" id="sendWithLink"> Lien de consultation et d'acceptation en ligne (avec suivi des ouvertures)</label>
     <label class="chk-line"><input type="checkbox" id="sendWithPdf"> Joindre le PDF du devis</label>
     <label class="chk-line"><input type="checkbox" id="sendBccAxonaut"> Copie cachée à Axonaut (in@axonaut.com)</label>
+    <div class="field" style="margin-top:10px;">
+      <label>Pièces jointes en plus</label>
+      <div id="sendAttZone" class="send-att-zone" tabindex="0" title="Dépose des fichiers ici, ou clique puis Ctrl+V">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+          <button type="button" class="btn small" id="sendAttPick">📁 Ajouter des fichiers…</button>
+          <button type="button" class="btn small" id="sendAttPaste">📋 Coller</button>
+          <span class="hint" style="margin:0;">ou dépose-les ici</span>
+          <input type="file" id="sendAttFile" multiple style="display:none;">
+        </div>
+        <div id="sendAttList"></div>
+        <div id="sendAttDocs"></div>
+      </div>
+      <div class="hint" id="sendAttSize"></div>
+    </div>
     <div class="status" id="sendStatus" style="margin-top:10px;"></div>
     <div class="actions">
       <button class="btn" id="sendCancel">Annuler</button>
@@ -980,7 +1001,7 @@ const axDetailCache = {};
 function axText(html){
   if(!html) return '';
   const div = document.createElement('div');
-  div.innerHTML = String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n');
+  div.innerHTML = String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(div|p|li|tr|h[1-6])(\s[^>]*)?>/gi, '\n');
   return div.textContent.replace(/\n{2,}/g, '\n').trim();
 }
 async function axFetchAll(path, maxPages){
@@ -2271,6 +2292,7 @@ async function openSendModal(){
   document.getElementById('sendStatus').textContent = '';
   document.getElementById('sendGo').disabled = !(st && st.connected);
   document.getElementById('sendModal').classList.add('show');
+  resetSendAttachments();
   // Contacts du client dans Axonaut (adresses email) à ajouter d'un clic.
   const chips = document.getElementById('sendContacts');
   chips.innerHTML = '<span class="hint">Chargement des contacts Axonaut…</span>';
@@ -2290,6 +2312,58 @@ async function openSendModal(){
     }
   }catch(e){ chips.innerHTML = `<span class="hint">Contacts Axonaut indisponibles (${escapeHtml(e.message.slice(0, 80))}).</span>`; }
 }
+// Pièces jointes ajoutées à l'envoi (en plus du PDF du devis) : fichiers du poste, collés, ou
+// documents déjà rangés avec le devis (dossiers « Fabrication » / « Demande de prix »)
+let sendExtras = [];          // [{ file }]
+let sendDocsList = [];        // documents du devis : [{ id, filename, original_filename, category }]
+const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+function renderSendAtt(){
+  const list = document.getElementById('sendAttList');
+  list.innerHTML = sendExtras.map((x, i) => `<div class="send-att">📎 ${escapeHtml(x.file.name)} <span class="sz">${fmtSize(x.file.size)}</span><button type="button" data-rm="${i}" title="Retirer">✕</button></div>`).join('');
+  list.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { sendExtras.splice(Number(b.dataset.rm), 1); renderSendAtt(); }));
+  const docs = document.getElementById('sendAttDocs');
+  docs.innerHTML = sendDocsList.length ? '<div class="send-att-docs"><div class="hint" style="margin:0 0 2px;">Documents du devis :</div>' + sendDocsList.map((dc, i) => `<label><input type="checkbox" data-doc="${i}" ${dc.checked ? 'checked' : ''}> ${escapeHtml(dc.original_filename || dc.filename)} <span class="sz" style="color:var(--muted); font-size:12px;">(${escapeHtml(CATEGORY_LABELS[dc.category] || dc.category)})</span></label>`).join('') + '</div>' : '';
+  docs.querySelectorAll('[data-doc]').forEach(cb => cb.addEventListener('change', () => { sendDocsList[Number(cb.dataset.doc)].checked = cb.checked; }));
+  const total = sendExtras.reduce((t, x) => t + x.file.size, 0);
+  const sz = document.getElementById('sendAttSize');
+  sz.style.color = total > 20 * 1048576 ? 'var(--danger)' : '';
+  sz.textContent = sendExtras.length ? `${sendExtras.length} fichier(s) · ${fmtSize(total)}${total > 20 * 1048576 ? ' — trop lourd pour un mail (25 Mo au plus avec le PDF)' : ''}` : '';
+}
+function addSendFiles(files){ [...files].forEach(f => { if(f && f.size != null) sendExtras.push({ file: f }); }); renderSendAtt(); }
+async function resetSendAttachments(){
+  sendExtras = []; sendDocsList = [];
+  renderSendAtt();
+  const key = prodDocsKey();
+  if(!key) return;
+  try{ sendDocsList = (await docsFetch(key)).map(dc => Object.assign({}, dc, { checked: false })); }catch(e){ sendDocsList = []; }
+  renderSendAtt();
+}
+const fileToBase64 = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
+// toutes les pièces jointes en plus, prêtes pour l'envoi
+async function collectSendAttachments(status){
+  const out = [];
+  for(const x of sendExtras) out.push({ filename: x.file.name, base64: await fileToBase64(x.file), contentType: x.file.type || 'application/octet-stream' });
+  for(const dc of sendDocsList.filter(dc => dc.checked)){
+    status.textContent = 'Lecture de ' + (dc.original_filename || dc.filename) + '…';
+    if(!(await ensureDocsFolderAccess(dc.category, true))) throw new Error(`accès au dossier « ${CATEGORY_LABELS[dc.category]} » non autorisé`);
+    const f = await (await docsHandles[dc.category].getFileHandle(dc.filename)).getFile();
+    out.push({ filename: dc.original_filename || dc.filename, base64: await fileToBase64(f), contentType: f.type || 'application/octet-stream' });
+  }
+  return out;
+}
+document.getElementById('sendAttPick').addEventListener('click', () => document.getElementById('sendAttFile').click());
+document.getElementById('sendAttFile').addEventListener('change', e => { addSendFiles(e.target.files); e.target.value = ''; });
+document.getElementById('sendAttPaste').addEventListener('click', async () => {
+  const files = await clipboardFilesAsFiles();
+  if(files.length) addSendFiles(files); else alert('Rien à coller : copie un fichier dans l\'Explorateur, ou une image.');
+});
+(() => {
+  const zone = document.getElementById('sendAttZone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('over'); if(e.dataTransfer.files.length) addSendFiles(e.dataTransfer.files); });
+  zone.addEventListener('paste', e => { const files = [...(e.clipboardData && e.clipboardData.files || [])]; if(files.length){ e.preventDefault(); addSendFiles(files); } });
+})();
 document.getElementById('sendCancel').addEventListener('click', () => document.getElementById('sendModal').classList.remove('show'));
 document.getElementById('sendGo').addEventListener('click', sendQuote);
 
@@ -2333,6 +2407,8 @@ async function sendQuote(){
       d.suivi = Object.assign({}, d.suivi, { token: up.token, url: up.url, hash: contentHash(d), uploadedAt: new Date().toISOString() });
       link = up.url;
     }
+    const extras = await collectSendAttachments(status);
+    if(extras.reduce((t, a) => t + a.base64.length * 0.75, 0) > 24 * 1048576) throw new Error('pièces jointes trop lourdes pour un mail (25 Mo au plus)');
     status.textContent = "Envoi de l'email…";
     // Objet habituel, complété par l'objet du devis s'il est renseigné.
     let subject = fillTemplate(document.getElementById('sendSubject').value, d, link).trim();
@@ -2341,14 +2417,14 @@ async function sendQuote(){
     const bcc = document.getElementById('sendBccAxonaut').checked ? ['in@axonaut.com'] : [];
     const sent = await window.csbHost.emailSend({
       to: to.join(', '), cc: cc.join(', '), bcc: bcc.join(', '), subject, text, html: textToEmailHtml(text, link),
-      attachments: withPdf ? [{ filename: `Devis ${d.numero}.pdf`, base64: pdfBase64 }] : []
+      attachments: (withPdf ? [{ filename: `Devis ${d.numero}.pdf`, base64: pdfBase64, contentType: 'application/pdf' }] : []).concat(extras)
     });
     d.envois = d.envois || [];
-    d.envois.push({ date: new Date().toISOString(), to: to.join(', '), cc: cc.join(', '), by: userName(), from: sent && sent.from, withLink: !!link, withPdf });
+    d.envois.push({ date: new Date().toISOString(), to: to.join(', '), cc: cc.join(', '), by: userName(), from: sent && sent.from, withLink: !!link, withPdf, extras: extras.map(a => a.filename) });
     if(!d.suivi && withPdf) d.suivi = { hash: contentHash(d) };
     else if(d.suivi) d.suivi.hash = contentHash(d);
     if(d.statut === 'brouillon') d.statut = 'envoye';
-    addHisto('Envoyé par email à ' + to.join(', ') + ((d.version || 1) > 1 ? ` (version ${d.version})` : '') + (link ? ' (lien en ligne)' : '') + (withPdf ? ' (PDF joint)' : '') + (d.attenteRevalidation && d.attenteRevalidation === (d.version || 1) ? ' — nouvelle acceptation demandée' : ''));
+    addHisto('Envoyé par email à ' + to.join(', ') + ((d.version || 1) > 1 ? ` (version ${d.version})` : '') + (link ? ' (lien en ligne)' : '') + (withPdf ? ' (PDF joint)' : '') + (extras.length ? ` (+ ${extras.length} pièce(s) jointe(s) : ${extras.map(a => a.filename).join(', ')})` : '') + (d.attenteRevalidation && d.attenteRevalidation === (d.version || 1) ? ' — nouvelle acceptation demandée' : ''));
     await saveCurrent();
     document.getElementById('sendModal').classList.remove('show');
     renderEditor();

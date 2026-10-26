@@ -3991,7 +3991,9 @@ function updateFabricationBtnLabel(contractId){
 }
 function stripHtmlToText(html){
   if(!html) return '';
-  const withBreaks = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n');
+  // retours à la ligne : <br>, mais aussi chaque bloc (<div>, <p>, <li>…) — les descriptions tapées
+  // dans le module Devis mettent chaque nouvelle ligne dans un <div>
+  const withBreaks = String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(div|p|li|tr|h[1-6])(\s[^>]*)?>/gi, '\n');
   const div = document.createElement('div');
   div.innerHTML = withBreaks;
   return div.textContent.replace(/\n{2,}/g, '\n').trim();

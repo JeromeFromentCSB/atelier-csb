@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.60', items: [
+    "Email : bouton « 🖨️ Imprimer » (et Ctrl+P) sur un mail ouvert, et sur une demande pour imprimer toute la conversation — en-tête (de, à, date, objet, pièces jointes) puis le contenu, boîte d'impression de Windows",
+    "Devis : envoi par email avec des pièces jointes en plus du PDF — fichiers du poste (ou glissés / collés) et documents déjà rangés avec le devis",
+    "Email : affichage des mails de nouveau rapide (la lecture de l'état des conversations ne bloque plus la boîte de réception)",
+    "Bon de fabrication : les retours à la ligne de la description des lignes sont conservés",
+  ]},
   { v: '0.2.59', items: [
     "Relancer l'appli alors qu'elle est déjà ouverte ouvre une nouvelle fenêtre qui partage les mêmes réglages (clé Axonaut, email, connexion, dossiers) — avant, la deuxième appli démarrait sans aucun réglage",
   ]},

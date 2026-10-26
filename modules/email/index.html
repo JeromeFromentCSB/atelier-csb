@@ -891,6 +891,7 @@ async function openMessage(id){
   pane.innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Chargement…</div>';
   try{
     const m = await requireCsbHost().emailGetMessage(id, currentMailbox);
+    currentMailFull = m;
     currentAttachments = m.attachments || [];
     // L'ouverture marque le mail comme lu côté serveur — on reflète ça tout de suite dans la
     // liste locale sans attendre un rechargement complet.
@@ -912,6 +913,7 @@ async function openMessage(id){
       <div class="detail-toolbar">
         ${isTrash ? '' : '<button class="btn ghost danger-soft" id="deleteMsgBtn" title="Déplace le mail vers la Corbeille (récupérable) — touche Suppr">🗑️ Supprimer</button>'}
         <button class="btn ghost icon" id="toggleReadBtn" title="Marquer comme non lu">✉️</button>
+        <button class="btn ghost" id="printMsgBtn" title="Imprimer ce mail">🖨️ Imprimer</button>
         ${dmMailToolbarHtml()}
       </div>
       <h2 class="detail-subject">${escapeHtml(m.subject)}</h2>
@@ -925,6 +927,7 @@ async function openMessage(id){
     const deleteBtn = document.getElementById('deleteMsgBtn');
     if(deleteBtn) deleteBtn.addEventListener('click', () => deleteMessage(id));
     document.getElementById('toggleReadBtn').addEventListener('click', () => toggleReadStatus(id));
+    document.getElementById('printMsgBtn').addEventListener('click', () => printMails([m], m.subject));
     dmWireMailToolbar(id);
     if(currentAttachments.length){
       const attachListEl = document.getElementById('attachList');
@@ -943,6 +946,53 @@ async function openMessage(id){
   }
 }
 
+// ---------- Impression d'un mail (ou d'une conversation) ----------
+let currentMailFull = null;
+function mailPrintHtml(mails, title){
+  const esc = escapeHtml;
+  const block = (m) => {
+    const when = m.date ? new Date(m.date).toLocaleString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+    const atts = (m.attachments || []).map(a => esc(a.filename) + ' (' + formatSize(a.size) + ')');
+    // le contenu HTML du mail, sans scripts ni formulaires (la page est de toute façon imprimée sans JavaScript)
+    const body = m.html
+      ? String(m.html).replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<\/?(form|iframe|object|embed)[^>]*>/gi, '')
+      : `<pre>${esc(m.text || '')}</pre>`;
+    return `<section class="mail">
+      <table class="head">
+        <tr><th>De</th><td><b>${esc((m.from && m.from.name) || '')}</b>${m.from && m.from.email && m.from.email !== m.from.name ? ' &lt;' + esc(m.from.email) + '&gt;' : ''}</td></tr>
+        ${m.to ? `<tr><th>À</th><td>${esc(m.to)}</td></tr>` : ''}
+        <tr><th>Date</th><td>${esc(when)}</td></tr>
+        <tr><th>Objet</th><td><b>${esc(m.subject || '')}</b></td></tr>
+        ${atts.length ? `<tr><th>Pièces jointes</th><td>${atts.join(' · ')}</td></tr>` : ''}
+      </table>
+      <div class="body">${body}</div>
+    </section>`;
+  };
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title || 'Mail')}</title><style>
+    @page{ margin:14mm 12mm; }
+    body{ font-family:'Segoe UI', Arial, sans-serif; font-size:12px; color:#111; margin:0; }
+    .doc-title{ font-size:15px; font-weight:700; margin:0 0 10px; }
+    .mail{ page-break-inside:auto; margin-bottom:18px; }
+    .mail + .mail{ border-top:2px solid #999; padding-top:12px; }
+    .head{ border-collapse:collapse; width:100%; margin-bottom:10px; background:#f4f1ea; }
+    .head th{ text-align:left; width:95px; color:#666; font-weight:600; padding:3px 8px; vertical-align:top; }
+    .head td{ padding:3px 8px; }
+    .body img{ max-width:100%; height:auto; }
+    .body table{ max-width:100%; }
+    pre{ white-space:pre-wrap; font-family:inherit; margin:0; }
+  </style></head><body>${mails.length > 1 ? `<div class="doc-title">${esc(title || '')} — ${mails.length} messages</div>` : ''}${mails.map(block).join('')}</body></html>`;
+}
+async function printMails(mails, title){
+  if(!(window.csbHost && window.csbHost.printHtml)){ alert("L'impression n'est disponible que dans l'application installée (version à jour)."); return; }
+  try{ await window.csbHost.printHtml(mailPrintHtml(mails, title), title); }
+  catch(e){ alert('Impression impossible : ' + e.message); }
+}
+// Ctrl+P : imprime le mail ouvert
+document.addEventListener('keydown', (e) => {
+  if(!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'p') return;
+  if(!dmView && currentMailFull && selectedMessageId){ e.preventDefault(); printMails([currentMailFull], currentMailFull.subject); }
+  else if(dmView && dmSelId){ e.preventDefault(); const t = dmFind(dmSelId); if(t) dmAction(t, 'print'); }
+});
 function isTrashFolder(){ return folders.some(f => f.path === currentMailbox && f.specialUse === '\\Trash'); }
 // Touche Suppr : supprime le mail ouvert (hors saisie de texte)
 document.addEventListener('keydown', (e) => {
@@ -1281,7 +1331,7 @@ function dmFind(id){ return dmData.threads.find(t => t.id === id) || dmData.sugg
 // ---------- Fiche d'une demande ----------
 function dmActionsHtml(t, isSug){
   const b = (act, label, cls, title) => `<button class="btn ${cls || 'ghost'}" data-dm="${act}" ${title ? `title="${escapeHtml(title)}"` : ''}>${label}</button>`;
-  const del = '<span class="dm-sep"></span>' + b('delete', '🗑️ Supprimer', 'danger-soft', 'Déplace vers la Corbeille (récupérable)');
+  const del = '<span class="dm-sep"></span>' + b('print', '🖨️ Imprimer', '', 'Imprimer toute la conversation') + b('delete', '🗑️ Supprimer', 'danger-soft', 'Déplace vers la Corbeille (récupérable)');
   if(isSug) return b('etat:atraiter', '📥 À traiter', 'primary', 'Mettre ce mail dans les demandes à traiter') +
     b('etat:traite', '✅ Déjà traité', '', 'Ancien mail déjà traité : ne plus le proposer') + b('ignore', '✕ Pas une demande', '', 'Ne plus proposer ce mail') + del;
   const aT = t.etat === 'atraiter', tr = t.etat === 'traite';
@@ -1430,6 +1480,11 @@ async function dmAction(t, action){
     }else if(kind === 'read' || kind === 'unread') await dmSetSeen(t, kind === 'read');
     else if(kind === 'create'){ await dmCreateDevis(t, val); return; }
     else if(kind === 'delete'){ await dmDelete(t); return; }
+    else if(kind === 'print'){
+      const full = [];
+      for(const m of t.msgs) full.push(await dmGetMessage(m.uid));
+      await printMails(full, t.subject); return;
+    }
     dmAfterChange(t, !!dmSelId);
   }catch(e){ alert('Action impossible : ' + e.message); }
 }

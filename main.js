@@ -313,6 +313,24 @@ ipcMain.handle('csb:html-to-pdf', async (_event, { html, footerHtml, headerHtml 
     if (!win.isDestroyed()) win.destroy();
   }
 });
+// Impression d'une page HTML (ex. un mail) : chargée dans une fenêtre cachée sans JavaScript
+// (le contenu d'un mail n'exécute donc rien), puis boîte d'impression de Windows.
+ipcMain.handle('csb:print-html', async (event, { html, title }) => {
+  const parent = BrowserWindow.fromWebContents(event.sender);
+  const win = new BrowserWindow({ show: false, parent: parent || undefined, title: title || 'Impression', webPreferences: { javascript: false, sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  try {
+    await win.loadURL('data:text/html;charset=utf-8;base64,' + Buffer.from(String(html), 'utf8').toString('base64'));
+    await new Promise((r) => setTimeout(r, 500)); // images du mail
+    return await new Promise((resolve, reject) => {
+      win.webContents.print({ silent: false, printBackground: true }, (success, reason) => {
+        if (success || reason === 'cancelled' || reason === 'Print job canceled') resolve({ ok: success });
+        else reject(new Error(reason || 'impression impossible'));
+      });
+    });
+  } finally {
+    setTimeout(() => { if (!win.isDestroyed()) win.destroy(); }, 1000);
+  }
+});
 // Logo de l'atelier en data URL (page client du serveur de suivi des devis).
 ipcMain.handle('csb:logo-data-url', () => {
   try { return 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, 'src', 'shell', 'assets', 'logo-full.png')).toString('base64'); }
@@ -764,6 +782,7 @@ function bodyStructureHasAttachment(struct) {
 ipcMain.handle('csb:email-set-credentials', (_event, { email, appPassword, host, port }) => {
   emailWriteCreds({ email, appPassword, host: host || undefined, port: port || undefined });
   cachedImapClient = null;
+  allMailPathCache = null;
   if (cachedImapBgClient) { try { cachedImapBgClient.logout(); } catch (e) {} cachedImapBgClient = null; }
   return { ok: true };
 });
@@ -835,7 +854,7 @@ async function findSpecialMailbox(client, specialUse) {
 }
 
 ipcMain.handle('csb:email-set-flags', async (_event, { uid, mailbox, addFlags, removeFlags }) => {
-  const client = await getImapClient();
+  const client = await imapClientFor(mailbox);
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
   try {
     if (addFlags && addFlags.length) await client.messageFlagsAdd({ uid: String(uid) }, addFlags, { uid: true });
@@ -849,7 +868,7 @@ ipcMain.handle('csb:email-set-flags', async (_event, { uid, mailbox, addFlags, r
 // « Supprimer » déplace le message vers la Corbeille Gmail (récupérable), jamais de
 // suppression définitive ni de vidage de corbeille depuis l'app.
 ipcMain.handle('csb:email-move-to-trash', async (_event, { uid, mailbox }) => {
-  const client = await getImapClient();
+  const client = await imapClientFor(mailbox);
   const trashPath = await findSpecialMailbox(client, '\\Trash');
   if (!trashPath) throw new Error('Dossier Corbeille introuvable sur ce compte.');
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
@@ -863,7 +882,7 @@ ipcMain.handle('csb:email-move-to-trash', async (_event, { uid, mailbox }) => {
 
 // Glisser-déposer un mail sur un dossier de la colonne de gauche : déplace vers ce dossier.
 ipcMain.handle('csb:email-move-to-folder', async (_event, { uid, mailbox, targetPath }) => {
-  const client = await getImapClient();
+  const client = await imapClientFor(mailbox);
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
   try {
     await client.messageMove({ uid: String(uid) }, targetPath, { uid: true });
@@ -942,7 +961,7 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset 
 // chargés (ou hors du filtre de recherche en cours), sans le rouvrir pour de vrai.
 ipcMain.handle('csb:email-get-by-uids', async (_event, { uids, mailbox }) => {
   if (!uids || !uids.length) return [];
-  const client = await getImapClient();
+  const client = await imapClientFor(mailbox);
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
   try {
     const results = [];
@@ -966,7 +985,7 @@ ipcMain.handle('csb:email-get-by-uids', async (_event, { uids, mailbox }) => {
 });
 
 ipcMain.handle('csb:email-get-message', async (_event, { uid, mailbox }) => {
-  const client = await getImapClient();
+  const client = await imapClientFor(mailbox);
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
   try {
     const msg = await client.fetchOne(uid, { source: true }, { uid: true });
@@ -1000,10 +1019,20 @@ ipcMain.handle('csb:email-get-message', async (_event, { uid, mailbox }) => {
 // (« Demandes/Prix », « Demandes/Commande », « Demandes/Traite »…), posés depuis l'appli ou
 // depuis Spark : l'état reste donc dans la boîte mail elle-même, visible des deux côtés.
 // On travaille dans « Tous les messages » pour voir aussi nos réponses dans les conversations.
+let allMailPathCache = null;
 async function gmailAllMailPath(client) {
+  if (allMailPathCache) return allMailPathCache;
   const list = await client.list();
   const all = list.find((f) => f.specialUse === '\\All');
-  return all ? all.path : 'INBOX';
+  allMailPathCache = all ? all.path : 'INBOX';
+  return allMailPathCache;
+}
+// Les opérations sur « Tous les messages » (demandes, conversations) passent par la connexion de
+// fond : une connexion IMAP n'a qu'un dossier ouvert à la fois, et faire basculer la connexion
+// principale entre la boîte de réception et « Tous les messages » ralentissait tout l'affichage.
+async function imapClientFor(mailbox) {
+  if (mailbox && allMailPathCache && mailbox === allMailPathCache && mailbox !== 'INBOX') return getImapBgClient();
+  return getImapClient();
 }
 function demandeSummary(msg) {
   const env = msg.envelope || {};
@@ -1076,7 +1105,7 @@ ipcMain.handle('csb:pdf-text', async (_event, { base64, maxPages }) => {
 // Conversation d'un mail ouvert dans un dossier quelconque (module Email) : renvoie tous ses
 // messages vus depuis « Tous les messages », pour y poser les libellés des demandes.
 ipcMain.handle('csb:demandes-thread-of', async (_event, { uid, mailbox }) => {
-  const client = await getImapClient();
+  const client = await getImapBgClient();
   let threadId = null;
   let lock = await client.getMailboxLock(mailbox || 'INBOX');
   try {
