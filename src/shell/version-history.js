@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.58', items: [
+    "Statistiques : l'onglet prend toute la largeur de la fenêtre",
+    "Statistiques : historique des factures Sage de 2020 à avril 2026 ajouté pour comparer les années — une couleur par année, et 2026 avant l'appli distinct des factures faites avec l'appli (barres empilées) ; 2020-2022 sans date, visibles seulement « Par année »",
+  ]},
   { v: '0.2.57', items: [
     "Email : classement simplifié — un mail est sans classement, « 📥 À traiter » ou « ✅ Traité » (boutons réversibles) ; la section Demandes ne garde que « À traiter » et « Traitées »",
     "Email : icône 📥 / ✅ dans la liste des mails pour voir l'état de chaque mail (et de sa conversation)",

@@ -374,7 +374,9 @@
   #stHeader .toolbar{ gap:8px; }
   #stHeader select, #stHeader .dateInput{ font-family:sans-serif; font-size:.78rem; padding:6px 8px; border:1.5px solid var(--line); border-radius:8px; background:var(--white); color:var(--ink); }
   #stHeader label{ font-family:sans-serif; font-size:.72rem; color:var(--muted); font-weight:600; }
-  #stBody{ padding:18px 26px 40px; font-family:sans-serif; max-width:1250px; }
+  #stBody{ padding:18px 26px 40px; font-family:sans-serif; box-sizing:border-box; width:100%; }
+  #stBody .st-table{ table-layout:auto; }
+  #stBody .st-card{ overflow-x:auto; }
   .st-kpis{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; margin-bottom:16px; }
   .st-kpi{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; }
   .st-kpi .k{ font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
@@ -388,9 +390,10 @@
   .st-legend i.prev{ height:0; border-top:2px solid var(--ink); border-radius:0; width:14px; vertical-align:3px; }
   #stChart{ position:relative; }
   #stChart svg{ display:block; width:100%; overflow:visible; }
-  #stChart .bar{ fill:#B5452F; }
+  #stChart .bar.hover{ opacity:.8; }
+  .st-dot{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:3px; vertical-align:0; }
   #stChart .hit{ fill:transparent; cursor:pointer; }
-  #stChart .hit:hover + .bar, #stChart .bar.hover{ fill:#8E3423; }
+  #stChart .hit:hover + .bar{ opacity:.8; }
   #stChart .grid{ stroke:var(--line); stroke-width:1; }
   #stChart .axis{ fill:var(--muted); font-size:11px; font-family:sans-serif; }
   #stChart .prev{ stroke:var(--ink); stroke-width:2; stroke-linecap:round; pointer-events:none; }
@@ -5706,6 +5709,51 @@ window.addEventListener('resize', fxUpdateHeaderHeight);
 // Chaque période est comparée à la même période de l'année précédente.
 const ST_MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 let stInited = false;
+// Historique des factures faites avant l'appli (Sage, 2024 → avril 2026) : fichier préparé sur le
+// NAS (dossier Factures), recopié dans les réglages partagés PocketBase pour être disponible
+// partout. Ces factures sont comptées comme réglées (pas de reste dû).
+const ST_HIST_KEY = 'stats_historique_sage';
+const ST_HIST_FILE = '\\\\SB-CONFECTION\\Atelier CSB\\Factures\\historique_factures_sage.json';
+let stHist = null, stHistInfo = '';
+// Couleurs : une par année de l'historique, une pour les factures faites avec l'appli
+const ST_SERIES = {
+  'sage-2020': { label: '2020 (Sage)', color: '#eda100' },
+  'sage-2021': { label: '2021 (Sage)', color: '#e87ba4' },
+  'sage-2022': { label: '2022 (Sage)', color: '#008300' },
+  'sage-2023': { label: '2023 (Sage)', color: '#eb6834' },
+  'sage-2024': { label: '2024 (Sage)', color: '#2a78d6' },
+  'sage-2025': { label: '2025 (Sage)', color: '#1baf7a' },
+  'sage-2026': { label: '2026 (Sage, avant l\'appli)', color: '#6250d6' },
+  'app':       { label: 'Appli (Axonaut)', color: '#B5452F' }
+};
+const ST_SERIES_ORDER = ['sage-2020', 'sage-2021', 'sage-2022', 'sage-2023', 'sage-2024', 'sage-2025', 'sage-2026', 'app'];
+const stSeriesOf = inv => inv._src === 'sage' ? 'sage-' + fxIsoDay(inv.date).slice(0, 4) : 'app';
+const stSeries = k => ST_SERIES[k] || { label: k.replace('sage-', '') + ' (Sage)', color: '#eda100' };
+const stNameKey = s => String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\b(SARL|SAS|SASU|EURL|SA|SCEA|EARL|SCI|STE|SOCIETE)\b/g, '').replace(/[^A-Z0-9]+/g, ' ').trim();
+async function stLoadHistory(){
+  if(stHist) return stHist;
+  let data = null, fileData = null;
+  try{ data = await fetchSharedSetting(ST_HIST_KEY); }catch(e){}
+  // le fichier du NAS fait foi s'il est plus récent (historique complété) : il remplace la copie
+  try{
+    if(window.csbHost && window.csbHost.readFileBytes) fileData = JSON.parse(new TextDecoder('utf-8').decode(await window.csbHost.readFileBytes(ST_HIST_FILE)));
+  }catch(e){ fileData = null; }
+  if(fileData && Array.isArray(fileData.factures) && (!data || !Array.isArray(data.factures) || fileData.genere !== data.genere || fileData.factures.length !== data.factures.length)){
+    data = fileData;
+    try{ await saveSharedSettingStrict(ST_HIST_KEY, data); }catch(e){ console.warn('Historique non recopié dans PocketBase', e); }
+  }
+  if(!data || !Array.isArray(data.factures)){ stHist = []; stHistInfo = 'historique Sage introuvable'; return stHist; }
+  // mêmes noms de clients que dans Axonaut quand c'est le même client (« SARL UPSTRIDE » = « Upstride »)
+  const known = {};
+  (fxInvoices || []).forEach(i => { const n = fxClient(i); known[stNameKey(n)] = n; });
+  stHist = data.factures.map((f, i) => ({
+    id: 'H-' + i + '-' + f.n, number: f.n, date: f.d || (f.annee + '-01-01'), total: f.ttc, tax_amount: f.tva, outstanding_amount: 0,
+    company: { name: known[stNameKey(f.c)] || f.c }, _src: 'sage', _yearOnly: !f.d
+  }));
+  stHistInfo = `+ ${stHist.length} factures Sage (historique)`;
+  return stHist;
+}
+const stAllInvoices = () => (fxInvoices || []).concat(stHist || []);
 async function stEnsureInvoices(){
   if(!fxInvoices) await fxOpen();
   while(!fxInvoices && fxLoading) await new Promise(r => setTimeout(r, 200));
@@ -5717,13 +5765,14 @@ async function stOpen(force){
   if(force){ fxInvoices = null; }
   await stEnsureInvoices();
   if(!fxInvoices){ body.innerHTML = '<div style="padding:20px; color:var(--silk-red);">Impossible de charger les factures.</div>'; return; }
+  await stLoadHistory();
   if(!stInited) stInit();
   stRender();
 }
 function stInit(){
   stInited = true;
   const now = new Date(), y = now.getFullYear();
-  const years = [...new Set(fxInvoices.map(i => fxIsoDay(i.date).slice(0, 4)).filter(Boolean))].sort().reverse();
+  const years = [...new Set(stAllInvoices().map(i => fxIsoDay(i.date).slice(0, 4)).filter(Boolean))].sort().reverse();
   if(!years.includes(String(y))) years.unshift(String(y));
   document.getElementById('stYear').innerHTML = years.map(v => `<option value="${v}">${v}</option>`).join('');
   document.getElementById('stYear').value = String(y);
@@ -5752,7 +5801,8 @@ function stCompute(){
     if(from > to) [from, to] = [to, from];
     unit = (new Date(to) - new Date(from)) / 86400000 <= 62 ? 'day' : 'month';
   }else{ unit = 'year'; }
-  const all = fxInvoices.filter(i => fxIsoDay(i.date));
+  // factures Sage sans date (2020-2022) : seulement dans la vue par année
+  const all = stAllInvoices().filter(i => fxIsoDay(i.date) && (unit === 'year' || !i._yearOnly));
   if(unit === 'year'){
     const ys = all.map(i => fxIsoDay(i.date).slice(0, 4)).sort();
     from = (ys[0] || today.slice(0, 4)) + '-01-01'; to = today.slice(0, 4) + '-12-31';
@@ -5783,9 +5833,9 @@ function stCompute(){
   sel.value = client;
   const keep = i => !client || fxClient(i) === client;
   const inv = periodInv.filter(keep), prev = prevInv.filter(keep);
-  const rows = keys.map(k => ({ key: k, ca: 0, ht: 0, ttc: 0, n: 0, prev: 0, du: 0, nd: 0 }));
+  const rows = keys.map(k => ({ key: k, ca: 0, ht: 0, ttc: 0, n: 0, prev: 0, du: 0, nd: 0, parts: {} }));
   const idx = Object.fromEntries(rows.map((r, n) => [r.key, n]));
-  inv.forEach(i => { const r = rows[idx[keyOf(fxIsoDay(i.date))]]; if(!r) return; r.ca += stAmount(i); r.ht += fxHT(i); r.ttc += fxNum(i.total); r.n++; r.du += stDue(i); if(fxDuTTC(i) > 0.005) r.nd++; });
+  inv.forEach(i => { const r = rows[idx[keyOf(fxIsoDay(i.date))]]; if(!r) return; const sk = stSeriesOf(i); r.parts[sk] = (r.parts[sk] || 0) + stAmount(i); r.ca += stAmount(i); r.ht += fxHT(i); r.ttc += fxNum(i.total); r.n++; r.du += stDue(i); if(fxDuTTC(i) > 0.005) r.nd++; });
   // année précédente ; pour la période en cours (pas finie), seulement jusqu'au même jour
   const todayKey = keyOf(today);
   prev.forEach(i => {
@@ -5817,7 +5867,8 @@ function stRender(){
   const totTTC = d.inv.reduce((t, i) => t + fxNum(i.total), 0);
   const best = d.rows.reduce((b, r) => r.ca > (b ? b.ca : -Infinity) ? r : b, null);
   const rangeTxt = d.unit === 'year' ? 'toutes les années' : `du ${fxDate(d.from)} au ${fxDate(d.to)}`;
-  document.getElementById('stInfo').textContent = `${n} facture(s) · ${rangeTxt}${d.client ? ' · ' + d.client : ''}`;
+  const yearOnlyNote = d.unit !== 'year' && (stHist || []).some(i => i._yearOnly) ? ' · 2020-2022 : dates inconnues, visibles seulement « Par année »' : '';
+  document.getElementById('stInfo').textContent = `${n} facture(s) · ${rangeTxt}${d.client ? ' · ' + d.client : ''}${stHistInfo ? ' · ' + stHistInfo : ''}${yearOnlyNote}`;
   const prevLabel = d.partial ? "même période l'an dernier, à date" : "même période l'an dernier";
   const kpis = `<div class="st-kpis">
     <div class="st-kpi"><div class="k">Chiffre d'affaires ${amtLabel}</div><div class="v">${fxEur(total)}</div>
@@ -5829,14 +5880,15 @@ function stRender(){
   </div>`;
   const unitName = { month: 'mois', year: 'année', day: 'jour' }[d.unit];
   const chart = `<div class="st-card"><h3>Chiffre d'affaires ${amtLabel} par ${unitName}
-      <span class="st-legend"><span><i style="background:#B5452F"></i>${d.unit === 'year' ? 'Année' : 'Période choisie'}</span><span><i class="prev"></i>Année précédente (à date pour la période en cours)</span></span></h3>
+      <span class="st-legend">${ST_SERIES_ORDER.filter(k => d.rows.some(r => r.parts[k])).map(k => `<span><i style="background:${stSeries(k).color}"></i>${fxEsc(stSeries(k).label)}</span>`).join('')}<span><i class="prev"></i>Année précédente (à date pour la période en cours)</span></span></h3>
     <div id="stChart"></div></div>`;
   const showPrev = true;
   const table = `<div class="st-card"><h3>Détail par ${unitName}</h3>
     <table class="st-table"><thead><tr><th>Période</th><th class="n">Factures</th><th class="n">CA HT</th><th class="n">CA TTC</th>${showPrev ? `<th class="n" title="Pour la période en cours : jusqu'au même jour de l'année précédente">Année préc. (${amtLabel})</th>` : ''}<th class="n">Évolution</th><th class="n">Reste dû ${amtLabel}</th></tr></thead>
     <tbody>${d.rows.map((r, k) => {
       const ref = r.prev;
-      return `<tr class="${d.unit !== 'day' ? 'click' : ''}" data-key="${r.key}"><td>${stPeriodLabel(r.key, d.unit, true)}</td><td class="n">${r.n || ''}</td><td class="n">${r.n ? fxEur(r.ht) : '—'}</td><td class="n">${r.n ? fxEur(r.ttc) : '—'}</td>${showPrev ? `<td class="n">${r.prev ? fxEur(r.prev) : '—'}</td>` : ''}<td class="n">${r.ca && ref ? stDelta(r.ca, ref) : ''}</td><td class="n">${stDueCell(r.du, r.nd)}</td></tr>`;
+      const dots = ST_SERIES_ORDER.filter(k => r.parts[k]).map(k => `<i class="st-dot" style="background:${stSeries(k).color}" title="${fxEsc(stSeries(k).label)}"></i>`).join('');
+      return `<tr class="${d.unit !== 'day' ? 'click' : ''}" data-key="${r.key}"><td>${dots}${stPeriodLabel(r.key, d.unit, true)}</td><td class="n">${r.n || ''}</td><td class="n">${r.n ? fxEur(r.ht) : '—'}</td><td class="n">${r.n ? fxEur(r.ttc) : '—'}</td>${showPrev ? `<td class="n">${r.prev ? fxEur(r.prev) : '—'}</td>` : ''}<td class="n">${r.ca && ref ? stDelta(r.ca, ref) : ''}</td><td class="n">${stDueCell(r.du, r.nd)}</td></tr>`;
     }).join('')}</tbody>
     <tfoot><tr><td>Total</td><td class="n">${n}</td><td class="n">${fxEur(d.rows.reduce((t, r) => t + r.ht, 0))}</td><td class="n">${fxEur(d.rows.reduce((t, r) => t + r.ttc, 0))}</td>${showPrev ? `<td class="n">${fxEur(d.rows.reduce((t, r) => t + r.prev, 0))}</td>` : ''}<td></td><td class="n">${stDueCell(d.rows.reduce((t, r) => t + r.du, 0), d.rows.reduce((t, r) => t + r.nd, 0))}</td></tr></tfoot></table></div>`;
   const top = d.client ? '' : `<div class="st-card"><h3>Par client <span class="st-legend">clic sur un client pour voir son détail</span></h3>
@@ -5887,13 +5939,23 @@ function stDrawChart(d, amtLabel){
   const every = Math.ceil(nB / Math.max(1, Math.floor((W - L - R) / 46)));
   rows.forEach((r, k) => {
     const cx = L + slot * k + slot / 2, x = cx - bw / 2;
-    const y0 = y(0), y1 = y(r.ca), top = Math.min(y0, y1), h = Math.abs(y0 - y1);
-    const rr = Math.min(4, bw / 2, h);
-    // barre arrondie (4 px) du côté de la valeur, posée sur la ligne de base
-    const bar = h > 0 ? (r.ca >= 0
-      ? `<path class="bar" data-i="${k}" d="M${x},${y0} V${top + rr} Q${x},${top} ${x + rr},${top} H${x + bw - rr} Q${x + bw},${top} ${x + bw},${top + rr} V${y0} Z"/>`
-      : `<path class="bar" data-i="${k}" d="M${x},${y0} V${top + h - rr} Q${x},${top + h} ${x + rr},${top + h} H${x + bw - rr} Q${x + bw},${top + h} ${x + bw},${top + h - rr} V${y0} Z"/>`) : '';
-    svg += `<rect class="hit" data-i="${k}" x="${L + slot * k}" y="${T}" width="${slot}" height="${H - T - B}"/>${bar}`;
+    const y0 = y(0);
+    // barre empilée : une part par origine / année (couleur), la plus haute arrondie (4 px),
+    // un liseré de 2 px entre les parts
+    const segs = ST_SERIES_ORDER.filter(sk => r.parts[sk] > 0).map(sk => ({ sk, v: r.parts[sk] }));
+    let acc = 0, bar = '';
+    segs.forEach((sg, si) => {
+      const yb = y(acc), yt = y(acc + sg.v); acc += sg.v;
+      const gap = si > 0 ? 2 : 0, h = Math.max(0, yb - yt - gap), top = yt;
+      if(h <= 0) return;
+      const last = si === segs.length - 1, rr = last ? Math.min(4, bw / 2, h) : 0;
+      bar += `<path fill="${stSeries(sg.sk).color}" d="M${x},${top + h} V${top + rr} Q${x},${top} ${x + rr},${top} H${x + bw - rr} Q${x + bw},${top} ${x + bw},${top + rr} V${top + h} Z"/>`;
+    });
+    if(!segs.length && r.ca < 0){
+      const h = Math.abs(y(r.ca) - y0);
+      bar = `<rect fill="${stSeries('app').color}" x="${x}" y="${y0}" width="${bw}" height="${h}"/>`;
+    }
+    svg += `<rect class="hit" data-i="${k}" x="${L + slot * k}" y="${T}" width="${slot}" height="${H - T - B}"/><g class="bar" data-i="${k}">${bar}</g>`;
     if(r.prev) svg += `<line class="prev" x1="${x - 2}" x2="${x + bw + 2}" y1="${y(r.prev)}" y2="${y(r.prev)}"/>`;
     if(k % every === 0) svg += `<text class="axis" x="${cx}" y="${H - 8}" text-anchor="middle">${stPeriodLabel(r.key, d.unit)}</text>`;
   });
@@ -5904,7 +5966,8 @@ function stDrawChart(d, amtLabel){
     const r = rows[Number(el.dataset.i)];
     const bar = box.querySelector(`.bar[data-i="${el.dataset.i}"]`);
     el.addEventListener('mousemove', e => {
-      tip.innerHTML = `<b>${stPeriodLabel(r.key, d.unit, true)}</b><br>${fxEur(r.ca)} ${amtLabel} · ${r.n} facture(s)<br>Année préc. : ${r.prev ? fxEur(r.prev) : '—'} ${r.ca && r.prev ? stDelta(r.ca, r.prev).replace(/class="st-(up|down)"/, 'style="font-weight:700"') : ''}${d.unit !== 'day' ? '<br><span style="opacity:.7">clic : détail</span>' : ''}`;
+      const partsTxt = ST_SERIES_ORDER.filter(sk => r.parts[sk]).length > 1 ? ST_SERIES_ORDER.filter(sk => r.parts[sk]).map(sk => `<br><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${stSeries(sk).color};margin-right:4px;"></i>${fxEsc(stSeries(sk).label)} : ${fxEur(r.parts[sk])}`).join('') : (ST_SERIES_ORDER.find(sk => r.parts[sk]) ? '<br>' + fxEsc(stSeries(ST_SERIES_ORDER.find(sk => r.parts[sk])).label) : '');
+      tip.innerHTML = `<b>${stPeriodLabel(r.key, d.unit, true)}</b><br>${fxEur(r.ca)} ${amtLabel} · ${r.n} facture(s)${partsTxt}<br>Année préc. : ${r.prev ? fxEur(r.prev) : '—'} ${r.ca && r.prev ? stDelta(r.ca, r.prev).replace(/class="st-(up|down)"/, 'style="font-weight:700"') : ''}${d.unit !== 'day' ? '<br><span style="opacity:.7">clic : détail</span>' : ''}`;
       tip.style.display = 'block';
       const tx = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
       tip.style.left = tx + 'px'; tip.style.top = (e.clientY - tip.offsetHeight - 10) + 'px';
