@@ -24,15 +24,19 @@ try {
 } catch (e) {}
 app.setName('Atelier CSB');
 
-// Une deuxième instance peut désormais s'ouvrir en parallèle (ex. deux fenêtres pour
-// travailler sur deux écrans) : elle reçoit son propre dossier de données (config, email,
-// caches locaux) distinct de la première, pour ne jamais faire cohabiter deux processus sur
-// les mêmes fichiers — c'est ce partage qui, à l'origine, faisait "disparaître" des réglages
-// enregistrés entre-temps (identifiants email notamment) lorsque deux instances tournaient
-// sur le même dossier utilisateur.
+// Relancer l'appli alors qu'elle est déjà ouverte (ex. pour travailler sur deux écrans) ouvre
+// une NOUVELLE FENÊTRE dans le programme déjà lancé, au lieu d'un deuxième programme : les
+// fenêtres partagent ainsi les mêmes réglages (clé Axonaut, email, connexion, dossiers
+// autorisés…). Avant, la deuxième instance recevait un dossier de réglages vide à part, pour ne
+// pas faire écrire deux programmes dans les mêmes fichiers — d'où des réglages « perdus ».
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
-  app.setPath('userData', app.getPath('userData') + '-instance-' + process.pid);
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (app.isReady()) createWindow();
+    else app.whenReady().then(() => createWindow());
+  });
 }
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'csb-config.json');
@@ -56,7 +60,7 @@ function writeConfig(partial) {
 let mainWindow;
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1024,
@@ -73,14 +77,18 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'src', 'shell', 'index.html'));
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.maximize();
-    mainWindow.show();
+  if (!mainWindow || mainWindow.isDestroyed()) mainWindow = win;
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = BrowserWindow.getAllWindows().find((w) => w !== win) || null;
+  });
+  win.loadFile(path.join(__dirname, 'src', 'shell', 'index.html'));
+  win.once('ready-to-show', () => {
+    win.maximize();
+    win.show();
   });
 
   const LEVELS = ['log', 'warn', 'error', 'debug'];
-  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     const tag = LEVELS[level] || 'log';
     console.log(`[renderer:${tag}] ${sourceId.split(/[\\/]/).pop()}:${line} — ${message}`);
   });
@@ -130,7 +138,7 @@ function createWindow() {
 // de publication d'une nouvelle version. En développement (npm start, pas encore packagé), il
 // n'y a pas de app-update.yml : on n'essaie même pas, ça échouerait à coup sûr.
 function sendUpdateStatus(status, extra) {
-  if (mainWindow) mainWindow.webContents.send('csb:update-status', { status, ...(extra || {}) });
+  BrowserWindow.getAllWindows().forEach((w) => { try { w.webContents.send('csb:update-status', { status, ...(extra || {}) }); } catch (e) {} });
 }
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
@@ -179,6 +187,7 @@ app.on('web-contents-created', (_event, contents) => {
 });
 
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return; // deuxième lancement : la fenêtre s'ouvre dans le premier programme
   createWindow();
 
   app.on('activate', () => {
