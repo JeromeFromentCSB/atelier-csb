@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Scan fabrication · Atelier CSB</title>
+<!--
+  Page ouverte en flashant un QR code du bon de fabrication avec l'appareil photo du téléphone.
+  À déposer à côté de photo.html, dans le dossier public de PocketBase (pb_public).
+  Lien : scan.html?o=<commande>&l=<n° de ligne, à partir de 0>, &x=1 (expédition) ou &v=1 (ouvrir la commande)
+  Association à un ordinateur : scan.html?pair=<id du poste>&n=<nom> (QR affiché dans Gestion Commande › Scanner).
+  Les validations vont dans bl_axonaut.lines_state, comme les cases à cocher de Gestion Commande.
+-->
+<style>
+  :root{ --ink:#232320; --paper:#faf9f6; --paper-2:#f2f0ea; --line:#e5e1d6; --yellow:#f5c518; --green:#2E7D32; --red:#B3453A; --muted:#8a8478; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--paper); color:var(--ink); }
+  header{ background:var(--ink); color:#fff; padding:calc(14px + env(safe-area-inset-top)) 16px 14px; }
+  header h1{ margin:0; font-size:1.05rem; }
+  main{ padding:16px; max-width:520px; margin:0 auto; }
+  .result{ border-radius:14px; padding:18px; color:#fff; margin-bottom:16px; }
+  .result.ok{ background:var(--green); } .result.err{ background:var(--red); } .result.info{ background:#5b6b80; } .result.wait{ background:var(--muted); }
+  .result .t{ font-size:1.25rem; font-weight:800; }
+  .result .d{ margin-top:6px; font-size:.92rem; opacity:.95; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+  .line{ display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--paper-2); font-size:.9rem; }
+  .line:last-child{ border-bottom:none; }
+  .line .s{ width:22px; flex-shrink:0; text-align:center; }
+  .line.cur{ font-weight:700; }
+  button{ width:100%; padding:14px; border-radius:10px; border:none; font-size:1rem; font-weight:700; margin-top:10px; }
+  .primary{ background:var(--yellow); color:var(--ink); } .ghost{ background:var(--paper-2); color:var(--ink); } .danger{ background:#fff; color:var(--red); border:1px solid var(--red); }
+  input{ width:100%; padding:13px; font-size:1rem; border:1px solid var(--line); border-radius:10px; margin-top:8px; }
+  .muted{ color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<header><h1>🔫 Scan fabrication</h1></header>
+<main id="app"><div class="result wait"><div class="t">Chargement…</div></div></main>
+<script>
+const AUTH_KEY = 'csb_scan_auth';
+const app = document.getElementById('app');
+const params = new URLSearchParams(location.search);
+const orderId = (params.get('o') || '').replace(/[^A-Za-z0-9_-]/g, '');
+const lineIdx = params.has('l') ? parseInt(params.get('l'), 10) : null;
+const isExp = params.get('x') === '1';
+const isOpen = params.get('v') === '1';
+const PAIR_KEY = 'csb_scan_pair';
+function pair(){ try{ return JSON.parse(localStorage.getItem(PAIR_KEY)) || null; }catch(e){ return null; } }
+// Prévient l'ordinateur associé : il revient au premier plan et ouvre la commande.
+async function notifyPoste(contractId, msg){
+  const p = pair();
+  if(!p) return false;
+  const key = 'scan_poste_' + p.id;
+  const value = JSON.stringify({ seq: Date.now() + '-' + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(), contractId, msg, by: (auth() || {}).name || '' });
+  const f = encodeURIComponent(`settings_key='${key}'`);
+  const list = await api(`/api/collections/axonaut_settings/records?filter=(${f})&perPage=1`);
+  const rec = (list.items || [])[0];
+  if(rec) await api(`/api/collections/axonaut_settings/records/${rec.id}`, { method:'PATCH', body: JSON.stringify({ settings_value: value }) });
+  else await api('/api/collections/axonaut_settings/records', { method:'POST', body: JSON.stringify({ settings_key: key, settings_value: value }) });
+  return true;
+}
+function pairFooter(){
+  const p = pair();
+  return `<div class="muted" style="text-align:center; margin-top:18px;">${p ? `📱 Associé à <b>${esc(p.name)}</b> · <a href="#" id="unpair">dissocier</a>` : "Ce téléphone n'est associé à aucun ordinateur."}</div>`;
+}
+function wireFooter(){
+  const u = document.getElementById('unpair');
+  if(u) u.onclick = (e) => { e.preventDefault(); localStorage.removeItem(PAIR_KEY); run(); };
+}
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+function auth(){ try{ return JSON.parse(localStorage.getItem(AUTH_KEY)) || null; }catch(e){ return null; } }
+async function api(path, opts = {}){
+  const a = auth();
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  if(a && a.token) headers.Authorization = a.token;
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  if(res.status === 401 || res.status === 403){ const e = new Error('connexion requise'); e.auth = true; throw e; }
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  return res.status === 204 ? null : res.json();
+}
+function vibrate(ok){ try{ navigator.vibrate && navigator.vibrate(ok ? 80 : [80, 60, 80]); }catch(e){} }
+
+function showLogin(msg){
+  app.innerHTML = `<div class="card"><b>Connexion</b><div class="muted" style="margin-top:4px;">Choisis ton identifiant et ton mot de passe, les mêmes que pour ouvrir l'appli Atelier CSB sur l'ordinateur (une seule fois sur ce téléphone).</div>
+    ${msg ? `<div style="color:var(--red); margin-top:8px;">${esc(msg)}</div>` : ''}
+    <select id="lu" style="width:100%; padding:13px; font-size:1rem; border:1px solid var(--line); border-radius:10px; margin-top:8px; background:#fff;"><option value="">Chargement des identifiants…</option></select>
+    <input id="lp" type="password" placeholder="Mot de passe" autocomplete="current-password">
+    <button class="primary" id="lb">Se connecter</button></div>`;
+  // même liste d'identifiants que l'écran de connexion de l'appli sur l'ordinateur
+  fetch('/api/collections/csb_users/records?perPage=200&sort=username&fields=username').then(r => r.json()).then(j => {
+    const sel = document.getElementById('lu'); if(!sel) return;
+    const users = (j.items || []).map(u => u.username).filter(Boolean);
+    sel.innerHTML = '<option value="">— Choisir ton identifiant —</option>' + users.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+  }).catch(() => { const sel = document.getElementById('lu'); if(sel) sel.innerHTML = '<option value="">Serveur injoignable</option>'; });
+  document.getElementById('lb').onclick = async () => {
+    try{
+      const res = await fetch('/api/collections/csb_users/auth-with-password', { method:'POST', headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ identity: document.getElementById('lu').value.trim(), password: document.getElementById('lp').value }) });
+      if(!res.ok) throw new Error('identifiant ou mot de passe incorrect');
+      const j = await res.json();
+      localStorage.setItem(AUTH_KEY, JSON.stringify({ token: j.token, name: (j.record && (j.record.name || j.record.email || j.record.username)) || '' }));
+      run();
+    }catch(e){ showLogin(e.message); }
+  };
+}
+
+let lastUndo = null;
+async function run(){
+  if(params.get('pair')){
+    const p = { id: params.get('pair').replace(/[^A-Za-z0-9]/g, ''), name: (params.get('n') || 'Ordinateur').slice(0, 40) };
+    localStorage.setItem(PAIR_KEY, JSON.stringify(p));
+    history.replaceState(null, '', location.pathname);
+    params.delete('pair');
+    vibrate(true);
+    app.innerHTML = `<div class="result ok"><div class="t">📱 Téléphone associé</div><div class="d">à ${esc(p.name)}. Les commandes bipées avec ce téléphone s'ouvriront sur cet ordinateur.</div></div>`;
+    if(!auth()) setTimeout(() => showLogin(), 1500);
+    return;
+  }
+  if(!orderId || (lineIdx === null && !isExp && !isOpen)){
+    app.innerHTML = `<div class="result info"><div class="t">Prêt à scanner</div><div class="d">Flashe un QR code du bon de fabrication avec l'appareil photo du téléphone.</div></div>` + pairFooter();
+    wireFooter();
+    return;
+  }
+  if(!auth()){ showLogin(); return; }
+  try{
+    const f = encodeURIComponent(`contract_id='${orderId}'`);
+    const idx = await api(`/api/collections/commandes_index/records?filter=(${f})&perPage=1`);
+    const order = (idx.items && idx.items[0]) || {};
+    let lines = [];
+    try{ lines = JSON.parse(order.lignes_json || '[]'); }catch(e){}
+    const label = [order.numero_commande || orderId, order.client].filter(Boolean).join(' — ');
+    const blList = await api(`/api/collections/bl_axonaut/records?filter=(${f})&perPage=1`);
+    const rec = (blList.items && blList.items[0]) || null;
+    const state = Object.assign({}, (rec && rec.lines_state) || {});
+    const log = Array.isArray(state._log) ? state._log.slice(-99) : [];
+    const who = (auth() || {}).name || 'téléphone', at = new Date().toISOString();
+    let title, detail, kind = 'ok', changed = false, extra = '';
+
+    if(isOpen){
+      const sent = await notifyPoste(orderId, 'Commande ouverte');
+      if(sent){ title = '📂 Ouverte sur ' + pair().name; detail = label; }
+      else{ kind = 'info'; title = 'Commande ' + (order.numero_commande || orderId); detail = "Pour l'ouvrir sur un ordinateur, associe ce téléphone : Gestion Commande › 🔫 Scanner."; }
+    }else if(isExp){
+      const missing = lines.map((l, i) => i).filter(i => state[i] !== true);
+      if(state._expedie){ kind = 'info'; title = 'Déjà expédiée'; detail = 'le ' + new Date(state._expedie.at).toLocaleString('fr-FR'); }
+      else if(missing.length && params.get('force') !== '1'){
+        kind = 'err'; title = `${missing.length} ligne(s) pas encore validée(s)`; detail = "L'expédition n'est pas enregistrée.";
+        extra = `<button class="primary" id="forceBtn">Expédier quand même</button>`;
+      }else{
+        state._expedie = { at, by: who }; log.push({ x: 1, at, by: who }); changed = true;
+        title = '🚚 Expédition enregistrée'; detail = label;
+        lastUndo = st => { delete st._expedie; };
+      }
+    }else{
+      if(lines.length && (lineIdx < 0 || lineIdx >= lines.length)) throw new Error('ligne inexistante — le devis a changé, réimprime le bon');
+      const name = (lines[lineIdx] && lines[lineIdx].titre) || ('ligne ' + (lineIdx + 1));
+      if(state[lineIdx] === true){ kind = 'info'; title = 'Ligne déjà validée'; detail = name; }
+      else{
+        state[lineIdx] = true; log.push({ l: lineIdx, at, by: who }); changed = true;
+        const done = lines.length ? lines.filter((x, i) => state[i] === true).length : null;
+        title = `✔ Ligne ${lineIdx + 1} validée` + (done !== null ? ` (${done}/${lines.length})` : ''); detail = name;
+        lastUndo = st => { delete st[lineIdx]; };
+      }
+    }
+    let saved = rec;
+    if(changed){
+      state._log = log;
+      const allDone = lines.length > 0 && lines.every((x, i) => state[i] === true);
+      const body = { contract_id: orderId, numero_commande: order.numero_commande || '', lines_state: state, all_done: allDone, etat_valide: allDone };
+      saved = rec ? await api(`/api/collections/bl_axonaut/records/${rec.id}`, { method:'PATCH', body: JSON.stringify(body) })
+                  : await api('/api/collections/bl_axonaut/records', { method:'POST', body: JSON.stringify(body) });
+      if(allDone && !isExp) title += ' — commande complète';
+      // l'ordinateur associé affiche aussi la commande
+      try{ await notifyPoste(orderId, title); }catch(e){ /* pas grave : la validation est enregistrée */ }
+    }
+    vibrate(kind !== 'err');
+    const st = (saved && saved.lines_state) || state;
+    app.innerHTML = `<div class="result ${kind}"><div class="t">${esc(title)}</div><div class="d">${esc(detail)}</div></div>${extra}
+      <div class="card"><b>${esc(label)}</b>
+        ${lines.map((l, i) => `<div class="line ${i === lineIdx ? 'cur' : ''}"><span class="s">${st[i] === true ? '✅' : '⬜'}</span><span>${esc(l.titre || 'Ligne ' + (i + 1))}${l.qte ? ` <span class="muted">× ${esc(l.qte)} ${esc(l.unite || '')}</span>` : ''}</span></div>`).join('')}
+        <div class="line"><span class="s">${st._expedie ? '🚚' : '⬜'}</span><span>Expédition${st._expedie ? ' <span class="muted">— ' + esc(new Date(st._expedie.at).toLocaleString('fr-FR')) + '</span>' : ''}</span></div>
+      </div>
+      ${changed ? '<button class="danger" id="undoBtn">↩ Annuler ce scan</button>' : ''}
+      <div class="muted" style="text-align:center; margin-top:14px;">Flashe le code suivant avec l'appareil photo.</div>` + pairFooter();
+    wireFooter();
+    const fb = document.getElementById('forceBtn');
+    if(fb) fb.onclick = () => { params.set('force', '1'); history.replaceState(null, '', '?' + params.toString()); run(); };
+    const ub = document.getElementById('undoBtn');
+    if(ub) ub.onclick = async () => {
+      try{
+        const cur = await api(`/api/collections/bl_axonaut/records/${saved.id}`);
+        const s2 = Object.assign({}, cur.lines_state || {}); lastUndo(s2);
+        const allDone = lines.length > 0 && lines.every((x, i) => s2[i] === true);
+        await api(`/api/collections/bl_axonaut/records/${saved.id}`, { method:'PATCH', body: JSON.stringify({ lines_state: s2, all_done: allDone, etat_valide: allDone }) });
+        app.innerHTML = `<div class="result info"><div class="t">Scan annulé</div><div class="d">${esc(label)}</div></div>`;
+      }catch(e){ alert('Annulation impossible : ' + e.message); }
+    };
+  }catch(e){
+    if(e.auth){ localStorage.removeItem(AUTH_KEY); showLogin('Connexion expirée ou droits insuffisants.'); return; }
+    vibrate(false);
+    app.innerHTML = `<div class="result err"><div class="t">Scan non enregistré</div><div class="d">${esc(e.message)}</div></div><button class="ghost" onclick="location.reload()">Réessayer</button>`;
+  }
+}
+run();
+</script>
+</body>
+</html>

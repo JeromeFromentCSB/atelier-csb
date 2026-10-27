@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('csbHost', {
   htmlToPdf: (html, footerHtml, headerHtml) => ipcRenderer.invoke('csb:html-to-pdf', { html, footerHtml, headerHtml }),
   savePdf: (base64, defaultName) => ipcRenderer.invoke('csb:save-pdf', { base64, defaultName }),
   printHtml: (html, title) => ipcRenderer.invoke('csb:print-html', { html, title }),
+  bringToFront: () => ipcRenderer.invoke('csb:bring-to-front'),
   openTempPdf: (base64, name) => ipcRenderer.invoke('csb:open-temp-pdf', { base64, name }),
   emailSend: (message) => ipcRenderer.invoke('csb:email-send', message),
   logoDataUrl: () => ipcRenderer.invoke('csb:logo-data-url'),

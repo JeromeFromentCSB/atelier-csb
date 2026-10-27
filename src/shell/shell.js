@@ -276,6 +276,31 @@
   setTimeout(pollDemandes, 15000);
   setInterval(pollDemandes, 5 * 60 * 1000);
 
+  // ================== Téléphone associé à ce poste (scan des bons de fabrication) ==================
+  // Le téléphone dépose chaque scan dans axonaut_settings (clé scan_poste_<id du poste>) ; ce poste
+  // le relève toutes les 2,5 s, revient au premier plan et ouvre la commande dans Gestion Commande.
+  let scanPosteLastSeq = null;
+  async function pollScanPoste() {
+    let poste = null;
+    try { poste = JSON.parse(localStorage.getItem('csb_scan_poste')); } catch (e) {}
+    if (!poste || !poste.id || !CSBAuth.currentUser() || !CSBAuth.hasModuleAccess('axonaut')) return;
+    try {
+      const f = encodeURIComponent(`settings_key='scan_poste_${poste.id}'`);
+      const res = await CSBAuth.authedFetch(CSBAuth.getPbUrl().replace(/\/+$/, '') + `/api/collections/axonaut_settings/records?filter=(${f})&perPage=1`);
+      if (!res.ok) return;
+      const rec = ((await res.json()).items || [])[0];
+      const ev = rec ? JSON.parse(rec.settings_value || 'null') : null;
+      const seq = ev ? String(ev.seq) : '';
+      if (scanPosteLastSeq === null) { scanPosteLastSeq = seq; return; } // premier passage : rien d'ancien
+      if (!ev || seq === scanPosteLastSeq) return;
+      scanPosteLastSeq = seq;
+      if (Date.now() - new Date(ev.at).getTime() > 2 * 60 * 1000) return; // scan trop ancien
+      if (window.csbHost && window.csbHost.bringToFront) window.csbHost.bringToFront();
+      window.postMessage({ type: 'csb:open-module', module: 'axonaut', payload: { contractId: ev.contractId, scanMsg: ev.msg || '' } }, '*');
+    } catch (e) { /* PocketBase injoignable : on réessaie au tour suivant */ }
+  }
+  setInterval(pollScanPoste, 2500);
+
   function renderModuleNav() {
     moduleNav.innerHTML = '';
     moduleOrder.forEach((mod) => {

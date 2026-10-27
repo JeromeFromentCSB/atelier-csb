@@ -562,6 +562,7 @@
           <input type="radio" name="commandeInvoiceFilter" value="facturees" style="cursor:pointer;"> Facturées
         </label>
       </div>
+      <button class="btn ghost" id="scanBtn" title="Valider une ligne de fabrication ou l'expédition en bipant le QR code du bon de fabrication (douchette) ou en collant son lien">🔫 Scanner</button>
       <button class="btn primary" id="refreshBtn">↻ Actualiser</button>
       <button class="btn ghost icon" id="columnPickerBtn" title="Choisir les colonnes affichées">☰</button>
       <button class="btn ghost icon" id="addrBookBtn" title="Carnet d'adresses">📇</button>
@@ -1182,6 +1183,7 @@
 </div>
 
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/vendor/qrcode.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
 <script>
 // ---------- Réglages PocketBase ----------
@@ -2848,6 +2850,11 @@ async function stampSignatureOnCn23(base64, signatureDataUrl){
 // interne de l'atelier, avec un cadre « Reçu le / signature » à la fin.
 async function generateBonDeFabrication(q, clientAddress, opts = {}){
   const isBL = !!opts.livraison;
+  // QR codes de validation (bon de fabrication seulement, commande connue)
+  const withCodes = !isBL && q.contract_id != null && q.contract_id !== '' && typeof qrcode === 'function';
+  const QR = 40;                       // côté du QR d'une ligne (≈ 14 mm)
+  const HEAD_QR = 58;                  // QR « Commande » sous la date (≈ 20 mm)
+  const qtyCol = withCodes ? 140 : 90; // la colonne quantité se décale pour laisser la place au QR
   const pdfDoc = await PDFLib.PDFDocument.create();
   const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
@@ -2861,7 +2868,8 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
   function drawTableHeader(yy){
     page.drawRectangle({ x: left, y: yy - 18, width: right - left, height: 20, color: navy });
     page.drawText('Description', { x: left + 8, y: yy - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
-    page.drawText('Quantité', { x: right - 90, y: yy - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
+    page.drawText('Quantité', { x: right - qtyCol, y: yy - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
+    if(withCodes) page.drawText('Valider', { x: right - 44, y: yy - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
     return yy - 22;
   }
 
@@ -2916,6 +2924,13 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
     page.drawText(isBL ? 'Bon de livraison' : 'Bon de fabrication', { x: right - 180, y: yy, size: 20, font: fontBold, color: navy });
     page.drawText(`N° ${q.number || ''}`, { x: right - 180, y: height - 72, size: 10, font });
     page.drawText(`Le ${new Date().toLocaleDateString('fr-FR')}`, { x: right - 180, y: height - 86, size: 10, font });
+    // QR « Commande » sous la date : bipé, il ouvre la commande sur l'ordinateur
+    if(withCodes){
+      drawPdfQr(page, scanUrlFor(q.contract_id, 'v'), right - 180, height - 96 - HEAD_QR, HEAD_QR);
+      page.drawText('Commande', { x: right - 180 + HEAD_QR + 8, y: height - 112, size: 10, font: fontBold, color: navy });
+      page.drawText('Biper pour ouvrir', { x: right - 180 + HEAD_QR + 8, y: height - 125, size: 8, font });
+      page.drawText("sur l'ordinateur", { x: right - 180 + HEAD_QR + 8, y: height - 135, size: 8, font });
+    }
 
     // Descend sous le logo avant le bloc client.
     if(logoImage) yy = logoTop - logoDims.height - 6;
@@ -2926,7 +2941,7 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
       yy -= 18;
     }
     if(objetTxt){
-      wrapPdfText('Objet : ' + objetTxt, fontBold, 10, right - left).forEach(line => { page.drawText(line, { x: left, y: yy, size: 10, font: fontBold }); yy -= 13; });
+      wrapPdfText('Objet : ' + objetTxt, fontBold, 10, withCodes ? right - left - 200 : right - left).forEach(line => { page.drawText(line, { x: left, y: yy, size: 10, font: fontBold }); yy -= 13; });
     }
     if(livraisonLines.length){
       yy -= 4;
@@ -2935,6 +2950,8 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
       livraisonLines.forEach(line => { page.drawText(line, { x: left, y: yy, size: 9, font }); yy -= 11.5; });
     }
 
+    // le QR « Commande » (en haut à droite) ne doit pas chevaucher la suite
+    if(withCodes) yy = Math.min(yy, height - 96 - HEAD_QR - 10);
     // Commentaire de la commande : encadré juste au-dessus du tableau des lignes, première page seulement.
     if(commentLines.length && page === firstPage){
       yy -= 4;
@@ -3018,12 +3035,12 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
     lastChapter = chapter;
     const details = stripHtmlToText(l.details || '').split('\n').filter(Boolean);
     const textX = left + 8 + THUMB_SIZE + 10;
-    const maxTextWidth = (right - 100) - textX;
+    const maxTextWidth = (right - qtyCol - 10) - textX;
     const titleLines = wrapPdfText(l.title || l.product_name || '', fontBold, 9.5, maxTextWidth);
     const refLines = l.product_code ? wrapPdfText('Réf : ' + l.product_code, font, 8.5, maxTextWidth) : [];
     const detailLines = details.flatMap(d => wrapPdfText(d, font, 8.5, maxTextWidth));
     const textHeight = 6 + titleLines.length * 13 + refLines.length * 11 + detailLines.length * 11;
-    const blockHeight = Math.max(textHeight, THUMB_SIZE + 10);
+    const blockHeight = Math.max(textHeight, THUMB_SIZE + 10, withCodes ? QR + 8 : 0);
     if(y - blockHeight < bottom) y = newPage();
     if(i % 2 === 1) page.drawRectangle({ x: left, y: y - blockHeight + 4, width: right - left, height: blockHeight, color: lightGrey });
     if(thumb){
@@ -3050,7 +3067,8 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
       page.drawText(dl, { x: textX, y: ly - 10, size: 8.5, font, color: PDFLib.rgb(0.3,0.3,0.3) });
       ly -= 11;
     });
-    page.drawText(`${(l.quantity||0).toFixed(2).replace('.', ',')} ${l.unit || ''}`, { x: right - 90, y: y - 10, size: 9.5, font });
+    page.drawText(`${(l.quantity||0).toFixed(2).replace('.', ',')} ${l.unit || ''}`, { x: right - qtyCol, y: y - 10, size: 9.5, font });
+    if(withCodes) drawPdfQr(page, scanUrlFor(q.contract_id, i), right - 44, y - 4 - QR, QR);
     totalQty += (l.quantity || 0);
     y -= blockHeight;
   }
@@ -3060,6 +3078,16 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
   page.drawRectangle({ x: right - 200, y: y - 18, width: 200, height: 20, color: navy });
   page.drawText('Total quantité', { x: right - 194, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
   page.drawText(totalQty.toFixed(2).replace('.', ','), { x: right - 55, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
+  if(withCodes){
+    // QR « Expédition » : à biper quand la commande part
+    const XQ = 70;
+    y -= 30;
+    if(y - XQ - 10 < bottom){ page = pdfDoc.addPage(PAGE_SIZE); y = height - 60; }
+    drawPdfQr(page, scanUrlFor(q.contract_id, 'x'), left, y - XQ, XQ);
+    page.drawText('Expédition', { x: left + XQ + 12, y: y - 18, size: 13, font: fontBold, color: navy });
+    page.drawText('À biper quand la commande est expédiée.', { x: left + XQ + 12, y: y - 34, size: 9, font });
+    page.drawText('Chaque ligne se valide avec son propre code, à droite de la ligne.', { x: left + XQ + 12, y: y - 47, size: 9, font, color: PDFLib.rgb(0.3,0.3,0.3) });
+  }
   if(isBL){
     // Cadre de réception à signer par le client
     y -= 36;
@@ -4109,6 +4137,7 @@ async function openBlModal(r){
   document.getElementById('blLinesList').innerHTML = '<div class="hint">Chargement du devis…</div>';
   document.getElementById('blResult').className = 'col-result';
   document.getElementById('blResult').textContent = '';
+  renderBlScanInfo(null);
   document.getElementById('blFabricationDocs').innerHTML = '';
   document.getElementById('blDemandePrixDocs').innerHTML = '';
   document.getElementById('blDemandePrixWrap').style.display = 'none';
@@ -4200,6 +4229,7 @@ async function openBlModal(r){
     currentBlPbRecord = saved;
     const checkedState = (saved && saved.lines_state) || {};
     renderBlLines(lines, checkedState, contractComment, chapterText, quotationComment);
+    renderBlScanInfo(checkedState);
     if(saved && saved.etat_valide){
       document.getElementById('blResult').className = 'col-result ok';
       document.getElementById('blResult').textContent = '✔ Toutes les lignes étaient déjà cochées — prêt à facturer.';
@@ -4233,6 +4263,7 @@ async function openModuleOrderLines(r){
   catch(e){ console.warn('BL PocketBase indisponible', e); }
   currentBlPbRecord = saved;
   renderBlLines(lines, (saved && saved.lines_state) || {}, '', '', q.comments);
+  renderBlScanInfo((saved && saved.lines_state) || {});
   if(saved && saved.etat_valide){
     document.getElementById('blResult').className = 'col-result ok';
     document.getElementById('blResult').textContent = '✔ Toutes les lignes étaient déjà cochées — prêt à facturer.';
@@ -4636,7 +4667,7 @@ async function onBlCheckboxChange(){
   const r = currentBlRecord;
   if(!r) return;
   const checkboxes = document.querySelectorAll('#blLinesList input[type=checkbox]');
-  const state = {};
+  const state = Object.assign({}, (currentBlPbRecord && currentBlPbRecord.lines_state) || {});
   checkboxes.forEach(cb => { state[cb.dataset.idx] = cb.checked; });
   const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
 
@@ -4656,6 +4687,230 @@ async function onBlCheckboxChange(){
     resultBox.className = 'col-result';
     resultBox.textContent = '';
   }
+}
+
+// ================== Scan des bons de fabrication (douchette, téléphone, saisie) ==================
+// Chaque ligne du bon de fabrication porte un QR code « ligne », et le bon un QR code « expédition ».
+// Le QR contient un lien vers la page mobile scan.html (servie par PocketBase) : l'appareil photo
+// d'un téléphone l'ouvre directement ; une douchette (lecteur 2D en mode clavier) le « tape » ici,
+// où il est reconnu. Les validations sont enregistrées dans le même suivi que les cases à cocher
+// des lignes (bl_axonaut.lines_state) ; l'expédition y est notée sous la clé « _expedie ».
+function scanBaseUrl(){ return getConfig().url.replace(/\/+$/, '') + '/scan.html'; }
+// line : n° de ligne (à partir de 0), 'x' = expédition, 'v' = ouvrir la commande
+function scanUrlFor(contractId, line){
+  return scanBaseUrl() + '?o=' + encodeURIComponent(String(contractId)) + (line === 'x' ? '&x=1' : line === 'v' ? '&v=1' : '&l=' + line);
+}
+function parseScanCode(text){
+  const m = /[?&]o=([^&# ]+)&(?:l=([0-9]+)|(x)=1|(v)=1)/.exec(String(text || ''));
+  if(!m) return null;
+  return { contractId: decodeURIComponent(m[1]), line: m[2] !== undefined ? parseInt(m[2], 10) : null, exp: !!m[3], open: !!m[4] };
+}
+// Identifiant de ce poste, pour y associer un téléphone (partagé avec le socle via localStorage).
+function scanPoste(){
+  let p = null;
+  try{ p = JSON.parse(localStorage.getItem('csb_scan_poste')); }catch(e){}
+  if(!p || !p.id){
+    p = { id: Math.random().toString(36).slice(2, 10), name: 'Ordinateur ' + Math.random().toString(36).slice(2, 5).toUpperCase() };
+    try{ localStorage.setItem('csb_scan_poste', JSON.stringify(p)); }catch(e){}
+  }
+  return p;
+}
+function setScanPosteName(name){
+  const p = scanPoste(); p.name = String(name || '').trim().slice(0, 40) || p.name;
+  try{ localStorage.setItem('csb_scan_poste', JSON.stringify(p)); }catch(e){}
+  return p;
+}
+// QR code dessiné dans le PDF (pdf-lib) : un carré noir par module.
+function drawPdfQr(page, text, x, y, size){
+  if(typeof qrcode !== 'function') return;
+  const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
+  const n = qr.getModuleCount(), cell = size / n, black = PDFLib.rgb(0, 0, 0);
+  for(let r = 0; r < n; r++) for(let c = 0; c < n; c++){
+    if(qr.isDark(r, c)) page.drawRectangle({ x: x + c * cell, y: y + size - (r + 1) * cell, width: cell + 0.05, height: cell + 0.05, color: black });
+  }
+}
+// Lignes d'une commande (même ordre que le bon de fabrication et les cases à cocher).
+async function scanOrderLines(r){
+  if(currentBlRecord === r && currentBlQuotation) return currentBlQuotation.quotation_lines || [];
+  if(isModuleOrder(r)) return moduleQuotation(r).quotation_lines || [];
+  let qid = r.quotationId;
+  if(!qid){
+    const cRes = await callAxonaut('/contracts/' + r.contractId);
+    qid = cRes.ok && cRes.parsed && cRes.parsed.quotation && cRes.parsed.quotation.id;
+  }
+  if(!qid) throw new Error('aucun devis lié à cette commande');
+  const qRes = await callAxonaut('/quotations/' + qid);
+  if(!qRes.ok) throw new Error('devis illisible (HTTP ' + qRes.status + ')');
+  return (qRes.parsed && qRes.parsed.quotation_lines) || [];
+}
+function scanUserName(){
+  try{ const u = CSBAuth.currentUser && CSBAuth.currentUser(); return (u && (u.name || u.email)) || ''; }catch(e){ return ''; }
+}
+let scanBusy = false;
+async function handleScan(text){
+  const code = parseScanCode(text);
+  if(!code){ scanFeedback(false, 'Code non reconnu', String(text).slice(0, 80)); return; }
+  if(scanBusy){ scanFeedback(false, 'Patiente…', 'le scan précédent est en cours d\'enregistrement'); return; }
+  scanBusy = true;
+  try{
+    if(!contracts.length) await refreshAll();
+    let r = contracts.find(x => String(x.contractId) === code.contractId);
+    if(!r){ await refreshAll(); r = contracts.find(x => String(x.contractId) === code.contractId); }
+    if(!r) throw new Error('commande introuvable (' + code.contractId + ')');
+    const label = (r.numeroCommande || '') + ' — ' + (r.clientCompany || r.nomSoc || '');
+    if(code.open){
+      await jumpToCommande(r.contractId);
+      scanFeedback(true, '📂 Commande ouverte', label);
+      return;
+    }
+    const lines = await scanOrderLines(r);
+    const rec = await blFetchByContract(r.contractId);
+    const state = Object.assign({}, (rec && rec.lines_state) || {});
+    const log = Array.isArray(state._log) ? state._log.slice(-99) : [];
+    const who = scanUserName(), at = new Date().toISOString();
+    let title, detail;
+    if(code.exp){
+      const missing = lines.map((l, i) => i).filter(i => state[i] !== true);
+      if(missing.length && !confirm(`Commande ${label}\n\n${missing.length} ligne(s) de fabrication pas encore validée(s).\nEnregistrer l'expédition quand même ?`)){ scanFeedback(false, 'Expédition non enregistrée', label); return; }
+      if(state._expedie){ scanFeedback(true, 'Déjà expédiée', label + ' — le ' + new Date(state._expedie.at).toLocaleString('fr-FR'), true); return; }
+      state._expedie = { at, by: who };
+      log.push({ x: 1, at, by: who });
+      title = '🚚 Expédition enregistrée'; detail = label;
+    }else{
+      if(code.line < 0 || code.line >= lines.length) throw new Error('ligne ' + (code.line + 1) + ' inexistante (le devis a peut-être changé : réimprime le bon)');
+      const l = lines[code.line];
+      const name = l.title || l.product_name || ('ligne ' + (code.line + 1));
+      if(state[code.line] === true){ scanFeedback(true, 'Ligne déjà validée', label + ' — ' + name, true); return; }
+      state[code.line] = true;
+      log.push({ l: code.line, at, by: who });
+      const done = lines.filter((x, i) => state[i] === true).length;
+      title = `✔ Ligne ${code.line + 1} validée (${done}/${lines.length})`; detail = label + ' — ' + name;
+    }
+    state._log = log;
+    const allDone = lines.length > 0 && lines.every((x, i) => state[i] === true);
+    const body = { contract_id: String(r.contractId), numero_commande: r.numeroCommande, lines_state: state, all_done: allDone, etat_valide: allDone };
+    const saved = rec ? await blPatch(rec.id, body) : await blCreate(body);
+    r.blReady = allDone; r.expedie = !!state._expedie;
+    if(currentBlRecord === r){
+      currentBlPbRecord = saved;
+      document.querySelectorAll('#blLinesList input[type=checkbox]').forEach(cb => { cb.checked = state[cb.dataset.idx] === true; });
+      renderBlScanInfo(state);
+    }
+    render();
+    scanFeedback(true, title + (allDone && !code.exp ? ' — commande complète' : ''), detail);
+  }catch(e){
+    scanFeedback(false, 'Scan non enregistré', e.message);
+  }finally{ scanBusy = false; }
+}
+// Retour visuel et sonore (bip aigu = ok, grave = erreur), visible de loin à l'atelier.
+function scanFeedback(ok, title, detail, neutral){
+  let box = document.getElementById('scanToast');
+  if(!box){
+    box = document.createElement('div'); box.id = 'scanToast';
+    box.style.cssText = 'position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:9999; min-width:320px; max-width:90vw; padding:14px 20px; border-radius:12px; color:#fff; font-family:sans-serif; box-shadow:0 8px 30px rgba(0,0,0,.25); transition:opacity .3s;';
+    document.body.appendChild(box);
+  }
+  box.style.background = neutral ? '#5b6b80' : (ok ? '#2E7D32' : '#B3453A');
+  box.innerHTML = `<div style="font-weight:800; font-size:1.05rem;">${escapeHtml(title)}</div><div style="font-size:.85rem; margin-top:3px; opacity:.95;">${escapeHtml(detail || '')}</div>`;
+  box.style.opacity = '1';
+  clearTimeout(box._t); box._t = setTimeout(() => { box.style.opacity = '0'; }, ok ? 3500 : 7000);
+  try{
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = ok ? 1320 : 260; g.gain.value = 0.08;
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + (ok ? 0.12 : 0.4));
+    o.onended = () => ac.close();
+  }catch(e){}
+}
+// Expédition affichée dans la fiche commande (avec annulation pour les administrateurs).
+function renderBlScanInfo(state){
+  let el = document.getElementById('blScanInfo');
+  const res = document.getElementById('blResult');
+  if(!el && res){ el = document.createElement('div'); el.id = 'blScanInfo'; el.style.cssText = 'margin-top:10px; font-family:sans-serif; font-size:.85rem;'; res.parentNode.insertBefore(el, res); }
+  if(!el) return;
+  const ex = state && state._expedie;
+  if(!ex){ el.innerHTML = ''; return; }
+  el.innerHTML = `<span style="background:#E3F2E4; color:#2E7D32; font-weight:700; border-radius:999px; padding:3px 10px;">🚚 Expédiée le ${escapeHtml(new Date(ex.at).toLocaleString('fr-FR'))}${ex.by ? ' par ' + escapeHtml(ex.by) : ''}</span>`
+    + (isAdminUser() ? ' <button class="btn ghost" id="blUnshipBtn" style="padding:2px 8px; font-size:.75rem;">Annuler l\'expédition</button>' : '');
+  const b = document.getElementById('blUnshipBtn');
+  if(b) b.onclick = async () => {
+    const r = currentBlRecord, rec = currentBlPbRecord;
+    if(!r || !rec || !confirm('Annuler l\'expédition enregistrée pour cette commande ?')) return;
+    const st = Object.assign({}, rec.lines_state || {}); delete st._expedie;
+    try{ currentBlPbRecord = await blPatch(rec.id, { lines_state: st }); r.expedie = false; renderBlScanInfo(st); render(); }
+    catch(e){ alert('Annulation impossible : ' + e.message); }
+  };
+}
+// Douchette : elle « tape » le contenu du QR très vite puis Entrée. On reconnaît ces rafales hors
+// des champs de saisie. Le texte est relu de deux façons (touche produite, et position de la touche
+// sur un clavier QWERTY) pour fonctionner même si la douchette est réglée en QWERTY sur un PC AZERTY.
+const QWERTY = { Minus: ['-', '_'], Equal: ['=', '+'], Slash: ['/', '?'], Semicolon: [';', ':'], Period: ['.', '>'], Comma: [',', '<'],
+  Digit1: ['1', '!'], Digit2: ['2', '@'], Digit3: ['3', '#'], Digit4: ['4', '$'], Digit5: ['5', '%'], Digit6: ['6', '^'], Digit7: ['7', '&'], Digit8: ['8', '*'], Digit9: ['9', '('], Digit0: ['0', ')'] };
+function qwertyChar(e){
+  if(/^Key[A-Z]$/.test(e.code)){ const c = e.code.slice(3); return e.shiftKey ? c : c.toLowerCase(); }
+  if(/^Numpad[0-9]$/.test(e.code)) return e.code.slice(6);
+  const k = QWERTY[e.code]; return k ? k[e.shiftKey ? 1 : 0] : '';
+}
+let scanKeys = { byKey: '', byCode: '', last: 0 };
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  const inField = t && t !== document.body && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) && t.id !== 'scanInput';
+  if(inField || e.ctrlKey || e.altKey || e.metaKey) return;
+  const now = Date.now();
+  if(now - scanKeys.last > 120) scanKeys = { byKey: '', byCode: '', last: now };
+  scanKeys.last = now;
+  if(e.key === 'Enter'){
+    const a = scanKeys.byKey, b = scanKeys.byCode;
+    scanKeys = { byKey: '', byCode: '', last: 0 };
+    const hit = parseScanCode(a) ? a : (parseScanCode(b) ? b : null);
+    if(hit){ e.preventDefault(); if(t && t.id === 'scanInput') t.value = ''; handleScan(hit); }
+    return;
+  }
+  if(e.key && e.key.length === 1) scanKeys.byKey += e.key;
+  scanKeys.byCode += qwertyChar(e);
+}, true);
+// Bouton « Scanner » : champ où la douchette peut taper, ou où l'on colle/tape un code à la main.
+function openScanBox(){
+  let box = document.getElementById('scanBox');
+  if(!box){
+    box = document.createElement('div'); box.id = 'scanBox';
+    box.style.cssText = 'position:fixed; inset:0; background:rgba(35,35,32,.45); z-index:9000; display:flex; align-items:center; justify-content:center;';
+    box.innerHTML = `<div style="background:#fff; border-radius:14px; padding:20px 22px; width:min(520px, 92vw); font-family:sans-serif;">
+      <div style="font-weight:800; font-size:1.05rem; margin-bottom:4px;">🔫 Scanner un bon de fabrication</div>
+      <div style="color:var(--muted); font-size:.82rem; margin-bottom:12px;">Bipe le QR « Commande » du bon pour ouvrir la commande, le QR d'une ligne quand sa fabrication est terminée, ou le QR « Expédition ». Tu peux aussi coller le lien du code puis Entrée. Hors de cette fenêtre, la douchette fonctionne aussi tant qu'aucun champ n'est sélectionné.</div>
+      <input id="scanInput" type="text" autocomplete="off" placeholder="En attente d'un scan…" style="width:100%; padding:12px; font-size:1rem; border:2px solid var(--poste-yellow-dark,#c99a00); border-radius:10px;">
+      <div style="display:flex; gap:14px; align-items:center; margin-top:16px; padding-top:14px; border-top:1px solid var(--line,#e5e1d6);">
+        <img id="scanPairQr" alt="" style="width:120px; height:120px; flex-shrink:0; image-rendering:pixelated;">
+        <div style="flex:1; font-size:.82rem;">
+          <div style="font-weight:700; margin-bottom:4px;">📱 Associer un téléphone à cet ordinateur</div>
+          <div style="color:var(--muted); margin-bottom:8px;">Flashe ce code avec l'appareil photo du téléphone. Ensuite, chaque code bipé avec ce téléphone ouvre la commande ici.</div>
+          <label style="font-size:.75rem; color:var(--muted);">Nom de cet ordinateur</label>
+          <input id="scanPosteName" type="text" style="width:100%; padding:6px 8px; border:1px solid var(--line,#e5e1d6); border-radius:6px;">
+        </div>
+      </div>
+      <div style="text-align:right; margin-top:12px;"><button class="btn ghost" id="scanCloseBtn">Fermer</button></div></div>`;
+    document.body.appendChild(box);
+    box.addEventListener('mousedown', (e) => { if(e.target === box) box.style.display = 'none'; });
+    document.getElementById('scanCloseBtn').onclick = () => { box.style.display = 'none'; };
+    const nameInput = document.getElementById('scanPosteName');
+    nameInput.addEventListener('change', () => { setScanPosteName(nameInput.value); renderPairQr(); });
+    document.getElementById('scanInput').addEventListener('keydown', (e) => {
+      if(e.key !== 'Enter') return;
+      const v = e.target.value.trim();
+      if(v && parseScanCode(v)){ e.preventDefault(); e.stopPropagation(); e.target.value = ''; handleScan(v); }
+    });
+  }
+  box.style.display = 'flex';
+  document.getElementById('scanPosteName').value = scanPoste().name;
+  renderPairQr();
+  setTimeout(() => document.getElementById('scanInput').focus(), 30);
+}
+function renderPairQr(){
+  const img = document.getElementById('scanPairQr');
+  if(!img || typeof qrcode !== 'function') return;
+  const p = scanPoste();
+  const qr = qrcode(0, 'M'); qr.addData(scanBaseUrl() + '?pair=' + encodeURIComponent(p.id) + '&n=' + encodeURIComponent(p.name)); qr.make();
+  img.src = qr.createDataURL(4, 2);
 }
 
 function escapeHtml(str){
@@ -4693,6 +4948,10 @@ function buildAddrCellHtml(r){
 // 3) BL validé + étiquette envoyée mais pas facturé, 4) tout fait, facturé.
 function buildStatusCellHtml(r){
   const facture = isContractInvoiced(r.contractId);
+  if(r.expedie && !r.labelGenerated){
+    return facture ? `<span class="status-icon s4" title="État 4 — fabriqué, expédié (scan), facturé">🧾</span>`
+      : `<span class="status-icon s3" title="État 3 — fabriqué et expédié (scan), pas encore facturé">🚚</span>`;
+  }
   if(r.labelGenerated && facture){
     return `<span class="status-icon s4" title="État 4 — BL validé, étiquette envoyée, facturé">🧾</span>`;
   }
@@ -4937,7 +5196,11 @@ async function refreshAll(){
       const blRecords = await blFetchAll();
       const blByContract = {};
       blRecords.forEach(b => { blByContract[String(b.contract_id)] = b; });
-      contracts.forEach(r => { r.blReady = !!(blByContract[String(r.contractId)] && blByContract[String(r.contractId)].etat_valide); });
+      contracts.forEach(r => {
+        const b = blByContract[String(r.contractId)];
+        r.blReady = !!(b && b.etat_valide);
+        r.expedie = !!(b && b.lines_state && b.lines_state._expedie);
+      });
     }catch(e){ console.warn('BL PocketBase indisponible', e); }
 
     contracts.sort((a,b) => (b.startDate || '').localeCompare(a.startDate || ''));
@@ -6040,7 +6303,16 @@ async function handleGestionCommandeRequest(payload){
   if(payload.openDevis){ openInDevisTab(payload.openDevis); return; }
   // retour après « Facturer dans Axonaut » lancé depuis la fiche commande
   if(payload.invoiced){ await refreshAll(); await jumpToCommande(payload.invoiced); return; }
-  if(payload.contractId){ await jumpToCommande(isNaN(Number(payload.contractId)) ? payload.contractId : Number(payload.contractId)); return; }
+  if(payload.contractId){
+    await jumpToCommande(isNaN(Number(payload.contractId)) ? payload.contractId : Number(payload.contractId));
+    if(payload.scanMsg !== undefined){
+      scanFeedback(true, '📱 ' + (payload.scanMsg || 'Commande ouverte'), 'scan du téléphone associé');
+      // le téléphone a peut-être validé une ligne : on relit la fiche
+      const r = currentBlRecord;
+      if(r){ try{ const rec = await blFetchByContract(r.contractId); if(rec && currentBlRecord === r){ currentBlPbRecord = rec; document.querySelectorAll('#blLinesList input[type=checkbox]').forEach(cb => { cb.checked = (rec.lines_state || {})[cb.dataset.idx] === true; }); renderBlScanInfo(rec.lines_state || {}); r.blReady = !!rec.etat_valide; r.expedie = !!(rec.lines_state && rec.lines_state._expedie); render(); } }catch(e){} }
+    }
+    return;
+  }
   if(payload.fabricationQuotationId){
     try{
       const res = await callAxonaut('/quotations/' + payload.fabricationQuotationId);
@@ -6099,6 +6371,7 @@ async function jumpToCommande(contractId){
   const row = document.querySelector(`tr[data-id="${r.contractId}"]`);
   if(row) row.scrollIntoView({ block:'center', behavior:'smooth' });
 }
+document.getElementById('scanBtn').addEventListener('click', openScanBox);
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });

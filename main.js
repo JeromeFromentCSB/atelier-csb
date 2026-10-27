@@ -358,6 +358,16 @@ ipcMain.handle('csb:open-temp-pdf', async (_event, { base64, name }) => {
   if (err) throw new Error(err);
   return filePath;
 });
+// Scan depuis un téléphone associé à ce poste : la fenêtre revient au premier plan.
+ipcMain.handle('csb:bring-to-front', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return false;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.setAlwaysOnTop(true); win.focus(); win.setAlwaysOnTop(false);
+  return true;
+});
+
 ipcMain.handle('csb:refocus-window', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win.isDestroyed()) return false;
@@ -943,6 +953,7 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset 
           from: { name: from.name || from.address || '', email: from.address || '' },
           date: msg.envelope.date ? new Date(msg.envelope.date).toISOString() : null,
           unread: !(msg.flags && msg.flags.has('\\Seen')),
+          flagged: !!(msg.flags && msg.flags.has('\\Flagged')),
           hasAttachment: bodyStructureHasAttachment(msg.bodyStructure),
           labels: msg.labels ? [...msg.labels] : [],
           threadId: msg.threadId ? String(msg.threadId) : null
@@ -950,7 +961,11 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset 
       }
     }
     results.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    return { items: results, hasMore };
+    // Mails épinglés du dossier (drapeau Flagged = étoile Gmail / épingle Spark) : la liste les
+    // garde en tête même quand ils sont plus anciens que les mails chargés.
+    let pinnedUids = [];
+    try { pinnedUids = ((await client.search({ flagged: true }, { uid: true })) || []).slice(-50); } catch (e) { /* pas grave */ }
+    return { items: results, hasMore, pinnedUids };
   } finally {
     lock.release();
   }
@@ -973,6 +988,7 @@ ipcMain.handle('csb:email-get-by-uids', async (_event, { uids, mailbox }) => {
         from: { name: from.name || from.address || '', email: from.address || '' },
         date: msg.envelope.date ? new Date(msg.envelope.date).toISOString() : null,
         unread: !(msg.flags && msg.flags.has('\\Seen')),
+        flagged: !!(msg.flags && msg.flags.has('\\Flagged')),
         hasAttachment: bodyStructureHasAttachment(msg.bodyStructure),
         labels: msg.labels ? [...msg.labels] : [],
         threadId: msg.threadId ? String(msg.threadId) : null

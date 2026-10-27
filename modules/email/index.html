@@ -443,10 +443,43 @@ let hasMoreMessages = false;
 // (stocké dans ce navigateur, comme une étoile personnelle) ; les 3 autres catégories sont
 // devinées par heuristique (expéditeur/objet) — approximatif par nature, pas une vraie
 // catégorisation Gmail.
-const PINNED_KEY = 'csb_email_pinned_uids';
-function loadPinned(){ try{ return new Set(JSON.parse(localStorage.getItem(PINNED_KEY)) || []); }catch(e){ return new Set(); } }
-function savePinned(){ try{ localStorage.setItem(PINNED_KEY, JSON.stringify([...pinnedIds])); }catch(e){} }
-let pinnedIds = loadPinned();
+// Épinglés : drapeau « Flagged » du serveur (= étoile Gmail, épingle Spark), donc partagé avec
+// tous les postes et les autres applis. pinnedIds = mails épinglés du dossier affiché.
+let pinnedIds = new Set();
+// Anciens épinglages enregistrés seulement sur ce poste (avant la 0.2.63) : repris une fois sur
+// la boîte de réception, puis oubliés.
+const LEGACY_PINNED_KEY = 'csb_email_pinned_uids';
+async function migrateLegacyPins(){
+  if(currentMailbox !== 'INBOX') return;
+  let old = [];
+  try{ old = JSON.parse(localStorage.getItem(LEGACY_PINNED_KEY)) || []; }catch(e){}
+  if(!old.length) return;
+  const todo = old.filter(id => messages.some(m => m.id === id) && !pinnedIds.has(id));
+  try{
+    if(todo.length) await requireCsbHost().emailSetFlags(todo.join(','), 'INBOX', ['\\Flagged'], []);
+    todo.forEach(id => pinnedIds.add(id));
+    localStorage.removeItem(LEGACY_PINNED_KEY);
+  }catch(e){ console.warn('Reprise des anciens épinglages impossible', e); }
+}
+async function togglePin(id, forceValue){
+  const pin = forceValue !== undefined ? forceValue : !pinnedIds.has(id);
+  const box = currentMailbox;
+  if(pin) pinnedIds.add(id); else pinnedIds.delete(id);
+  renderList(); refreshPinBtn(id);
+  try{
+    await requireCsbHost().emailSetFlags(id, box, pin ? ['\\Flagged'] : [], pin ? [] : ['\\Flagged']);
+  }catch(e){
+    if(box === currentMailbox){ if(pin) pinnedIds.delete(id); else pinnedIds.add(id); renderList(); refreshPinBtn(id); }
+    alert((pin ? 'Épinglage' : 'Désépinglage') + ' impossible : ' + e.message);
+  }
+}
+function refreshPinBtn(id){
+  const b = document.getElementById('pinMsgBtn');
+  if(!b || selectedMessageId !== id) return;
+  const on = pinnedIds.has(id);
+  b.textContent = on ? '📌 Désépingler' : '📌 Épingler';
+  b.classList.toggle('active', on);
+}
 
 const NOTIF_PATTERN = /noreply|no-reply|notification|mailer-daemon|@google\.com|@openai\.com|@anthropic\.com|@microsoft\.com|@apple\.com|@sendcloud\./i;
 const NEWSLETTER_PATTERN = /newsletter|no-?reply@|news@|info@|marketing@|@pinterest\.|@cloudflare\.|@dpd|@embroidize|fireflies\.ai/i;
@@ -681,6 +714,8 @@ async function loadMessages(append){
     const res = await requireCsbHost().emailList(q, 40, currentMailbox, append ? loadedCount : 0);
     const items = Array.isArray(res) ? res : (res.items || []);
     hasMoreMessages = Array.isArray(res) ? false : !!res.hasMore;
+    if(!append) pinnedIds = new Set((res && res.pinnedUids) || []);
+    items.forEach(m => { if(m.flagged) pinnedIds.add(m.uid); else pinnedIds.delete(m.uid); });
     const mapped = items.map(m => ({
       id: m.uid,
       snippet: '',
@@ -707,6 +742,7 @@ async function loadMessages(append){
       try{
         const extra = await requireCsbHost().emailGetByUids(missingPinned, currentMailbox);
         extra.forEach(m => {
+          if(!m.flagged) pinnedIds.delete(m.uid);
           messages.push({
             id: m.uid, snippet: '', unread: m.unread, from: m.from, subject: m.subject,
             date: m.date ? new Date(m.date) : null, hasAttachment: m.hasAttachment, labels: m.labels || [], threadId: m.threadId || null
@@ -714,6 +750,7 @@ async function loadMessages(append){
         });
       }catch(e){ console.warn('Impossible de récupérer certains mails épinglés', e); }
     }
+    await migrateLegacyPins();
   }catch(e){
     document.getElementById('msgList').innerHTML = `<div class="hint" style="padding:16px; color:var(--silk-red); font-family:sans-serif;">Erreur : ${escapeHtml(e.message)}</div>`;
     document.getElementById('listEmpty').style.display = 'none';
@@ -785,7 +822,7 @@ function threadRowHtml(thread){
         </div>
         <div class="msg-subject">${escapeHtml(m.subject)}</div>
       </div>
-      <span class="msg-pin ${thread.pinned ? 'pinned' : ''}">${thread.pinned ? '📌' : ''}</span>
+      <span class="msg-pin ${thread.pinned ? 'pinned' : ''}" data-action="toggle-thread-pin" data-thread="${escapeHtml(thread.key)}" title="${thread.pinned ? 'Désépingler la conversation' : 'Épingler la conversation'}">📌</span>
     </div>
   `;
   if(count > 1 && expanded){
@@ -816,10 +853,16 @@ function wireMsgRows(listEl){
   listEl.querySelectorAll('[data-action="toggle-pin"]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      const id = parseInt(el.dataset.id, 10);
-      if(pinnedIds.has(id)) pinnedIds.delete(id); else pinnedIds.add(id);
-      savePinned();
-      renderList();
+      togglePin(parseInt(el.dataset.id, 10));
+    });
+  });
+  listEl.querySelectorAll('[data-action="toggle-thread-pin"]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const t = (currentThreads || []).find(x => x.key === el.dataset.thread);
+      if(!t) return;
+      if(t.pinned) t.messages.filter(m => pinnedIds.has(m.id)).forEach(m => togglePin(m.id, false));
+      else togglePin(t.latest.id, true);
     });
   });
   listEl.querySelectorAll('[data-action="toggle-cat"]').forEach(el => {
@@ -969,6 +1012,7 @@ async function openMessage(id){
       <div class="detail-toolbar">
         ${isTrash ? '' : '<button class="btn ghost danger-soft" id="deleteMsgBtn" title="Déplace le mail vers la Corbeille (récupérable) — touche Suppr">🗑️ Supprimer</button>'}
         <button class="btn ghost icon" id="toggleReadBtn" title="Marquer comme non lu">✉️</button>
+        <button class="btn ghost" id="pinMsgBtn" title="Garder ce mail en haut de la liste (épingle partagée avec Gmail / Spark)">📌 Épingler</button>
         <button class="btn ghost" id="printMsgBtn" title="Imprimer ce mail">🖨️ Imprimer</button>
         ${dmMailToolbarHtml()}
       </div>
@@ -984,6 +1028,8 @@ async function openMessage(id){
     if(deleteBtn) deleteBtn.addEventListener('click', () => deleteMessage(id));
     document.getElementById('toggleReadBtn').addEventListener('click', () => toggleReadStatus(id));
     document.getElementById('printMsgBtn').addEventListener('click', () => printMails([m], m.subject));
+    document.getElementById('pinMsgBtn').addEventListener('click', () => togglePin(id));
+    refreshPinBtn(id);
     dmWireMailToolbar(id);
     if(currentAttachments.length){
       const attachListEl = document.getElementById('attachList');

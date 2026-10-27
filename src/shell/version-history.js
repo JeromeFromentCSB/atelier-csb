@@ -2,6 +2,12 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.63', items: [
+    "Bon de fabrication : QR codes de scan — « Commande » sous la date (ouvre la commande sur l'ordinateur), « Valider » sur chaque ligne (fabrication terminée) et « Expédition » en bas",
+    "Gestion Commande : bouton « 🔫 Scanner » et prise en charge des douchettes 2D (même réglées en clavier QWERTY) — lignes cochées, expédition notée (🚚, heure et personne), bandeau et bip de confirmation",
+    "Téléphone : page de scan (à déposer sur le serveur à côté de la page photos) ouverte par l'appareil photo, connexion avec l'identifiant de l'appli ; un téléphone peut être associé à un ordinateur pour y ouvrir la commande bipée",
+    "Email : épingler / désépingler un mail (bouton dans le mail ouvert, 📌 dans la liste) — épingle partagée avec Gmail et Spark, les épinglés restent en haut",
+  ]},
   { v: '0.2.62', items: [
     "Email : les dossiers se réordonnent par glisser-déposer (ordre mémorisé sur le poste, lien « ↺ Ordre d'origine » pour revenir à l'ordre de Gmail)",
   ]},
