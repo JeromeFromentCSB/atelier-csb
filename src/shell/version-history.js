@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.62', items: [
+    "Email : les dossiers se réordonnent par glisser-déposer (ordre mémorisé sur le poste, lien « ↺ Ordre d'origine » pour revenir à l'ordre de Gmail)",
+  ]},
   { v: '0.2.61', items: [
     "Devis : un produit ou un client modifié (module Articles, module Clients, autre fenêtre ou site Axonaut) est pris en compte sans relancer l'appli",
     "Clients : dans la fiche d'un client, choix du type Prospect / Client (passage dans les deux sens, vérifié auprès d'Axonaut)",

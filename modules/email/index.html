@@ -88,6 +88,11 @@
   .folder-item.active{ background:var(--white); border-left-color:var(--poste-yellow-dark); font-weight:700; }
   .folder-item .ic{ flex-shrink:0; font-size:.9rem; }
   .folder-item .nm{ overflow:hidden; text-overflow:ellipsis; }
+  .folder-item.drop-before{ box-shadow: inset 0 2px 0 var(--poste-yellow-dark); }
+  .folder-item.drop-after{ box-shadow: inset 0 -2px 0 var(--poste-yellow-dark); }
+  .folder-item.dragging{ opacity:.4; }
+  .folder-reset{ display:block; margin:6px 10px; font-size:.72rem; color:var(--muted); background:none; border:none; cursor:pointer; text-align:left; padding:0; font-family:sans-serif; }
+  .folder-reset:hover{ text-decoration:underline; }
   .folder-item.drop-target{ background:var(--poste-yellow, #ffe082); border-left-color:var(--poste-yellow-dark); }
   .msg-row.dragging{ opacity:.4; }
   .thread-row{ cursor:pointer; }
@@ -543,15 +548,66 @@ async function loadFolders(){
   }
   renderFolders();
 }
+// Ordre des dossiers choisi par glisser-déposer (mémorisé sur ce poste). Les dossiers absents de
+// l'ordre enregistré (nouveaux dossiers) gardent leur place d'origine, après les autres.
+const FOLDER_ORDER_KEY = 'csb_email_folder_order';
+function savedFolderOrder(){ try{ return JSON.parse(localStorage.getItem(FOLDER_ORDER_KEY)) || []; }catch(e){ return []; } }
+function orderedFolders(){
+  const order = savedFolderOrder();
+  if(!order.length) return folders.slice();
+  const rank = new Map(order.map((p, i) => [p, i]));
+  return folders.map((f, i) => ({ f, i })).sort((a, b) => {
+    const ra = rank.has(a.f.path) ? rank.get(a.f.path) : 1e6 + a.i;
+    const rb = rank.has(b.f.path) ? rank.get(b.f.path) : 1e6 + b.i;
+    return ra - rb;
+  }).map(x => x.f);
+}
+const FOLDER_DND = 'application/x-csb-folder';
+let draggingFolder = null;
+function moveFolderInOrder(path, targetPath, after){
+  const list = orderedFolders().map(f => f.path).filter(p => p !== path);
+  let i = list.indexOf(targetPath);
+  if(i < 0) return;
+  if(after) i++;
+  list.splice(i, 0, path);
+  try{ localStorage.setItem(FOLDER_ORDER_KEY, JSON.stringify(list)); }catch(e){}
+  renderFolders();
+}
 function renderFolders(){
   const el = document.getElementById('folderList');
-  el.innerHTML = folders.map(f => `
-    <div class="folder-item ${f.path === currentMailbox && !dmView ? 'active' : ''}" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}">
+  el.innerHTML = orderedFolders().map(f => `
+    <div class="folder-item ${f.path === currentMailbox && !dmView ? 'active' : ''}" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)} — glisser pour changer l'ordre" draggable="true">
       <span class="ic">${folderIcon(f)}</span>
       <span class="nm">${escapeHtml(folderLabel(f))}</span>
     </div>
-  `).join('');
+  `).join('') + (savedFolderOrder().length ? `<button class="folder-reset" id="folderResetBtn" title="Revenir à l'ordre d'origine des dossiers">↺ Ordre d'origine</button>` : '');
+  const reset = document.getElementById('folderResetBtn');
+  if(reset) reset.addEventListener('click', () => { try{ localStorage.removeItem(FOLDER_ORDER_KEY); }catch(e){} renderFolders(); });
+  const clearMarks = () => el.querySelectorAll('.drop-before, .drop-after').forEach(x => x.classList.remove('drop-before', 'drop-after'));
   el.querySelectorAll('.folder-item').forEach(item => {
+    // Réordonner : on glisse un dossier sur un autre (au-dessus ou en dessous selon la souris)
+    item.addEventListener('dragstart', (e) => {
+      draggingFolder = item.dataset.path;
+      e.dataTransfer.setData(FOLDER_DND, draggingFolder);
+      e.dataTransfer.effectAllowed = 'move';
+      item.classList.add('dragging');
+    });
+    item.addEventListener('dragend', () => { draggingFolder = null; item.classList.remove('dragging'); clearMarks(); });
+    item.addEventListener('dragover', (e) => {
+      if(!draggingFolder) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      if(draggingFolder === item.dataset.path) return;
+      const r = item.getBoundingClientRect(), after = e.clientY > r.top + r.height / 2;
+      clearMarks(); item.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+    item.addEventListener('drop', (e) => {
+      if(!draggingFolder) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const from = draggingFolder; draggingFolder = null; clearMarks();
+      if(from === item.dataset.path) return;
+      const r = item.getBoundingClientRect();
+      moveFolderInOrder(from, item.dataset.path, e.clientY > r.top + r.height / 2);
+    });
     item.addEventListener('click', () => {
       dmLeaveView();
       currentMailbox = item.dataset.path;
