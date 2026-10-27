@@ -378,6 +378,10 @@ function readForm(p, isNew){
   if((isNew || 'name' in body) && !body.name) return { error: 'Le nom est obligatoire.' };
   return { body };
 }
+// Prévient les autres modules (Devis…) qu'un article a changé, y compris dans les autres fenêtres.
+function notifyProductChanged(p){
+  try{ localStorage.setItem('csb_product_changed', JSON.stringify({ at: Date.now(), product: p })); }catch(_){}
+}
 async function create(){
   const st = document.getElementById('st'), btn = document.getElementById('save');
   const { body, error } = readForm({}, true);
@@ -396,6 +400,7 @@ async function create(){
     const p = Object.assign({}, body, saved);
     if(!saved.type && body.product_type) p.type = (PRODUCT_TYPES.find(x => x.code === body.product_type) || {}).label;
     products.push(p);
+    notifyProductChanged(p);
     let imgMsg = '';
     if(imgState && imgState.dataUrl){
       if(code){ try{ await writeImage(code, imgState); }catch(e){ imgMsg = ' (vignette non enregistrée : ' + e.message + ')'; } }
@@ -425,6 +430,7 @@ async function save(p){
       Object.assign(p, saved && saved.id ? saved : body);
       if(body.product_type && !(saved && saved.type)) p.type = (PRODUCT_TYPES.find(x => x.code === body.product_type) || {}).label;
       if('disabled' in body) p.disabled = body.disabled === 'true';
+      notifyProductChanged(p);
     }
     // La vignette suit le code article
     let imgMsg = '';

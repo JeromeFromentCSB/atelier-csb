@@ -1524,7 +1524,9 @@ async function dmCreateDevis(t, kind){
     window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { fromMail: {
       kind, threadId: t.id, subject: t.subject, email: t.contactEmail, name: t.contactName, date: t.firstDate,
       client: dmClientOf(t) || null, mails } } }, '*');
-    await dmLabels(t, [DM.L.root, DM.L.traite], [DM.L.encours, DM.L.sanssuite]);
+    // Le mail n'est PAS marqué « Traité » : il reste (ou passe) « À traiter » tant que le devis
+    // n'est pas fini ; on le marque traité soi-même ensuite. Un mail déjà traité ne bouge pas.
+    if(!(t.labels.has(DM.L.traite) || t.labels.has(DM.L.sanssuite)) && !t.labels.has(DM.L.root)) await dmLabels(t, [DM.L.root], []);
     await dmSetSeen(t, true);
     (dmDevisLinks[t.id] = dmDevisLinks[t.id] || []).push({ id: '', numero: '', statut: 'brouillon', title: t.subject });
     dmAfterChange(t);

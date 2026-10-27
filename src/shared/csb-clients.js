@@ -148,7 +148,7 @@
       </div>
       <div class="row">
         <div class="f"><label>Nom du contact sur l'adresse</label><input type="text" data-k="address_contact_name"></div>
-        ${editing ? '' : `<div class="f" style="max-width:200px;"><label>Type</label><select data-k="type"><option value="prospect">Prospect</option><option value="customer">Client</option></select></div>`}
+        <div class="f" style="max-width:200px;"><label>Type</label><select data-k="type"><option value="prospect">Prospect</option><option value="customer">Client</option></select></div>
       </div>
       ${editing ? '' : `<label style="display:flex; gap:8px; align-items:center; margin-top:8px;"><input type="checkbox" data-k="isB2C" style="width:auto;"> Particulier (B2C)</label>`}
       <div class="row"><div class="f" style="min-width:100%;"><label>Commentaires</label><textarea data-k="comments"></textarea></div></div>
@@ -180,6 +180,7 @@
         company = await axonaut('/companies/' + opts.companyId);
         ['name','siret','intracommunity_number','thirdparty_code','address_street','address_zip_code','address_city','address_country','address_contact_name','comments']
           .forEach(k => { if(field(k) && company[k] != null) field(k).value = company[k]; });
+        field('type').value = company.is_customer ? 'customer' : 'prospect';
         contacts = asArray(await axonaut('/companies/' + opts.companyId + '/employees').catch(() => []));
         status('');
       }catch(e){ status('Impossible de charger la fiche : ' + e.message, 'err'); }
@@ -301,7 +302,25 @@
         let saved;
         if(editing){
           status('Enregistrement dans Axonaut…');
+          // Passage prospect ⇄ client : envoyé avec la fiche, puis vérifié en relisant la fiche
+          // (ce changement n'est pas documenté dans l'API Axonaut pour un client existant).
+          const wantCustomer = v('type') === 'customer';
+          const typeChanged = !!(company && !!company.is_customer !== wantCustomer);
+          if(typeChanged) Object.assign(body, { is_customer: wantCustomer, is_prospect: !wantCustomer });
           saved = await axonaut('/companies/' + opts.companyId, 'PATCH', body);
+          if(typeChanged){
+            const check = await axonaut('/companies/' + opts.companyId).catch(() => null);
+            if(check && !!check.is_customer !== wantCustomer){
+              const result = Object.assign({}, company || {}, body, saved || {}, check);
+              try{ localStorage.setItem('csb_client_changed', JSON.stringify({ at: Date.now(), company: result })); }catch(_){}
+              if(opts.onSaved) opts.onSaved(result);
+              company = check; field('type').value = check.is_customer ? 'customer' : 'prospect';
+              btn.disabled = false;
+              status("Fiche enregistrée, mais Axonaut a refusé de changer le type (" + (wantCustomer ? 'prospect → client' : 'client → prospect') + "). Fais ce changement sur le site Axonaut, dans la fiche de la société.", 'err');
+              return;
+            }
+            if(check) saved = Object.assign({}, saved || {}, check);
+          }
         }else{
           Object.assign(body, { is_prospect: v('type') !== 'customer', is_customer: v('type') === 'customer', isB2C: field('isB2C').checked, currency: 'EUR', language: 'fr' });
           const c0 = readContact(0);
@@ -313,6 +332,8 @@
           if(!saved || !saved.id) throw new Error("réponse d'Axonaut inattendue");
         }
         const result = Object.assign({}, company || {}, body, saved || {});
+        // prévient les autres modules (Devis…) et les autres fenêtres que ce client a changé
+        try{ localStorage.setItem('csb_client_changed', JSON.stringify({ at: Date.now(), company: result })); }catch(_){}
         close();
         if(opts.onSaved) opts.onSaved(result);
       }catch(e){

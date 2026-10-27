@@ -130,6 +130,13 @@ async function search(){
 function editClient(id){
   CSBClients.open({ companyId: id, onSaved: c => {
     const i = results.findIndex(r => String(r.id) === String(id));
+    // passé de prospect à client (ou l'inverse) : les listes filtrées par type sont à refaire
+    if(i >= 0 && !!results[i].is_customer !== !!c.is_customer){
+      Object.keys(listCache).forEach(k => delete listCache[k]);
+      results[i] = Object.assign({}, results[i], c);
+      if(document.getElementById('type').value) search(); else renderList();
+      return;
+    }
     if(i >= 0){ results[i] = Object.assign({}, results[i], c); renderList(); }
     Object.values(listCache).forEach(list => { const j = list.findIndex(r => String(r.id) === String(id)); if(j >= 0) list[j] = Object.assign({}, list[j], c); });
   } });

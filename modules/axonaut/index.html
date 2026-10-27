@@ -844,7 +844,9 @@
         <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
           <button class="btn ghost" id="blViewQuoteBtn" style="display:none;">📄 Voir le devis</button>
           <button class="btn ghost" id="blFabricationBtn" style="display:none;">🏭 Bon de fabrication</button>
+          <button class="btn ghost" id="blLivraisonBtn" style="display:none;" title="Bon de livraison à remettre au client (lignes et quantités de la commande, sans prix)">🚚 Bon de livraison</button>
           <button class="btn ghost" id="blTakeOverBtn" style="display:none;" title="Recopie le devis de cette commande dans le module Devis pour le modifier ; la commande garde tout ce qui y est attaché">✏️ Modifier le devis dans le module Devis</button>
+          <button class="btn primary" id="blInvoiceBtn" style="display:none;" title="Crée la facture dans Axonaut avec les lignes du devis de cette commande (comme dans le devis)">🧾 Facturer dans Axonaut</button>
           <button class="btn ghost" id="blDeleteOrderBtn" style="display:none; color:var(--silk-red,#c0392b);" title="Supprime la commande et son devis (module Devis)">🗑 Supprimer la commande</button>
         </div>
         <div id="blShipmentsBox" style="margin-bottom:14px;">
@@ -2842,7 +2844,10 @@ async function stampSignatureOnCn23(base64, signatureDataUrl){
 // Coordonnées propres de l'Atelier CSB (raison sociale SARL C.S.B.) — distinctes des réglages
 // « Colissimo — Expéditeur », qui servent à une autre identité (Upstride - Le Nouvel Atelier)
 // utilisée uniquement pour l'envoi des étiquettes, pas pour ce document interne.
-async function generateBonDeFabrication(q, clientAddress){
+// opts.livraison : même document en « Bon de livraison » (pour le client) — sans le commentaire
+// interne de l'atelier, avec un cadre « Reçu le / signature » à la fin.
+async function generateBonDeFabrication(q, clientAddress, opts = {}){
+  const isBL = !!opts.livraison;
   const pdfDoc = await PDFLib.PDFDocument.create();
   const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
@@ -2895,7 +2900,7 @@ async function generateBonDeFabrication(q, clientAddress){
   // Commentaire de la commande (facultatif) : découpé en lignes qui tiennent dans l'encadré ; on
   // remplace ce que l'encodage standard du PDF ne sait pas écrire (emoji, etc.).
   const firstPage = page;
-  const commentRaw = pdfSafe(clientAddress && clientAddress.commentaire);
+  const commentRaw = isBL ? '' : pdfSafe(clientAddress && clientAddress.commentaire);
   const commentLines = commentRaw
     ? commentRaw.split('\n').flatMap(par => par.trim() ? wrapPdfText(par, fontBold, 9, (right - left) - 16) : [''])
     : [];
@@ -2908,7 +2913,7 @@ async function generateBonDeFabrication(q, clientAddress){
       page.drawImage(logoImage, { x: left, y: logoTop - logoDims.height, width: logoDims.width, height: logoDims.height });
     }
 
-    page.drawText('Bon de fabrication', { x: right - 180, y: yy, size: 20, font: fontBold, color: navy });
+    page.drawText(isBL ? 'Bon de livraison' : 'Bon de fabrication', { x: right - 180, y: yy, size: 20, font: fontBold, color: navy });
     page.drawText(`N° ${q.number || ''}`, { x: right - 180, y: height - 72, size: 10, font });
     page.drawText(`Le ${new Date().toLocaleDateString('fr-FR')}`, { x: right - 180, y: height - 86, size: 10, font });
 
@@ -3055,6 +3060,16 @@ async function generateBonDeFabrication(q, clientAddress){
   page.drawRectangle({ x: right - 200, y: y - 18, width: 200, height: 20, color: navy });
   page.drawText('Total quantité', { x: right - 194, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
   page.drawText(totalQty.toFixed(2).replace('.', ','), { x: right - 55, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
+  if(isBL){
+    // Cadre de réception à signer par le client
+    y -= 36;
+    const boxH = 80, boxW = 250;
+    if(y - boxH < bottom){ page = pdfDoc.addPage(PAGE_SIZE); y = height - 60; }
+    page.drawRectangle({ x: right - boxW, y: y - boxH, width: boxW, height: boxH, borderColor: navy, borderWidth: 1 });
+    page.drawText('Marchandise reçue en bon état', { x: right - boxW + 8, y: y - 14, size: 9, font: fontBold, color: navy });
+    page.drawText('Le : ____ / ____ / ________', { x: right - boxW + 8, y: y - 32, size: 9, font });
+    page.drawText('Nom et signature du client :', { x: right - boxW + 8, y: y - 48, size: 9, font });
+  }
   const outBytes = await pdfDoc.save();
   let binary = '';
   outBytes.forEach(b => binary += String.fromCharCode(b));
@@ -4116,9 +4131,22 @@ async function openBlModal(r){
   currentBlQuotation = null;
   const fabricationBtn = document.getElementById('blFabricationBtn');
   fabricationBtn.style.display = r.quotationId ? 'inline-flex' : 'none';
+  const livraisonBtn = document.getElementById('blLivraisonBtn');
+  livraisonBtn.style.display = r.quotationId ? 'inline-flex' : 'none';
+  livraisonBtn.onclick = async () => {
+    if(!currentBlQuotation){ alert('Devis introuvable pour cette commande.'); return; }
+    await generateBonDeFabrication(currentBlQuotation, {
+      client: r.clientCompany || r.nomSoc, livraison: r.hasDeliveryInfo, contact: r.contact,
+      nomSoc: r.nomSoc || r.clientCompany, adresse: r.adresse, cp: r.cp, ville: r.ville, pays: r.pays, tel: r.tel
+    }, { livraison: true });
+  };
   const takeOverBtn = document.getElementById('blTakeOverBtn');
   takeOverBtn.style.display = (!isModuleOrder(r) && r.quotationId && CSBAuth.can('devis', 'creer')) ? 'inline-flex' : 'none';
   takeOverBtn.onclick = () => takeOverInDevisModule(r.quotationId, r);
+  // Facturer (administrateurs) : commandes du module Devis à l'état « Commande », comme dans le devis.
+  const invoiceBtn = document.getElementById('blInvoiceBtn');
+  invoiceBtn.style.display = (isAdminUser() && isModuleOrder(r) && r.moduleRec.statut === 'accepte' && CSBAuth.can('devis', 'facturer')) ? 'inline-flex' : 'none';
+  invoiceBtn.onclick = () => openInDevisTab({ recId: r.moduleRec.id, invoice: true, returnTo: r.contractId });
   updateFabricationBtnLabel(r.contractId);
   fabricationBtn.onclick = async () => {
     if(!currentBlQuotation){ alert('Devis introuvable pour cette commande.'); return; }
@@ -6010,6 +6038,8 @@ function openInDevisTab(payload){
 async function handleGestionCommandeRequest(payload){
   if(!payload) return;
   if(payload.openDevis){ openInDevisTab(payload.openDevis); return; }
+  // retour après « Facturer dans Axonaut » lancé depuis la fiche commande
+  if(payload.invoiced){ await refreshAll(); await jumpToCommande(payload.invoiced); return; }
   if(payload.contractId){ await jumpToCommande(isNaN(Number(payload.contractId)) ? payload.contractId : Number(payload.contractId)); return; }
   if(payload.fabricationQuotationId){
     try{
@@ -6057,7 +6087,9 @@ async function jumpToCommande(contractId){
   if(!contractId){ alert('Aucune commande liée à ce devis.'); return; }
   if(!contracts.length) await refreshAll();
   activateTab('commande');
-  const r = contracts.find(x => x.contractId === contractId);
+  let r = contracts.find(x => x.contractId === contractId);
+  // commande toute récente (devis validé depuis le dernier chargement) : on recharge une fois
+  if(!r){ await refreshAll(); r = contracts.find(x => x.contractId === contractId); }
   if(!r){ alert("Commande introuvable — clique sur « ↻ Actualiser » dans l'onglet Commande puis réessaie."); return; }
   const client = r.clientCompany || r.nomSoc || 'Sans client';
   expandedCommandeClients.add(client);

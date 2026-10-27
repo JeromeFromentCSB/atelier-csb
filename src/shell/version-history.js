@@ -2,6 +2,14 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.61', items: [
+    "Devis : un produit ou un client modifié (module Articles, module Clients, autre fenêtre ou site Axonaut) est pris en compte sans relancer l'appli",
+    "Clients : dans la fiche d'un client, choix du type Prospect / Client (passage dans les deux sens, vérifié auprès d'Axonaut)",
+    "Gestion Commande : bouton « 🧾 Facturer dans Axonaut » dans la fiche d'une commande du module Devis (administrateurs), comme dans le devis",
+    "Gestion Commande : bouton « 🚚 Bon de livraison » à côté du bon de fabrication — sans prix ni commentaire interne, avec un cadre de réception à signer",
+    "Email : « Créer le devis » ne passe plus le mail en « Traité » — il reste « À traiter » jusqu'à ce que tu le marques traité",
+    "Devis : le nom de la commande s'affiche après le numéro du devis, et un clic ouvre la commande dans Gestion Commande ; bouton « Supprimer la commande » retiré du devis ; bandeau « Modifier le devis » en double retiré",
+  ]},
   { v: '0.2.60', items: [
     "Email : bouton « 🖨️ Imprimer » (et Ctrl+P) sur un mail ouvert, et sur une demande pour imprimer toute la conversation — en-tête (de, à, date, objet, pièces jointes) puis le contenu, boîte d'impression de Windows",
     "Devis : envoi par email avec des pièces jointes en plus du PDF — fichiers du poste (ou glissés / collés) et documents déjà rangés avec le devis",

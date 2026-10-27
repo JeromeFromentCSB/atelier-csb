@@ -127,6 +127,8 @@
   .totals .v{ font-family:"SF Mono", Consolas, monospace; }
   .margin-box{ font-size:12px; color:var(--muted); margin-top:6px; text-align:right; }
   .status{ font-size:12px; color:var(--muted); }
+  .order-link{ color:#1F3A66; text-decoration:none; font-weight:600; white-space:nowrap; }
+  .order-link:hover{ text-decoration:underline; }
   .status.err{ color:var(--danger); }
   .topbar{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
   .topbar h2{ margin:0; font-family:var(--font-display); font-size:22px; font-weight:600; flex:1; min-width:200px; }
@@ -476,7 +478,7 @@ function asArray(d){ return Array.isArray(d) ? d : (d && Array.isArray(d.data) ?
 
 // Tous les produits actifs, une fois par session (pagination défensive : on s'arrête dès qu'une
 // page ne ramène plus rien de nouveau, comme pour les commandes dans Gestion Commande).
-let productsCache = null, productsPromise = null;
+let productsCache = null, productsPromise = null, productsAt = 0;
 function loadProducts(){
   if(productsCache) return Promise.resolve(productsCache);
   if(!productsPromise){
@@ -492,11 +494,35 @@ function loadProducts(){
         page++;
       }
       productsCache = all.filter(p => !p.disabled);
+      productsAt = Date.now(); productsPromise = null;
       return productsCache;
     })().catch(e => { productsPromise = null; throw e; });
   }
   return productsPromise;
 }
+// Recharge la base produits en arrière-plan si elle date de plus d'une minute (articles modifiés
+// directement sur le site Axonaut). L'ancienne liste reste utilisable pendant le rechargement.
+function refreshProductsIfStale(maxAgeMs = 60000){
+  if(!productsCache || productsPromise || Date.now() - productsAt < maxAgeMs) return;
+  const old = productsCache;
+  productsCache = null;          // force loadProducts à relire Axonaut…
+  loadProducts().catch(() => { if(!productsCache) productsCache = old; });
+  productsCache = old;           // …mais l'ancienne liste reste servie en attendant
+}
+// Un article créé ou modifié dans le module Articles (même fenêtre ou autre fenêtre) : mis à jour
+// tout de suite ici, sans attendre le rechargement.
+function applyProductChange(prod){
+  if(!prod || !prod.id || !productsCache) return;
+  const i = productsCache.findIndex(x => String(x.id) === String(prod.id));
+  const disabled = prod.disabled === true || prod.disabled === 'true';
+  if(disabled){ if(i >= 0) productsCache.splice(i, 1); return; }
+  if(i >= 0) productsCache[i] = Object.assign({}, productsCache[i], prod);
+  else productsCache.push(prod);
+}
+window.addEventListener('storage', (e) => {
+  if(e.key !== 'csb_product_changed' || !e.newValue) return;
+  try{ applyProductChange(JSON.parse(e.newValue).product); }catch(_){}
+});
 let taxRates = null;
 async function loadTaxRates(){
   if(taxRates) return taxRates;
@@ -1277,8 +1303,21 @@ function openDraft(d, recId, updated){
 }
 
 // Titre du devis : numéro (inchangé), objet du devis s'il est rempli, puis le client.
+// Devis passé en commande : le nom de la commande suit celui du devis ; un clic l'ouvre dans
+// l'onglet Commande de Gestion Commande.
+function orderTitleHtml(d){
+  if(!(d.statut === 'accepte' || d.statut === 'facture') || !currentRecId) return '';
+  const name = d.axonautOrderName || d.numero || '';
+  return ` <a href="#" class="order-link" data-open-order="1" title="Ouvrir la commande dans Gestion Commande">· 📦 Commande ${escapeHtml(name)}</a>`;
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('[data-open-order]');
+  if(!a || !current) return;
+  e.preventDefault();
+  askGestionCommande({ contractId: current.linkedContractId || ('D-' + currentRecId) });
+});
 function topTitleHtml(d){
-  return `${escapeHtml(d.numero ? 'Devis ' + d.numero : 'Nouveau devis')}${(d.title || '').trim() ? ' — ' + escapeHtml(d.title.trim()) : ''}${d.client ? `<span style="font-size:15px; color:var(--muted); font-weight:400;"> · ${escapeHtml(d.client.name)}</span>` : ''}`;
+  return `${escapeHtml(d.numero ? 'Devis ' + d.numero : 'Nouveau devis')}${orderTitleHtml(d)}${(d.title || '').trim() ? ' — ' + escapeHtml(d.title.trim()) : ''}${d.client ? `<span style="font-size:15px; color:var(--muted); font-weight:400;"> · ${escapeHtml(d.client.name)}</span>` : ''}`;
 }
 function refreshTopTitle(){ const el = document.getElementById('edTitle'); if(el && current) el.innerHTML = topTitleHtml(current); }
 function renderEditor(){
@@ -1480,7 +1519,7 @@ function renderActionsBar(){
   html += b('pdfSave', '💾 Enregistrer le PDF');
   html += b('dupBtn', '⧉ Dupliquer', '', 'Nouveau brouillon à partir de ce devis');
   if(canEdit && ['brouillon','envoye','accepte'].includes(d.statut) && d.numero) html += b('aCancel', '⊘ Annuler le devis', 'danger');
-  if(canDelete(d)) html += b('delBtn', d.statut === 'accepte' ? '🗑 Supprimer la commande' : '🗑 Supprimer', 'danger');
+  if(canDelete(d) && d.statut !== 'accepte') html += b('delBtn', '🗑 Supprimer', 'danger');
   bar.innerHTML = html;
   const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
   on('aSend', () => setStatut('envoye', 'Marqué comme envoyé'));
@@ -1599,8 +1638,7 @@ function applyReadOnly(){
   ed.querySelectorAll('.iconbtn, #addFreeLineBtn, #addSectionBtn, #changeClientBtn, #newClientBtn').forEach(el => { if(notProd(el)) el.style.display = 'none'; });
   const addRow = ed.querySelector('.add-row'); if(addRow) addRow.style.display = 'none';
   if(current.statut !== 'facture' && CSBAuth.can('devis', 'creer')){
-    document.getElementById('axBanner').innerHTML = orderVersionBanner() +
-      `<div class="banner" style="background:#F2F5FA; border-color:#D5DCE6;">Devis ${escapeHtml((STATUTS[current.statut] || {}).label || '').toLowerCase()} : clique sur <b>✏️ Modifier le devis</b> pour le changer — les modifications devront être validées.</div>`;
+    document.getElementById('axBanner').innerHTML = orderVersionBanner();
     const sync = document.getElementById('aSyncOrder');
     if(sync) sync.addEventListener('click', () => updateOrderFromQuote());
     return;
@@ -2624,6 +2662,7 @@ async function invoiceInAxonaut(){
     addHisto('Facturé dans Axonaut' + (d.facture.numero ? ' — facture ' + d.facture.numero : ''));
     await saveCurrent();
     renderEditor();
+    return true;
   }catch(e){
     alert("La facturation a échoué : " + e.message + "\n\nAvant de réessayer, vérifie dans Axonaut qu'aucune facture n'a été créée malgré l'erreur.");
     renderEditor();
@@ -2757,7 +2796,33 @@ function renderClientArea(){
     refreshTopTitle();
   });
   loadAddresses(c.id);
+  syncClientFromAxonaut(c.id);
 }
+// Fiche client à jour : le devis garde une copie du client (nom, adresse, SIRET, TVA). Tant qu'il
+// est modifiable, on la relit dans Axonaut à l'ouverture (au plus toutes les 30 s par client).
+const clientSyncAt = {};
+async function syncClientFromAxonaut(companyId){
+  if(!current || isLocked(current)) return;
+  if(Date.now() - (clientSyncAt[companyId] || 0) < 30000) return;
+  clientSyncAt[companyId] = Date.now();
+  try{ applyClientChange(await axonaut('/companies/' + companyId)); }catch(e){}
+}
+function applyClientChange(co){
+  if(!co || !co.id || !current || !current.client || String(current.client.id) !== String(co.id) || isLocked(current)) return;
+  const fresh = clientFromCompany(co), old = current.client;
+  const keys = ['name', 'street', 'zip', 'city', 'country', 'siret', 'tva'];
+  if(keys.every(k => String(old[k] == null ? '' : old[k]) === String(fresh[k]))) return;
+  current.client = Object.assign({}, old, fresh);
+  if(!current.addressId) current.address = clientMainAddress();
+  changed();
+  refreshTopTitle();
+  renderClientArea();
+}
+// Client enregistré ailleurs dans l'appli (module Clients, Gestion Commande, autre fenêtre).
+window.addEventListener('storage', (e) => {
+  if(e.key !== 'csb_client_changed' || !e.newValue) return;
+  try{ const co = JSON.parse(e.newValue).company; if(co && co.id) clientSyncAt[co.id] = Date.now(); applyClientChange(co); }catch(_){}
+});
 // Adresses Axonaut du client ouvert (pour l'adresse du devis et le choix de l'adresse de livraison).
 let clientAddresses = [];
 function addressSnapshot(a){
@@ -2783,9 +2848,12 @@ async function loadAddresses(companyId){
     if(!current.addressId){
       const pref = arr.find(a => a.is_for_quotation) || arr.find(a => a.is_for_invoice) || arr[0];
       current.addressId = pref.id; current.address = addressSnapshot(pref); changed();
-    }else if(!current.address){
+    }else{
       const a = arr.find(x => String(x.id) === String(current.addressId));
-      if(a){ current.address = addressSnapshot(a); changed(); }
+      if(a && !isLocked(current)){
+        const snap = addressSnapshot(a);
+        if(JSON.stringify(snap) !== JSON.stringify(current.address || null)){ current.address = snap; changed(); }
+      }else if(a && !current.address){ current.address = addressSnapshot(a); changed(); }
     }
     sel.innerHTML = arr.map(a => {
       const label = [a.name || a.company_name, a.address_street, [a.address_zip_code, a.address_city].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
@@ -3175,6 +3243,7 @@ function wireProductSearch(){
     hint.textContent = 'Base produits indisponible : ' + e.message;
     document.getElementById('axBanner').innerHTML = `<div class="banner err">Impossible de joindre Axonaut : ${escapeHtml(e.message)}</div>`;
   });
+  input.addEventListener('focus', () => refreshProductsIfStale());
   const show = () => {
     const q = norm(input.value.trim());
     if(!q || !productsCache){ box.classList.remove('show'); return; }
@@ -3479,8 +3548,21 @@ window.addEventListener('message', (event) => {
   if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload) return;
   if(msg.payload.fromMail) dmCreateFromMail(msg.payload.fromMail);
   else if(msg.payload.axQuotationId) openAxQuoteById(msg.payload.axQuotationId);
+  else if(msg.payload.invoice) invoiceFromGestionCommande(msg.payload);
   else openRecordById(msg.payload.recId);
 });
+// « Facturer dans Axonaut » lancé depuis la fiche commande de Gestion Commande : on ouvre le devis
+// puis on lance la même facturation (mêmes contrôles et confirmations) ; ensuite retour à la commande.
+async function invoiceFromGestionCommande(p){
+  await openRecordById(p.recId);
+  const t0 = Date.now();
+  while(!(current && currentRecId === p.recId) && Date.now() - t0 < 20000) await new Promise(r => setTimeout(r, 200));
+  if(!(current && currentRecId === p.recId)) return;
+  if(current.statut !== 'accepte'){ alert('Ce devis ne peut pas être facturé (état : ' + current.statut + ').'); return; }
+  if(!CSBAuth.can('devis', 'facturer')){ alert("Tu n'as pas le droit de facturer."); return; }
+  const ok = await invoiceInAxonaut();
+  if(ok && p.returnTo) window.parent.postMessage({ type: 'csb:open-module', module: 'axonaut', payload: { invoiced: p.returnTo } }, '*');
+}
 let pendingAxQuote = null;
 function openAxQuoteById(qid){
   if(!axLoaded){ pendingAxQuote = qid; return; }
