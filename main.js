@@ -153,8 +153,54 @@ autoUpdater.on('error', (err) => sendUpdateStatus('error', { message: err.messag
 // Electron n'affiche aucun menu contextuel par défaut dans une <webview> (contrairement à un
 // vrai navigateur) : il faut l'assembler et l'afficher soi-même, ici, dans le processus
 // principal (une webview crée son propre WebContents "guest", capté via web-contents-created).
+// Correcteur orthographique en français pour chaque session (fenêtres et webviews, qui ont
+// leurs propres sessions « persist:… »).
+app.on('session-created', (ses) => {
+  try {
+    const avail = ses.availableSpellCheckerLanguages || [];
+    const fr = avail.includes('fr-FR') ? 'fr-FR' : (avail.includes('fr') ? 'fr' : avail.find(l => /^fr/i.test(l)));
+    if (fr) ses.setSpellCheckerLanguages([fr]);
+  } catch (e) { /* pas de correcteur disponible : tant pis */ }
+});
+
+// Propositions du correcteur pour le mot souligné, en tête du menu clic droit.
+function spellingMenuItems(contents, params) {
+  if (!params.isEditable || !params.misspelledWord) return [];
+  const items = (params.dictionarySuggestions || []).slice(0, 6).map(s => ({
+    label: s, click: () => contents.replaceMisspelling(s)
+  }));
+  if (!items.length) items.push({ label: 'Aucune proposition', enabled: false });
+  items.push({
+    label: 'Ajouter au dictionnaire',
+    click: () => contents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+  });
+  items.push({ type: 'separator' });
+  return items;
+}
+
 app.on('web-contents-created', (_event, contents) => {
-  if (contents.getType() !== 'webview') return;
+  if (contents.getType() !== 'webview') {
+    // Fenêtres de l'appli (et modules en iframe) : menu simple Copier / Couper / Coller.
+    // Les modules qui ont leur propre menu (preventDefault sur contextmenu) ne déclenchent
+    // pas cet événement, leur menu reste inchangé.
+    contents.on('context-menu', (_e, params) => {
+      const items = spellingMenuItems(contents, params);
+      if (params.isEditable) {
+        items.push({ label: 'Couper', role: 'cut', enabled: !!params.selectionText });
+        items.push({ label: 'Copier', role: 'copy', enabled: !!params.selectionText });
+        items.push({ label: 'Coller', role: 'paste' });
+      } else if (params.selectionText) {
+        items.push({ label: 'Copier', role: 'copy' });
+      }
+      if (params.linkURL && /^(https?|mailto):/i.test(params.linkURL)) {
+        if (items.length) items.push({ type: 'separator' });
+        items.push({ label: "Copier l'adresse du lien", click: () => require('electron').clipboard.writeText(params.linkURL) });
+      }
+      if (!items.length) return;
+      Menu.buildFromTemplate(items).popup({ window: BrowserWindow.fromWebContents(contents) || undefined });
+    });
+    return;
+  }
   // Un lien qui s'ouvrirait normalement dans une nouvelle fenêtre/onglet (target="_blank",
   // window.open() côté page) est plutôt relayé à l'embarqueur (shell.js) pour ouvrir un nouvel
   // onglet interne, au lieu d'ouvrir une fenêtre Electron nue ou d'échouer silencieusement.
@@ -163,7 +209,7 @@ app.on('web-contents-created', (_event, contents) => {
     return { action: 'deny' };
   });
   contents.on('context-menu', (_e, params) => {
-    const items = [];
+    const items = spellingMenuItems(contents, params);
     if (params.linkURL) {
       items.push({ label: 'Ouvrir le lien dans un nouvel onglet', click: () => contents.hostWebContents.send('csb:webview-open-tab', params.linkURL) });
       items.push({ label: 'Ouvrir le lien dans le navigateur', click: () => shell.openExternal(params.linkURL) });
@@ -793,12 +839,13 @@ ipcMain.handle('csb:email-set-credentials', (_event, { email, appPassword, host,
   emailWriteCreds({ email, appPassword, host: host || undefined, port: port || undefined });
   cachedImapClient = null;
   allMailPathCache = null;
+  Object.keys(specialMailboxCache).forEach(k => delete specialMailboxCache[k]);
   if (cachedImapBgClient) { try { cachedImapBgClient.logout(); } catch (e) {} cachedImapBgClient = null; }
   return { ok: true };
 });
 // Envoi d'un email (devis aux clients) avec le même compte et le même mot de passe
 // d'application que la lecture IMAP. Gmail range automatiquement le message dans « Envoyés ».
-ipcMain.handle('csb:email-send', async (_event, { to, cc, bcc, subject, text, html, attachments }) => {
+ipcMain.handle('csb:email-send', async (_event, { to, cc, bcc, subject, text, html, attachments, inReplyTo, references }) => {
   const creds = emailReadCreds();
   if (!creds.email || !creds.appPassword) {
     throw new Error("Compte email non configuré : connecte-le d'abord dans le module Email (adresse + mot de passe d'application).");
@@ -812,6 +859,8 @@ ipcMain.handle('csb:email-send', async (_event, { to, cc, bcc, subject, text, ht
   });
   const info = await transporter.sendMail({
     from: creds.email, to, cc: cc || undefined, bcc: bcc || undefined, subject, text, html,
+    // Réponse : rangée dans la même conversation (Gmail, Spark…)
+    inReplyTo: inReplyTo || undefined, references: references || undefined,
     attachments: (attachments || []).map(a => ({ filename: a.filename, content: Buffer.from(a.base64, 'base64'), contentType: a.contentType || 'application/pdf' }))
   });
   return { messageId: info.messageId, from: creds.email, accepted: info.accepted, rejected: info.rejected };
@@ -857,8 +906,13 @@ ipcMain.handle('csb:email-list-folders', async () => {
     });
 });
 
+// Chemins des dossiers spéciaux (Corbeille…) gardés en mémoire : la liste complète des dossiers
+// Gmail est longue à obtenir, inutile de la redemander à chaque suppression.
+const specialMailboxCache = {};
 async function findSpecialMailbox(client, specialUse) {
+  if (specialMailboxCache[specialUse]) return specialMailboxCache[specialUse];
   const list = await client.list();
+  list.forEach(f => { if (f.specialUse) specialMailboxCache[f.specialUse] = f.path; });
   const found = list.find(f => f.specialUse === specialUse);
   return found ? found.path : null;
 }
@@ -961,11 +1015,40 @@ ipcMain.handle('csb:email-list', async (_event, { query, limit, mailbox, offset 
       }
     }
     results.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    // Mails épinglés du dossier (drapeau Flagged = étoile Gmail / épingle Spark) : la liste les
-    // garde en tête même quand ils sont plus anciens que les mails chargés.
-    let pinnedUids = [];
-    try { pinnedUids = ((await client.search({ flagged: true }, { uid: true })) || []).slice(-50); } catch (e) { /* pas grave */ }
-    return { items: results, hasMore, pinnedUids };
+    return { items: results, hasMore };
+  } finally {
+    lock.release();
+  }
+});
+
+// Mails épinglés d'un dossier (drapeau Flagged = étoile Gmail / épingle Spark), les 30 plus récents.
+// Demandé APRÈS l'affichage de la liste, sur la connexion de fond quand c'est possible, pour ne
+// jamais retarder l'affichage des mails.
+// skip : UID dont le poste a déjà le résumé (pas retéléchargés).
+ipcMain.handle('csb:email-pinned-uids', async (_event, { mailbox, skip }) => {
+  const client = await getImapBgClient();
+  const lock = await client.getMailboxLock(mailbox || 'INBOX');
+  try {
+    const uids = ((await client.search({ flagged: true }, { uid: true })) || []).slice(-30);
+    const known = new Set((skip || []).map(Number));
+    const todo = uids.filter((u) => !known.has(u));
+    const items = [];
+    if (todo.length) {
+      for await (const msg of client.fetch(todo.map(String), { envelope: true, flags: true, bodyStructure: true, labels: true, threadId: true }, { uid: true })) {
+        const from = (msg.envelope.from && msg.envelope.from[0]) || {};
+        items.push({
+          uid: msg.uid,
+          subject: msg.envelope.subject || '(sans objet)',
+          from: { name: from.name || from.address || '', email: from.address || '' },
+          date: msg.envelope.date ? new Date(msg.envelope.date).toISOString() : null,
+          unread: !(msg.flags && msg.flags.has('\\Seen')),
+          hasAttachment: bodyStructureHasAttachment(msg.bodyStructure),
+          labels: msg.labels ? [...msg.labels] : [],
+          threadId: msg.threadId ? String(msg.threadId) : null
+        });
+      }
+    }
+    return { uids, items };
   } finally {
     lock.release();
   }
@@ -1000,6 +1083,106 @@ ipcMain.handle('csb:email-get-by-uids', async (_event, { uids, mailbox }) => {
   }
 });
 
+// ---------- Lecture rapide d'un mail ----------
+// Seuls les en-têtes et le texte (texte brut / HTML) sont téléchargés ; les pièces jointes ne le
+// sont qu'au clic (csb:email-get-attachment). Les images intégrées (cid:) de moins de 3 Mo au
+// total sont incluses pour que le mail s'affiche comme d'habitude.
+async function streamToBuffer(stream) {
+  const chunks = [];
+  for await (const c of stream) chunks.push(c);
+  return Buffer.concat(chunks);
+}
+function walkStructure(node, out) {
+  if (!node) return out;
+  const type = String(node.type || '').toLowerCase();
+  const disp = String(node.disposition || '').toLowerCase();
+  const filename = (node.dispositionParameters && node.dispositionParameters.filename) || (node.parameters && node.parameters.name) || '';
+  if (node.childNodes && node.childNodes.length && type.startsWith('multipart/')) {
+    node.childNodes.forEach(c => walkStructure(c, out));
+    return out;
+  }
+  const part = node.part || '1';
+  if ((type === 'text/plain' || type === 'text/html') && disp !== 'attachment' && !filename) {
+    if (type === 'text/html' && !out.html) out.html = part;
+    if (type === 'text/plain' && !out.text) out.text = part;
+    return out;
+  }
+  const size = node.size || 0;
+  out.atts.push({
+    part, filename: filename || ('piece-jointe-' + (out.atts.length + 1)), contentType: type || 'application/octet-stream',
+    size: String(node.encoding || '').toLowerCase() === 'base64' ? Math.round(size * 0.74) : size,
+    cid: node.id ? String(node.id).replace(/^<|>$/g, '') : '', inline: disp === 'inline' || (!disp && !!node.id)
+  });
+  return out;
+}
+ipcMain.handle('csb:email-get-message-light', async (_event, { uid, mailbox, markSeen }) => {
+  const client = await imapClientFor(mailbox);
+  const lock = await client.getMailboxLock(mailbox || 'INBOX');
+  try {
+    const msg = await client.fetchOne(uid, { bodyStructure: true, headers: true }, { uid: true });
+    if (!msg) throw new Error('Message introuvable (a-t-il été déplacé/supprimé depuis la liste ?).');
+    const st = walkStructure(msg.bodyStructure, { html: null, text: null, atts: [] });
+    const dl = async (part) => {
+      const r = await client.download(String(uid), part, { uid: true });
+      return r && r.content ? streamToBuffer(r.content) : Buffer.alloc(0);
+    };
+    let html = st.html ? (await dl(st.html)).toString('utf8') : null;
+    const text = st.text ? (await dl(st.text)).toString('utf8') : null;
+    if (html && /cid:/i.test(html)) {
+      let budget = 3 * 1024 * 1024;
+      for (const a of st.atts.filter(x => x.cid && x.size < budget)) {
+        if (!html.includes('cid:' + a.cid)) continue;
+        const buf = await dl(a.part);
+        budget -= buf.length;
+        html = html.split('cid:' + a.cid).join(`data:${a.contentType};base64,${buf.toString('base64')}`);
+        a.embedded = true;
+      }
+    }
+    if (markSeen) { try { await client.messageFlagsAdd({ uid: String(uid) }, ['\\Seen'], { uid: true }); } catch (e) {} }
+    const head = await simpleParser(msg.headers || Buffer.alloc(0));
+    const fromAddr = head.from && head.from.value && head.from.value[0];
+    return {
+      subject: head.subject || '(sans objet)',
+      from: fromAddr ? { name: fromAddr.name || fromAddr.address, email: fromAddr.address } : { name: '', email: '' },
+      to: head.to ? head.to.text : '',
+      cc: head.cc ? head.cc.text : '',
+      toList: addrList(head.to), ccList: addrList(head.cc), replyToList: addrList(head.replyTo),
+      messageId: head.messageId || '',
+      references: Array.isArray(head.references) ? head.references : (head.references ? [head.references] : []),
+      date: head.date ? head.date.toISOString() : null,
+      html: html || null,
+      text: text || (html ? null : ''),
+      // pièces jointes sans leur contenu (sauf images intégrées déjà dans le HTML, masquées)
+      attachments: st.atts.filter(a => !(a.embedded && a.inline)).map((a, i) => ({
+        idx: i, filename: a.filename, contentType: a.contentType, size: a.size, part: a.part, contentBase64: ''
+      })),
+      light: true
+    };
+  } finally {
+    lock.release();
+  }
+});
+ipcMain.handle('csb:email-get-attachment', async (_event, { uid, mailbox, part }) => {
+  const client = await imapClientFor(mailbox);
+  const lock = await client.getMailboxLock(mailbox || 'INBOX');
+  try {
+    const r = await client.download(String(uid), String(part), { uid: true });
+    if (!r || !r.content) throw new Error('Pièce jointe introuvable.');
+    return (await streamToBuffer(r.content)).toString('base64');
+  } finally {
+    lock.release();
+  }
+});
+
+// Adresses d'un champ (To, Cc, Reply-To) analysé par mailparser : [{ name, email }]
+function addrList(field) {
+  const out = [];
+  (Array.isArray(field) ? field : (field ? [field] : [])).forEach(f => (f.value || []).forEach(v => {
+    if (v.address) out.push({ name: v.name || '', email: v.address });
+    (v.group || []).forEach(g => { if (g.address) out.push({ name: g.name || '', email: g.address }); });
+  }));
+  return out;
+}
 ipcMain.handle('csb:email-get-message', async (_event, { uid, mailbox }) => {
   const client = await imapClientFor(mailbox);
   const lock = await client.getMailboxLock(mailbox || 'INBOX');
@@ -1014,6 +1197,11 @@ ipcMain.handle('csb:email-get-message', async (_event, { uid, mailbox }) => {
       subject: parsed.subject || '(sans objet)',
       from: fromAddr ? { name: fromAddr.name || fromAddr.address, email: fromAddr.address } : { name: '', email: '' },
       to: parsed.to ? parsed.to.text : '',
+      // Pour Répondre / Répondre à tous / Transférer
+      cc: parsed.cc ? parsed.cc.text : '',
+      toList: addrList(parsed.to), ccList: addrList(parsed.cc), replyToList: addrList(parsed.replyTo),
+      messageId: parsed.messageId || '',
+      references: Array.isArray(parsed.references) ? parsed.references : (parsed.references ? [parsed.references] : []),
       date: parsed.date ? parsed.date.toISOString() : null,
       html: parsed.html || null,
       text: parsed.text || null,

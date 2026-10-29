@@ -46,3 +46,14 @@ Module **Devis → ⚙︎ Réglages du module → Envoi des devis** :
   qui pré-chargent les liens des emails ne sont pas comptés).
 - Le lien reste le même quand on renvoie un devis modifié : le PDF en ligne est simplement remplacé.
 - Quand un devis est annulé ou refusé dans le module, sa page indique qu'il n'est plus valable.
+
+## Suivi des colis Colissimo (onglet « 🚚 Suivi colis » de Gestion Commande)
+
+Le relais sait aussi interroger le suivi Colissimo : `?colissimoSuivi=<n° de colis>`.
+Il utilise **la même clé que les étiquettes** (secret `COLISSIMO_API_KEY`), rien à ajouter en principe.
+
+Pour l'activer : copie le contenu de `worker.js` dans l'éditeur du Worker sur Cloudflare, puis **Deploy**.
+
+Si Colissimo refuse la clé seule pour le suivi (message « Compte non authentifié »), ajoute deux secrets
+dans *Settings → Variables and Secrets* : `COLISSIMO_LOGIN` (n° de contrat Colissimo, 6 chiffres) et
+`COLISSIMO_PASSWORD` (mot de passe de la Colissimo Box), puis **Deploy**.

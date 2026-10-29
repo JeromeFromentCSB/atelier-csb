@@ -400,6 +400,35 @@ const relaisExistant = {
       }
     }
 
+    // ---- Suivi des colis Colissimo (Web Service Suivi TL « timelineCompany ») ----
+    //   https://TON-WORKER.workers.dev?colissimoSuivi=<n° de colis>
+    // Même clé que les étiquettes (secret COLISSIMO_API_KEY). Facultatif : secrets COLISSIMO_LOGIN et
+    // COLISSIMO_PASSWORD (n° de contrat et mot de passe Colissimo Box) si la clé seule est refusée.
+    const suiviParam = url.searchParams.get("colissimoSuivi");
+    if (suiviParam) {
+      try {
+        const parcelNumber = String(suiviParam).replace(/[^A-Za-z0-9]/g, "").slice(0, 30);
+        if (!parcelNumber) return jsonResponse({ error: "N° de colis manquant" }, 400);
+        if (!env.COLISSIMO_API_KEY && !env.COLISSIMO_LOGIN) {
+          return jsonResponse({ error: "Secret COLISSIMO_API_KEY non configuré sur le Worker" }, 500);
+        }
+        const body = { parcelNumber, lang: "fr_FR" };
+        if (env.COLISSIMO_API_KEY) body.apiKey = env.COLISSIMO_API_KEY;
+        if (env.COLISSIMO_LOGIN) { body.login = env.COLISSIMO_LOGIN; body.password = env.COLISSIMO_PASSWORD || ""; }
+        const res = await fetch("https://ws.colissimo.fr/tracking-timeline-ws/rest/tracking/timelineCompany", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(body),
+        });
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch (e) {}
+        return jsonResponse(parsed || { error: "Réponse Colissimo illisible", status: res.status, raw: text.slice(0, 500) }, parsed ? 200 : 502);
+      } catch (e) {
+        return jsonResponse({ error: "Suivi Colissimo injoignable : " + (e && e.message ? e.message : e) }, 502);
+      }
+    }
+
     // ---- Relais Colissimo (Web Service SLS) ----
     const colissimoParam = url.searchParams.get("colissimo");
     if (colissimoParam) {

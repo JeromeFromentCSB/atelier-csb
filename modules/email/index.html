@@ -118,6 +118,16 @@
   }
   .msg-row:hover{ background:#fbf9f3; }
   .msg-row.selected{ background:#fdf3d0; box-shadow:inset 3px 0 0 var(--poste-yellow-dark); }
+  /* Sélection multiple (Ctrl+clic, Maj+clic, clic sur l'avatar) */
+  .msg-row.multi{ background:#e9f0fb; box-shadow:inset 3px 0 0 #2D5B9A; }
+  .msg-row .msg-avatar[data-action="select"]{ cursor:pointer; }
+  .msg-row.multi .msg-avatar{ background:#2D5B9A !important; font-size:0; }
+  .msg-row.multi .msg-avatar::after{ content:'✓'; font-size:15px; color:#fff; }
+  .bulk-panel{ font-family:sans-serif; }
+  .bulk-panel h2{ font-family:var(--font-display); font-size:1.2rem; margin:0 0 4px; }
+  .bulk-actions{ display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+  .bulk-list{ font-size:.8rem; color:var(--muted); max-height:50vh; overflow:auto; border-top:1px solid var(--line); }
+  .bulk-list div{ padding:5px 0; border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .msg-row.unread .msg-subject, .msg-row.unread .msg-from{ font-weight:800; }
   .msg-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
   .msg-top{ display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
@@ -171,6 +181,8 @@
 
   #detailContent{ padding:22px 26px; }
   .detail-toolbar{ display:flex; gap:8px; margin-bottom:14px; }
+  /* En-tête du mail (boutons, objet, expéditeur) fixe en haut pendant le défilement */
+  .detail-head{ position:sticky; top:0; z-index:5; background:var(--paper); margin:-22px -26px 14px; padding:22px 26px 10px; border-bottom:1px solid var(--line); }
   .detail-subject{ font-family:var(--font-display); font-size:1.25rem; margin:0 0 10px; }
   .detail-meta{ font-family:sans-serif; font-size:.8rem; color:var(--muted); margin-bottom:4px; }
   .detail-meta strong{ color:var(--ink); }
@@ -252,6 +264,29 @@
 
   ::-webkit-scrollbar{ height:10px; width:10px; }
   ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
+  /* ---------- Fenêtre d'écriture (Nouveau / Répondre / Transférer) ---------- */
+  #cmpOverlay{ display:none; position:fixed; inset:0; background:rgba(33,28,22,.55); z-index:500; align-items:center; justify-content:center; padding:18px; }
+  #cmpOverlay.show{ display:flex; }
+  .cmp-box{ background:var(--white); border-radius:var(--radius); box-shadow:0 20px 60px rgba(0,0,0,.35); width:min(900px,100%); max-height:94vh; display:flex; flex-direction:column; font-family:sans-serif; overflow:hidden; }
+  .cmp-head{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); }
+  .cmp-head h3{ margin:0; font-family:var(--font-display); font-size:1.05rem; }
+  .cmp-body{ padding:12px 16px; overflow:auto; display:flex; flex-direction:column; gap:7px; }
+  .cmp-row{ display:flex; align-items:center; gap:8px; font-size:.82rem; }
+  .cmp-row > label{ width:54px; color:var(--muted); flex-shrink:0; }
+  .cmp-row input[type=text]{ flex:1; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:.85rem; min-width:0; }
+  #cmpEditor{ min-height:200px; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; line-height:1.45; outline:none; background:#fff; }
+  #cmpEditor:focus{ border-color:var(--poste-yellow-dark); }
+  #cmpQuoteWrap{ border-left:3px solid var(--line); padding-left:8px; }
+  #cmpQuoteWrap iframe{ width:100%; height:220px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .cmp-atts{ display:flex; flex-wrap:wrap; gap:6px; }
+  .cmp-att{ display:inline-flex; align-items:center; gap:6px; font-size:.75rem; background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:3px 6px 3px 10px; }
+  .cmp-att button{ border:none; background:none; cursor:pointer; color:var(--muted); font-size:.8rem; }
+  .cmp-drop{ border:2px dashed var(--line); border-radius:8px; padding:8px; text-align:center; font-size:.75rem; color:var(--muted); }
+  .cmp-drop.over{ border-color:var(--poste-yellow-dark); background:var(--paper); }
+  .cmp-foot{ display:flex; align-items:center; gap:8px; padding:10px 16px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  #cmpStatus{ font-size:.78rem; color:var(--muted); }
+  #cmpStatus.err{ color:var(--silk-red); }
+  .reply-bar{ display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 4px; }
 </style>
 </head>
 <body>
@@ -261,6 +296,7 @@
     <div class="toolbar">
       <input type="text" class="search" id="searchInput" placeholder="Rechercher (objet, expéditeur…)">
       <button class="btn primary" id="refreshBtn">↻ Actualiser</button>
+      <button class="btn" id="composeBtn" title="Écrire un nouveau mail">✏️ Nouveau message</button>
       <button class="btn ghost" id="threadToggleBtn" title="Regrouper les mails d'un même échange">🧵 Conversations</button>
       <div class="status-pill" id="statusPill">
         <span class="status-dot" id="statusDot"></span>
@@ -435,6 +471,9 @@ let currentAttachments = [];
 let currentPreviewUrl = null;
 let currentMailbox = 'INBOX';
 let folders = [];
+// Sélection multiple de mails (voir « Sélection multiple » plus bas)
+const multiSel = new Set();
+let selAnchor = null;
 let loadedCount = 0;
 let hasMoreMessages = false;
 
@@ -460,6 +499,37 @@ async function migrateLegacyPins(){
     todo.forEach(id => pinnedIds.add(id));
     localStorage.removeItem(LEGACY_PINNED_KEY);
   }catch(e){ console.warn('Reprise des anciens épinglages impossible', e); }
+}
+// Épinglés plus anciens que les mails chargés : recherchés après l'affichage ; leurs résumés sont
+// gardés en mémoire (par dossier) pour ne pas les retélécharger à chaque actualisation.
+const olderPinnedCache = {}; // dossier -> Map(uid -> mail)
+let olderPinnedRun = 0;
+async function loadOlderPinned(box){
+  const host = window.csbHost;
+  if(!host || !host.emailPinnedUids) return;
+  const run = ++olderPinnedRun;
+  try{
+    const cache = olderPinnedCache[box] = olderPinnedCache[box] || new Map();
+    // déjà connus : mails affichés et résumés gardés en mémoire
+    const skip = [...new Set(messages.map(m => m.id).concat([...cache.keys()]))];
+    const res = await host.emailPinnedUids(box, skip);
+    if(run !== olderPinnedRun || box !== currentMailbox) return;
+    const uids = res.uids || [];
+    const loaded = new Set(messages.map(m => m.id));
+    const missing = uids.filter(u => !loaded.has(u));
+    {
+      (res.items || []).forEach(m => cache.set(m.uid, {
+        id: m.uid, snippet: '', unread: m.unread, from: m.from, subject: m.subject,
+        date: m.date ? new Date(m.date) : null, hasAttachment: m.hasAttachment, labels: m.labels || [], threadId: m.threadId || null
+      }));
+    }
+    if(run !== olderPinnedRun || box !== currentMailbox) return;
+    uids.forEach(u => pinnedIds.add(u));
+    const now = new Set(messages.map(m => m.id));
+    missing.forEach(u => { const m = cache.get(u); if(m && !now.has(u)) messages.push(m); });
+    await migrateLegacyPins();
+    renderList();
+  }catch(e){ console.warn('Épinglés plus anciens non chargés', e); }
 }
 async function togglePin(id, forceValue){
   const pin = forceValue !== undefined ? forceValue : !pinnedIds.has(id);
@@ -660,9 +730,10 @@ function renderFolders(){
     item.addEventListener('drop', (e) => {
       e.preventDefault();
       item.classList.remove('drop-target');
-      const id = parseInt(e.dataTransfer.getData('text/plain'), 10);
-      if(!id || item.dataset.path === currentMailbox) return;
-      moveMessageToFolder(id, item.dataset.path);
+      const ids = String(e.dataTransfer.getData('text/plain') || '').split(',').map(x => parseInt(x, 10)).filter(Boolean);
+      if(!ids.length || item.dataset.path === currentMailbox) return;
+      if(ids.length > 1) bulkMove(ids, item.dataset.path);
+      else moveMessageToFolder(ids[0], item.dataset.path);
     });
   });
 }
@@ -700,6 +771,7 @@ async function moveMessageToFolder(id, targetPath){
 }
 
 async function loadMessages(append){
+  if(!append && multiSel.size){ multiSel.clear(); }
   const q = document.getElementById('searchInput').value.trim();
   const btn = document.getElementById('refreshBtn');
   const moreBtn = document.getElementById('loadMoreBtn');
@@ -714,8 +786,8 @@ async function loadMessages(append){
     const res = await requireCsbHost().emailList(q, 40, currentMailbox, append ? loadedCount : 0);
     const items = Array.isArray(res) ? res : (res.items || []);
     hasMoreMessages = Array.isArray(res) ? false : !!res.hasMore;
-    if(!append) pinnedIds = new Set((res && res.pinnedUids) || []);
-    items.forEach(m => { if(m.flagged) pinnedIds.add(m.uid); else pinnedIds.delete(m.uid); });
+    if(!append) pinnedIds = new Set();
+    items.forEach(m => { if(m.flagged) pinnedIds.add(m.uid); });
     const mapped = items.map(m => ({
       id: m.uid,
       snippet: '',
@@ -734,23 +806,9 @@ async function loadMessages(append){
       messages = mapped;
     }
     loadedCount += items.length;
-    // Un mail épinglé doit rester visible même s'il sort des mails chargés (ou du filtre de
-    // recherche en cours) : on va chercher les épinglés manquants séparément, sans les marquer
-    // comme lus (contrairement à l'ouverture normale d'un mail).
-    const missingPinned = [...pinnedIds].filter(id => !messages.some(m => m.id === id));
-    if(missingPinned.length && requireCsbHost().emailGetByUids){
-      try{
-        const extra = await requireCsbHost().emailGetByUids(missingPinned, currentMailbox);
-        extra.forEach(m => {
-          if(!m.flagged) pinnedIds.delete(m.uid);
-          messages.push({
-            id: m.uid, snippet: '', unread: m.unread, from: m.from, subject: m.subject,
-            date: m.date ? new Date(m.date) : null, hasAttachment: m.hasAttachment, labels: m.labels || [], threadId: m.threadId || null
-          });
-        });
-      }catch(e){ console.warn('Impossible de récupérer certains mails épinglés', e); }
-    }
-    await migrateLegacyPins();
+    // Les épinglés plus anciens que les mails chargés sont ajoutés APRÈS l'affichage (voir
+    // loadOlderPinned), pour ne jamais retarder la liste.
+    if(!append) setTimeout(() => loadOlderPinned(currentMailbox), 0);
   }catch(e){
     document.getElementById('msgList').innerHTML = `<div class="hint" style="padding:16px; color:var(--silk-red); font-family:sans-serif;">Erreur : ${escapeHtml(e.message)}</div>`;
     document.getElementById('listEmpty').style.display = 'none';
@@ -787,9 +845,9 @@ function msgRowHtml(m){
   const color = avatarColorFor(m.from.name || m.from.email || String(m.id));
   const pinned = pinnedIds.has(m.id);
   return `
-    <div class="msg-row ${m.unread ? 'unread' : ''} ${m.id === selectedMessageId ? 'selected' : ''}" data-id="${m.id}" draggable="true">
+    <div class="msg-row ${m.unread ? 'unread' : ''} ${m.id === selectedMessageId && !multiSel.size ? 'selected' : ''} ${multiSel.has(m.id) ? 'multi' : ''}" data-id="${m.id}" draggable="true">
       <span class="msg-dot ${m.unread ? 'unread' : ''}" data-action="toggle-read" data-id="${m.id}" title="${m.unread ? 'Marquer comme lu' : 'Marquer comme non lu'}"></span>
-      <span class="msg-avatar" style="background:${color};">${escapeHtml(initial)}</span>
+      <span class="msg-avatar" style="background:${color};" data-action="select" data-id="${m.id}" title="Sélectionner (ou Ctrl+clic sur le mail, Maj+clic pour une série)">${escapeHtml(initial)}</span>
       <div class="msg-main">
         <div class="msg-top">
           <span class="msg-from">${escapeHtml(m.from.name)}</span>
@@ -834,12 +892,21 @@ function threadRowHtml(thread){
 function wireMsgRows(listEl){
   listEl.querySelectorAll('.msg-row:not(.thread-row)').forEach(row => {
     row.addEventListener('click', (e) => {
+      const id = parseInt(row.dataset.id, 10);
+      if(e.target.closest('[data-action="select"]')){ e.stopPropagation(); selToggle(id); return; }
       if(e.target.closest('[data-action]')) return;
-      openMessage(parseInt(row.dataset.id, 10));
+      if(e.shiftKey){ e.preventDefault(); selRange(id); return; }
+      if(e.ctrlKey || e.metaKey){ selToggle(id); return; }
+      if(multiSel.size){ multiSel.clear(); }
+      selAnchor = id;
+      openMessage(id);
     });
     row.addEventListener('dragstart', (e) => {
+      const id = parseInt(row.dataset.id, 10);
+      // glisser un mail de la sélection = glisser toute la sélection
+      const ids = multiSel.has(id) ? [...multiSel] : [id];
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', row.dataset.id);
+      e.dataTransfer.setData('text/plain', ids.join(','));
       row.classList.add('dragging');
     });
     row.addEventListener('dragend', () => row.classList.remove('dragging'));
@@ -989,7 +1056,8 @@ async function openMessage(id){
   const pane = document.getElementById('detailContent');
   pane.innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Chargement…</div>';
   try{
-    const m = await requireCsbHost().emailGetMessage(id, currentMailbox);
+    const m = await fastGetMessage(id, currentMailbox, true);
+    if(selectedMessageId !== id) return; // un autre mail a été cliqué entre-temps
     currentMailFull = m;
     currentAttachments = m.attachments || [];
     // L'ouverture marque le mail comme lu côté serveur — on reflète ça tout de suite dans la
@@ -1009,17 +1077,23 @@ async function openMessage(id){
       : `<div style="white-space:pre-wrap;">${escapeHtml(m.text || '')}</div>`;
     const isTrash = folders.some(f => f.path === currentMailbox && f.specialUse === '\\Trash');
     pane.innerHTML = `
+      <div class="detail-head">
       <div class="detail-toolbar">
         ${isTrash ? '' : '<button class="btn ghost danger-soft" id="deleteMsgBtn" title="Déplace le mail vers la Corbeille (récupérable) — touche Suppr">🗑️ Supprimer</button>'}
         <button class="btn ghost icon" id="toggleReadBtn" title="Marquer comme non lu">✉️</button>
         <button class="btn ghost" id="pinMsgBtn" title="Garder ce mail en haut de la liste (épingle partagée avec Gmail / Spark)">📌 Épingler</button>
         <button class="btn ghost" id="printMsgBtn" title="Imprimer ce mail">🖨️ Imprimer</button>
+        <span class="dm-sep"></span>
+        <button class="btn ghost" id="replyBtn" title="Répondre à l'expéditeur">↩️ Répondre</button>
+        <button class="btn ghost" id="replyAllBtn" title="Répondre à l'expéditeur et à tous les destinataires">↩️ Répondre à tous</button>
+        <button class="btn ghost" id="forwardBtn" title="Transférer ce mail (avec ses pièces jointes)">➡️ Transférer</button>
         ${dmMailToolbarHtml()}
       </div>
       <h2 class="detail-subject">${escapeHtml(m.subject)}</h2>
       <div class="detail-meta"><strong>${escapeHtml(m.from.name)}</strong> ${m.from.email !== m.from.name ? '&lt;' + escapeHtml(m.from.email) + '&gt;' : ''}</div>
       <div class="detail-meta">À : ${escapeHtml(m.to || '')}</div>
       <div class="detail-meta">${m.date ? new Date(m.date).toLocaleString('fr-FR') : ''}</div>
+      </div>
       <div class="detail-body">${bodyHtml}</div>
       ${currentAttachments.length ? `<div class="attach-list" id="attachList"></div><div class="att-preview"></div>` : ''}
     `;
@@ -1030,6 +1104,9 @@ async function openMessage(id){
     document.getElementById('printMsgBtn').addEventListener('click', () => printMails([m], m.subject));
     document.getElementById('pinMsgBtn').addEventListener('click', () => togglePin(id));
     refreshPinBtn(id);
+    document.getElementById('replyBtn').addEventListener('click', () => openCompose('reply', m));
+    document.getElementById('replyAllBtn').addEventListener('click', () => openCompose('replyAll', m));
+    document.getElementById('forwardBtn').addEventListener('click', () => openCompose('forward', m));
     dmWireMailToolbar(id);
     if(currentAttachments.length){
       const attachListEl = document.getElementById('attachList');
@@ -1100,18 +1177,28 @@ function isTrashFolder(){ return folders.some(f => f.path === currentMailbox && 
 document.addEventListener('keydown', (e) => {
   if(e.key !== 'Delete' || (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]'))) return;
   if(dmView && dmSelId){ const t = dmFind(dmSelId); if(t) dmDelete(t); return; }
+  if(!dmView && multiSel.size && !isTrashFolder()){ bulkDelete([...multiSel]); return; }
   if(!dmView && selectedMessageId && !isTrashFolder()) deleteMessage(selectedMessageId);
 });
 async function deleteMessage(id){
   if(!confirm('Déplacer ce mail vers la Corbeille ?')) return;
+  // Retiré tout de suite de la liste ; le déplacement se fait ensuite sur le serveur (remis en
+  // place en cas d'échec).
+  const box = currentMailbox;
+  const idx = messages.findIndex(m => m.id === id);
+  const removed = idx >= 0 ? messages[idx] : null;
+  messages = messages.filter(m => m.id !== id);
+  msgCacheDrop(box, id);
+  if(selectedMessageId === id) selectedMessageId = null;
+  renderList();
+  closePreview();
+  document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l\'afficher ici.</div>';
   try{
-    await requireCsbHost().emailMoveToTrash(id, currentMailbox);
-    messages = messages.filter(m => m.id !== id);
-    selectedMessageId = null;
-    renderList();
-    closePreview();
-    document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l\'afficher ici.</div>';
-  }catch(e){ alert('Erreur : ' + e.message); }
+    await requireCsbHost().emailMoveToTrash(id, box);
+  }catch(e){
+    if(removed && box === currentMailbox && !messages.some(m => m.id === id)){ messages.splice(Math.min(idx, messages.length), 0, removed); renderList(); }
+    alert('Le mail n\'a pas pu être mis à la corbeille : ' + e.message);
+  }
 }
 
 async function toggleReadStatus(id){
@@ -1158,7 +1245,13 @@ function previewAttachment(idx){
   zone.innerHTML = `<div class="att-preview-head"><span class="fn">${escapeHtml(a.filename)}</span><span style="display:flex; gap:6px;"><a class="btn ghost" id="attDownload" download="${escapeHtml(a.filename)}" style="text-decoration:none;">⭳ Enregistrer</a><button class="btn ghost icon" id="attClose">✕</button></span></div><div class="att-preview-body"></div>`;
   const bodyEl = zone.querySelector('.att-preview-body');
   zone.querySelector('#attClose').addEventListener('click', closePreview);
+  (async () => {
   try{
+    if(!a.contentBase64 && a.part){
+      bodyEl.innerHTML = '<div class="att-preview-empty">Téléchargement de la pièce jointe…</div>';
+      await ensureAttachment(a);
+      if(!chip.classList.contains('selected')) return;
+    }
     if(!a.contentBase64) throw new Error('Contenu de la pièce jointe introuvable.');
     const bytes = b64ToBytes(a.contentBase64);
     currentPreviewUrl = URL.createObjectURL(new Blob([bytes], { type: a.contentType }));
@@ -1171,6 +1264,7 @@ function previewAttachment(idx){
   }catch(e){
     bodyEl.innerHTML = `<div class="att-preview-empty" style="color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
   }
+  })();
 }
 
 // ---------- Redimensionnement des colonnes ----------
@@ -1504,12 +1598,13 @@ async function dmToggleMsg(t, uid, forceOpen){
     const base = currentAttachments.length;
     currentAttachments = currentAttachments.concat(msg.attachments || []);
     const doc = msg.html || `<pre style="white-space:pre-wrap; font-family:inherit;">${escapeHtml(msg.text || '')}</pre>`;
-    box.innerHTML = `<iframe class="dm-frame" sandbox="allow-same-origin"></iframe>
+    box.innerHTML = `<div class="reply-bar"><button class="btn ghost" data-cmp="reply">↩️ Répondre</button><button class="btn ghost" data-cmp="replyAll">↩️ Répondre à tous</button><button class="btn ghost" data-cmp="forward">➡️ Transférer</button></div><iframe class="dm-frame" sandbox="allow-same-origin"></iframe>
       ${(msg.attachments || []).length ? `<div class="attach-list">${msg.attachments.map((a, i) => `<div class="attach-chip" data-idx="${base + i}"><span class="ic">${attachIcon(a.contentType)}</span><span class="meta"><span class="fn">${escapeHtml(a.filename)}</span><span class="sz">${formatSize(a.size)}</span></span></div>`).join('')}</div><div class="att-preview"></div>` : ''}`;
     const fr = box.querySelector('iframe');
     fr.srcdoc = `<style>html,body{margin:0;padding:6px;font-family:sans-serif;font-size:14px}img{max-width:100%!important;height:auto!important}*{max-width:100%;box-sizing:border-box}</style>${doc}`;
     fr.addEventListener('load', () => { try{ fr.style.height = Math.min(1200, fr.contentWindow.document.documentElement.scrollHeight + 16) + 'px'; }catch(e){} });
     box.querySelectorAll('.attach-chip').forEach(chip => chip.addEventListener('click', () => previewAttachment(parseInt(chip.dataset.idx, 10))));
+    box.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click', () => openCompose(b.dataset.cmp, msg)));
   }catch(e){ box.innerHTML = `<div style="color:var(--silk-red);">Message illisible : ${escapeHtml(e.message)}</div>`; }
 }
 function dmWireClientSearch(t){
@@ -1710,6 +1805,402 @@ setInterval(() => { if(dmHasHost() && document.visibilityState === 'visible') dm
     dmLoad(true);
   }
 })();
+
+// ================== Sélection multiple ==================
+// Ctrl+clic : ajoute/retire un mail · Maj+clic : sélectionne une série · clic sur l'avatar ·
+// Ctrl+A : tous les mails affichés · Échap : désélectionne. Les actions groupées s'affichent à droite.
+function visibleIds(){ return [...document.querySelectorAll('#msgList .msg-row[data-id]')].map(r => parseInt(r.dataset.id, 10)); }
+function selToggle(id){
+  // premier Ctrl+clic alors qu'un mail est ouvert : il fait partie de la sélection
+  if(!multiSel.size && selectedMessageId && selectedMessageId !== id && messages.some(m => m.id === selectedMessageId)) multiSel.add(selectedMessageId);
+  if(multiSel.has(id)) multiSel.delete(id); else multiSel.add(id);
+  selAnchor = id;
+  selChanged();
+}
+function selRange(id){
+  const ids = visibleIds();
+  const from = ids.indexOf(selAnchor != null ? selAnchor : (selectedMessageId || id)), to = ids.indexOf(id);
+  if(from < 0 || to < 0){ selToggle(id); return; }
+  ids.slice(Math.min(from, to), Math.max(from, to) + 1).forEach(x => multiSel.add(x));
+  selChanged();
+}
+function selClear(){ multiSel.clear(); selChanged(); }
+function selChanged(){
+  renderList();
+  if(multiSel.size) renderBulkPanel();
+  else if(selectedMessageId) openMessage(selectedMessageId);
+  else document.getElementById('detailContent').innerHTML = '<div class="hint" style="color:var(--muted); font-family:sans-serif;">Clique sur un mail à gauche pour l\'afficher ici.</div>';
+}
+function renderBulkPanel(){
+  closePreview(); currentMailFull = null;
+  const ids = [...multiSel];
+  const sel = messages.filter(m => multiSel.has(m.id));
+  const anyUnread = sel.some(m => m.unread), anyRead = sel.some(m => !m.unread);
+  const anyPinned = sel.some(m => pinnedIds.has(m.id)), anyUnpinned = sel.some(m => !pinnedIds.has(m.id));
+  const trash = isTrashFolder();
+  const opts = orderedFolders().filter(f => f.path !== currentMailbox).map(f => `<option value="${escapeHtml(f.path)}">${folderIcon(f)} ${escapeHtml(folderLabel(f))}</option>`).join('');
+  document.getElementById('detailContent').innerHTML = `<div class="bulk-panel">
+    <h2>${ids.length} mail${ids.length > 1 ? 's' : ''} sélectionné${ids.length > 1 ? 's' : ''}</h2>
+    <div class="dm-muted" style="font-size:.78rem;">Ctrl+clic pour ajouter ou retirer un mail, Maj+clic pour une série, Ctrl+A pour tout, Échap pour annuler.</div>
+    <div class="bulk-actions">
+      ${trash ? '' : '<button class="btn ghost danger-soft" data-bulk="delete">🗑️ Supprimer</button>'}
+      <select id="bulkMoveSel" class="btn ghost" style="max-width:240px;"><option value="">📁 Déplacer vers…</option>${opts}</select>
+      ${anyUnread ? '<button class="btn ghost" data-bulk="read">✉️ Marquer comme lu</button>' : ''}
+      ${anyRead ? '<button class="btn ghost" data-bulk="unread">✉️ Marquer comme non lu</button>' : ''}
+      ${anyUnpinned ? '<button class="btn ghost" data-bulk="pin">📌 Épingler</button>' : ''}
+      ${anyPinned ? '<button class="btn ghost" data-bulk="unpin">📌 Désépingler</button>' : ''}
+      <button class="btn ghost" data-bulk="print">🖨️ Imprimer</button>
+      <button class="btn ghost" data-bulk="clear">✕ Tout désélectionner</button>
+    </div>
+    <div class="bulk-list">${sel.map(m => `<div><b>${escapeHtml(m.from.name || m.from.email)}</b> — ${escapeHtml(m.subject)}</div>`).join('')}</div>
+  </div>`;
+  const pane = document.getElementById('detailContent');
+  pane.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => bulkAction(b.dataset.bulk)));
+  document.getElementById('bulkMoveSel').addEventListener('change', e => { if(e.target.value) bulkMove([...multiSel], e.target.value); });
+}
+async function bulkAction(kind){
+  const ids = [...multiSel];
+  if(!ids.length) return;
+  const host = requireCsbHost(), box = currentMailbox;
+  if(kind === 'clear') return selClear();
+  if(kind === 'delete') return bulkDelete(ids);
+  if(kind === 'print'){
+    try{ const mails = await Promise.all(ids.map(id => fastGetMessage(id, box, false))); printMails(mails, ids.length + ' mails'); }
+    catch(e){ alert('Impression impossible : ' + e.message); }
+    return;
+  }
+  if(kind === 'pin' || kind === 'unpin'){
+    const pin = kind === 'pin';
+    ids.forEach(id => { if(pin) pinnedIds.add(id); else pinnedIds.delete(id); });
+    renderList(); renderBulkPanel();
+    try{ await host.emailSetFlags(ids.join(','), box, pin ? ['\\Flagged'] : [], pin ? [] : ['\\Flagged']); }
+    catch(e){ alert((pin ? 'Épinglage' : 'Désépinglage') + ' impossible : ' + e.message); }
+    return;
+  }
+  if(kind === 'read' || kind === 'unread'){
+    const read = kind === 'read';
+    messages.forEach(m => { if(multiSel.has(m.id)) m.unread = !read; });
+    renderList(); renderBulkPanel();
+    try{ await host.emailSetFlags(ids.join(','), box, read ? ['\\Seen'] : [], read ? [] : ['\\Seen']); }
+    catch(e){ alert('Modification impossible : ' + e.message); }
+  }
+}
+// Retire des mails de la liste tout de suite ; si le serveur refuse, ils reviennent.
+function bulkRemoveLocal(ids){
+  const set = new Set(ids);
+  const removed = messages.filter(m => set.has(m.id));
+  messages = messages.filter(m => !set.has(m.id));
+  ids.forEach(id => { multiSel.delete(id); msgCacheDrop(currentMailbox, id); });
+  if(set.has(selectedMessageId)) selectedMessageId = null;
+  selChanged();
+  return removed;
+}
+function bulkRestore(removed, box){
+  if(box !== currentMailbox) return;
+  const have = new Set(messages.map(m => m.id));
+  messages = messages.concat(removed.filter(m => !have.has(m.id))).sort((a, b) => new Date(b.date) - new Date(a.date));
+  renderList();
+}
+async function bulkDelete(ids){
+  if(!ids.length || !confirm(`Déplacer ${ids.length} mail${ids.length > 1 ? 's' : ''} vers la Corbeille ?`)) return;
+  const box = currentMailbox;
+  const removed = bulkRemoveLocal(ids);
+  try{ await requireCsbHost().emailMoveToTrash(ids.join(','), box); }
+  catch(e){ bulkRestore(removed, box); alert('Suppression impossible : ' + e.message); }
+}
+async function bulkMove(ids, targetPath){
+  if(!ids.length) return;
+  const box = currentMailbox;
+  // mails « Traités » des demandes : déplacés un par un (leurs libellés de demande sont retirés)
+  const treated = ids.filter(id => { const m = messages.find(x => x.id === id); return m && mailStateEtat(m) === 'traite'; });
+  const plain = ids.filter(id => !treated.includes(id));
+  for(const id of treated) await moveMessageToFolder(id, targetPath);
+  if(!plain.length){ multiSel.clear(); selChanged(); return; }
+  const removed = bulkRemoveLocal(plain);
+  try{ await requireCsbHost().emailMoveToFolder(plain.join(','), box, targetPath); }
+  catch(e){ bulkRestore(removed, box); alert('Déplacement impossible : ' + e.message); }
+}
+document.addEventListener('keydown', (e) => {
+  if(dmView || (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]'))) return;
+  if(document.getElementById('cmpOverlay') && document.getElementById('cmpOverlay').classList.contains('show')) return;
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && messages.length){
+    e.preventDefault();
+    visibleIds().forEach(id => multiSel.add(id));
+    selChanged();
+  }else if(e.key === 'Escape' && multiSel.size){ e.preventDefault(); selClear(); }
+});
+
+// ================== Lecture rapide des mails ==================
+// Texte du mail d'abord (pièces jointes au clic) ; les mails lus restent en mémoire, et un mail
+// survolé dans la liste est préchargé (sans être marqué lu) pour s'ouvrir instantanément.
+const msgCache = new Map(); // "dossier|uid" -> promesse du mail
+const MSG_CACHE_MAX = 40;
+function msgCacheDrop(box, uid){ msgCache.delete(box + '|' + uid); }
+function fastGetMessage(uid, box, open){
+  const host = requireCsbHost();
+  const key = box + '|' + uid;
+  let pr = msgCache.get(key);
+  if(!pr){
+    pr = (host.emailGetMessageLight ? host.emailGetMessageLight(uid, box, !!open) : host.emailGetMessage(uid, box))
+      .then(m => { m._uid = uid; m._box = box; (m.attachments || []).forEach(a => { a._uid = uid; a._box = box; }); return m; })
+      .catch(e => {
+        msgCache.delete(key);
+        // repli : lecture complète, comme avant
+        if(host.emailGetMessageLight) return host.emailGetMessage(uid, box);
+        throw e;
+      });
+    msgCache.set(key, pr);
+    if(msgCache.size > MSG_CACHE_MAX) msgCache.delete(msgCache.keys().next().value);
+    return pr;
+  }
+  // déjà préchargé sans marquer lu : on le marque lu maintenant (sans attendre)
+  if(open){
+    const local = messages.find(x => x.id === uid);
+    if(local && local.unread && host.emailSetFlags) host.emailSetFlags(uid, box, ['\\Seen'], []).catch(() => {});
+  }
+  return pr;
+}
+async function ensureAttachment(a){
+  if(a.contentBase64 || !a.part) return a;
+  if(!a._loading) a._loading = window.csbHost.emailGetAttachment(a._uid, a._box, a.part).then(b64 => { a.contentBase64 = b64; return a; }).finally(() => { a._loading = null; });
+  return a._loading;
+}
+(() => {
+  const list = document.getElementById('msgList');
+  let timer = null;
+  list.addEventListener('mouseover', e => {
+    const row = e.target.closest('.msg-row[data-id]');
+    if(!row || dmView) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const uid = Number(row.dataset.id);
+      if(uid && window.csbHost && window.csbHost.emailGetMessageLight && !msgCache.has(currentMailbox + '|' + uid)) fastGetMessage(uid, currentMailbox, false).catch(() => {});
+    }, 150);
+  });
+  list.addEventListener('mouseleave', () => clearTimeout(timer));
+})();
+
+// ================== Écrire un mail : Nouveau message, Répondre, Répondre à tous, Transférer ==================
+// Envoi par le compte Gmail de l'appli (SMTP) : le mail apparaît dans « Envoyés » de Gmail/Spark.
+// Une réponse porte les en-têtes In-Reply-To / References : elle reste dans la même conversation.
+// Le message d'origine est montré à part (cadre protégé) et ajouté en citation à l'envoi.
+const SIGNATURE_KEY = 'csb_email_signature';
+let cmp = null; // { mode, orig, atts:[{filename, contentType, base64, size}] }
+const cmpEsc = escapeHtml;
+function cmpGetSignature(){ try{ return localStorage.getItem(SIGNATURE_KEY) || ''; }catch(e){ return ''; } }
+function cmpAddr(a){ return a.name && a.name !== a.email ? `${a.name} <${a.email}>` : a.email; }
+function cmpSplit(v){ return String(v || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean); }
+function cmpEmailOf(x){ const m = String(x).match(/<([^>]+)>/); return (m ? m[1] : x).trim().toLowerCase(); }
+function cmpValid(x){ return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(cmpEmailOf(x)); }
+function cmpPrefix(subject, pre){
+  const s = String(subject || '').trim();
+  const re = pre === 'RE' ? /^(re|réf|aw)\s*:/i : /^(tr|fwd?|wg)\s*:/i;
+  return re.test(s) ? s : `${pre} : ${s}`.replace(' : ', ': ');
+}
+function cmpQuoteHeader(o, forward){
+  const d = o.date ? new Date(o.date).toLocaleString('fr-FR', { dateStyle:'full', timeStyle:'short' }) : '';
+  if(forward){
+    return `---------- Message transféré ----------\nDe : ${cmpAddr(o.from || {})}\nDate : ${d}\nObjet : ${o.subject || ''}\nÀ : ${o.to || ''}${o.cc ? '\nCc : ' + o.cc : ''}`;
+  }
+  return `Le ${d}, ${cmpAddr(o.from || {})} a écrit :`;
+}
+function cmpOrigHtml(o){ return o.html || `<pre style="white-space:pre-wrap; font-family:inherit;">${cmpEsc(o.text || '')}</pre>`; }
+async function openCompose(mode, orig){
+  const host = window.csbHost;
+  if(!host || !host.emailSend){ alert("L'envoi de mail n'est disponible que dans l'application installée."); return; }
+  const st = await host.emailStatus().catch(() => ({}));
+  if(!st || !st.connected){ alert('Connecte d\'abord ta boîte Gmail (⚙︎ Réglages).'); return; }
+  const me = String(st.email || '').toLowerCase();
+  cmp = { mode, orig: orig || null, atts: [], me };
+  let to = [], cc = [], subject = '';
+  if(orig && (mode === 'reply' || mode === 'replyAll')){
+    const fromMe = String((orig.from && orig.from.email) || '').toLowerCase() === me;
+    // Réponse à son propre message envoyé : on répond aux destinataires d'origine
+    const primary = fromMe ? (orig.toList || []) : ((orig.replyToList && orig.replyToList.length) ? orig.replyToList : [orig.from]);
+    to = primary.filter(a => a && a.email).map(cmpAddr);
+    if(mode === 'replyAll'){
+      const seen = new Set(to.map(cmpEmailOf).concat([me]));
+      cc = [...(fromMe ? [] : (orig.toList || [])), ...(orig.ccList || [])].filter(a => a && a.email && !seen.has(a.email.toLowerCase()) && seen.add(a.email.toLowerCase())).map(cmpAddr);
+    }
+    subject = cmpPrefix(orig.subject, 'RE');
+  }else if(orig && mode === 'forward'){
+    subject = cmpPrefix(orig.subject, 'TR');
+    const missing = (orig.attachments || []).filter(a => !a.contentBase64 && a.part);
+    if(missing.length){
+      cmpToast('Téléchargement des pièces jointes…');
+      try{ await Promise.all(missing.map(ensureAttachment)); }catch(e){ alert('Pièces jointes non téléchargées : ' + e.message); }
+    }
+    cmp.atts = (orig.attachments || []).filter(a => a.contentBase64).map(a => ({ filename: a.filename, contentType: a.contentType, base64: a.contentBase64, size: a.size || Math.round(a.contentBase64.length * 0.75) }));
+  }
+  document.getElementById('cmpTitle').textContent = { new:'Nouveau message', reply:'Répondre', replyAll:'Répondre à tous', forward:'Transférer' }[mode] || 'Message';
+  document.getElementById('cmpFrom').textContent = 'De : ' + st.email;
+  document.getElementById('cmpTo').value = to.join(', ');
+  document.getElementById('cmpCc').value = cc.join(', ');
+  document.getElementById('cmpBcc').value = '';
+  document.getElementById('cmpBccRow').style.display = 'none';
+  document.getElementById('cmpSubject').value = subject;
+  const sig = cmpGetSignature();
+  document.getElementById('cmpEditor').innerHTML = '<div><br></div><div><br></div>' + (sig ? `<div class="cmp-sig">${cmpEsc(sig).replace(/\n/g, '<br>')}</div>` : '');
+  const qw = document.getElementById('cmpQuoteWrap');
+  if(orig){
+    qw.style.display = '';
+    document.getElementById('cmpQuoteOn').checked = true;
+    document.getElementById('cmpQuoteLabel').textContent = mode === 'forward' ? 'Inclure le message transféré' : 'Inclure le message d\'origine';
+    const fr = document.getElementById('cmpQuoteFrame');
+    fr.srcdoc = `<style>html,body{margin:0;padding:8px;font-family:sans-serif;font-size:13px;color:#444}img{max-width:100%!important;height:auto!important}*{max-width:100%;box-sizing:border-box}</style><div style="color:#777;white-space:pre-wrap;margin-bottom:8px;">${cmpEsc(cmpQuoteHeader(orig, mode === 'forward'))}</div>${cmpOrigHtml(orig)}`;
+  }else qw.style.display = 'none';
+  cmpRenderAtts();
+  const s = document.getElementById('cmpStatus'); s.className = ''; s.textContent = '';
+  document.getElementById('cmpSend').disabled = false;
+  document.getElementById('cmpOverlay').classList.add('show');
+  setTimeout(() => { (to.length || mode !== 'forward' && mode !== 'new' ? document.getElementById('cmpEditor') : document.getElementById('cmpTo')).focus(); }, 30);
+}
+function cmpRenderAtts(){
+  const box = document.getElementById('cmpAtts');
+  const total = cmp.atts.reduce((t, a) => t + (a.size || 0), 0);
+  box.innerHTML = cmp.atts.map((a, i) => `<span class="cmp-att">📎 ${cmpEsc(a.filename)} <span style="color:var(--muted);">${formatSize(a.size || 0)}</span><button type="button" data-rm="${i}" title="Retirer">✕</button></span>`).join('')
+    + (cmp.atts.length ? `<span style="font-size:.72rem; color:${total > 24 * 1048576 ? 'var(--silk-red)' : 'var(--muted)'}; align-self:center;">${formatSize(total)}${total > 24 * 1048576 ? ' — trop lourd pour un mail (25 Mo max)' : ''}</span>` : '');
+  box.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { cmp.atts.splice(Number(b.dataset.rm), 1); cmpRenderAtts(); }));
+}
+function cmpAddFiles(files){
+  [...files].forEach(f => {
+    const r = new FileReader();
+    r.onload = () => { cmp.atts.push({ filename: f.name, contentType: f.type || 'application/octet-stream', base64: String(r.result).split(',')[1] || '', size: f.size }); cmpRenderAtts(); };
+    r.readAsDataURL(f);
+  });
+}
+function cmpClose(force){
+  if(!force){
+    const txt = document.getElementById('cmpEditor').innerText.replace(cmpGetSignature(), '').trim();
+    if(txt && !confirm('Fermer sans envoyer ? Le message sera perdu.')) return;
+  }
+  document.getElementById('cmpOverlay').classList.remove('show');
+  cmp = null;
+}
+async function cmpSend(){
+  if(!cmp) return;
+  const status = document.getElementById('cmpStatus');
+  const err = t => { status.className = 'err'; status.textContent = t; };
+  const to = cmpSplit(document.getElementById('cmpTo').value);
+  const cc = cmpSplit(document.getElementById('cmpCc').value);
+  const bcc = cmpSplit(document.getElementById('cmpBcc').value);
+  const bad = to.concat(cc, bcc).filter(x => !cmpValid(x));
+  if(!to.length) return err('Indique au moins un destinataire.');
+  if(bad.length) return err('Adresse incorrecte : ' + bad.join(', '));
+  const subject = document.getElementById('cmpSubject').value.trim();
+  if(!subject && !confirm('Envoyer sans objet ?')) return;
+  if(cmp.atts.reduce((t, a) => t + (a.size || 0), 0) > 24 * 1048576) return err('Pièces jointes trop lourdes (25 Mo au plus).');
+  const ed = document.getElementById('cmpEditor');
+  let html = `<div style="font-family:Arial, Helvetica, sans-serif; font-size:14px;">${ed.innerHTML}</div>`;
+  let text = ed.innerText;
+  const o = cmp.orig;
+  const withQuote = o && document.getElementById('cmpQuoteOn').checked;
+  if(withQuote){
+    const head = cmpQuoteHeader(o, cmp.mode === 'forward');
+    html += `<br><div style="color:#555;">${cmpEsc(head).replace(/\n/g, '<br>')}</div>`
+      + (cmp.mode === 'forward' ? `<div>${cmpOrigHtml(o)}</div>` : `<blockquote style="margin:0 0 0 .8ex; border-left:1px solid #ccc; padding-left:1ex;">${cmpOrigHtml(o)}</blockquote>`);
+    const ot = String(o.text || '').trim();
+    text += '\n\n' + head + '\n' + (cmp.mode === 'forward' ? ot : ot.split('\n').map(l => '> ' + l).join('\n'));
+  }
+  const msg = { to: to.join(', '), cc: cc.join(', '), bcc: bcc.join(', '), subject, text, html,
+    attachments: cmp.atts.map(a => ({ filename: a.filename, base64: a.base64, contentType: a.contentType || 'application/octet-stream' })) };
+  if(o && (cmp.mode === 'reply' || cmp.mode === 'replyAll') && o.messageId){
+    msg.inReplyTo = o.messageId;
+    msg.references = (o.references || []).concat([o.messageId]).filter(Boolean).join(' ');
+  }
+  const btn = document.getElementById('cmpSend');
+  btn.disabled = true; status.className = ''; status.textContent = 'Envoi…';
+  try{
+    await window.csbHost.emailSend(msg);
+    cmpClose(true);
+    cmpToast('✉️ Message envoyé à ' + to.map(cmpEmailOf).join(', '));
+    if(typeof dmLoad === 'function' && o) setTimeout(() => { try{ dmLoad(true); }catch(e){} }, 4000);
+  }catch(e){ err('Échec de l\'envoi : ' + e.message); btn.disabled = false; }
+}
+function cmpToast(t){
+  const el = document.createElement('div');
+  el.textContent = t;
+  el.style.cssText = 'position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#211C16; color:#fff; padding:9px 16px; border-radius:20px; font:13px sans-serif; z-index:600; box-shadow:0 6px 20px rgba(0,0,0,.25);';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+(() => {
+  document.getElementById('composeBtn').addEventListener('click', () => openCompose('new', null));
+  document.getElementById('cmpClose').addEventListener('click', () => cmpClose(false));
+  document.getElementById('cmpCancel').addEventListener('click', () => cmpClose(false));
+  document.getElementById('cmpSend').addEventListener('click', cmpSend);
+  document.getElementById('cmpBccToggle').addEventListener('click', () => { document.getElementById('cmpBccRow').style.display = ''; document.getElementById('cmpBcc').focus(); });
+  document.getElementById('cmpAttBtn').addEventListener('click', () => document.getElementById('cmpFile').click());
+  document.getElementById('cmpFile').addEventListener('change', e => { cmpAddFiles(e.target.files); e.target.value = ''; });
+  const drop = document.getElementById('cmpDrop');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); if(e.dataTransfer.files.length) cmpAddFiles(e.dataTransfer.files); });
+  document.getElementById('cmpEditor').addEventListener('paste', e => {
+    const files = [...((e.clipboardData && e.clipboardData.files) || [])];
+    if(files.length){ e.preventDefault(); cmpAddFiles(files); return; }
+    // texte collé : sans mise en forme étrangère (évite les styles cassés)
+    const t = e.clipboardData && e.clipboardData.getData('text/plain');
+    if(t != null){ e.preventDefault(); document.execCommand('insertText', false, t); }
+  });
+  document.getElementById('cmpSigBtn').addEventListener('click', () => {
+    const cur = cmpGetSignature();
+    const ta = document.getElementById('cmpSigText');
+    const box = document.getElementById('cmpSigBox');
+    ta.value = cur; box.style.display = box.style.display === 'none' ? '' : 'none';
+  });
+  document.getElementById('cmpSigSave').addEventListener('click', () => {
+    const v = document.getElementById('cmpSigText').value.trim();
+    try{ localStorage.setItem(SIGNATURE_KEY, v); }catch(e){}
+    const ed = document.getElementById('cmpEditor');
+    const old = ed.querySelector('.cmp-sig');
+    const html = v ? `<div class="cmp-sig">${cmpEsc(v).replace(/\n/g, '<br>')}</div>` : '';
+    if(old) old.outerHTML = html || ''; else if(html) ed.insertAdjacentHTML('beforeend', html);
+    document.getElementById('cmpSigBox').style.display = 'none';
+  });
+  document.addEventListener('keydown', e => {
+    if(!document.getElementById('cmpOverlay').classList.contains('show')) return;
+    if(e.key === 'Escape'){ e.preventDefault(); cmpClose(false); }
+    if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); cmpSend(); }
+  }, true);
+})();
 </script>
+
+<div id="cmpOverlay">
+  <div class="cmp-box">
+    <div class="cmp-head">
+      <h3 id="cmpTitle">Nouveau message</h3>
+      <span id="cmpFrom" style="font-size:.75rem; color:var(--muted);"></span>
+      <button class="btn ghost icon" id="cmpClose" style="margin-left:auto;" title="Fermer (Échap)">✕</button>
+    </div>
+    <div class="cmp-body">
+      <div class="cmp-row"><label>À</label><input type="text" id="cmpTo" placeholder="adresse@exemple.fr — plusieurs : séparer par des virgules"><button class="btn ghost" id="cmpBccToggle" style="font-size:.72rem; padding:3px 8px;" title="Ajouter une copie cachée">Cci</button></div>
+      <div class="cmp-row"><label>Cc</label><input type="text" id="cmpCc"></div>
+      <div class="cmp-row" id="cmpBccRow" style="display:none;"><label>Cci</label><input type="text" id="cmpBcc"></div>
+      <div class="cmp-row"><label>Objet</label><input type="text" id="cmpSubject"></div>
+      <div id="cmpEditor" contenteditable="true"></div>
+      <div id="cmpSigBox" style="display:none;">
+        <textarea id="cmpSigText" rows="4" style="width:100%; font:inherit; font-size:.82rem; border:1px solid var(--line); border-radius:6px; padding:6px;" placeholder="Ta signature (ajoutée automatiquement à chaque nouveau mail)"></textarea>
+        <button class="btn" id="cmpSigSave" style="margin-top:4px;">Enregistrer la signature</button>
+      </div>
+      <div id="cmpQuoteWrap">
+        <label style="font-size:.78rem; color:var(--muted); display:flex; gap:6px; align-items:center; margin-bottom:4px;"><input type="checkbox" id="cmpQuoteOn" checked> <span id="cmpQuoteLabel">Inclure le message d'origine</span></label>
+        <iframe id="cmpQuoteFrame" sandbox="allow-same-origin"></iframe>
+      </div>
+      <div class="cmp-atts" id="cmpAtts"></div>
+      <div class="cmp-drop" id="cmpDrop">Glisse des fichiers ici pour les joindre — ou colle-les (Ctrl+V) dans le message</div>
+      <input type="file" id="cmpFile" multiple style="display:none;">
+    </div>
+    <div class="cmp-foot">
+      <button class="btn ghost" id="cmpAttBtn">📎 Joindre</button>
+      <button class="btn ghost" id="cmpSigBtn">✍️ Signature</button>
+      <span id="cmpStatus"></span>
+      <span style="margin-left:auto; display:flex; gap:8px;">
+        <button class="btn ghost" id="cmpCancel">Annuler</button>
+        <button class="btn primary" id="cmpSend" title="Ctrl+Entrée">✉️ Envoyer</button>
+      </span>
+    </div>
+  </div>
+</div>
 </body>
 </html>

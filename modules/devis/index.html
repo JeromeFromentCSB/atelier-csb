@@ -2607,13 +2607,64 @@ function openExternal(url){
   if(window.csbHost && window.csbHost.openExternal) window.csbHost.openExternal(url);
   else window.open(url, '_blank');
 }
-function buildInvoicePayload(d){
-  const payload = { company_id: d.client.id, order_number: d.axonautOrderName || d.numero || '', products: buildAxonautProducts(d) };
+// ---------- Régime de TVA du client (vérifié à chaque facturation) ----------
+// France → TVA française. Entreprise d'un autre pays de l'UE avec n° de TVA intracommunautaire →
+// facture HT (TVA 0 %, autoliquidation). Pays hors UE → facture HT (exportation).
+// Particulier de l'UE (sans n° de TVA) → TVA française.
+const EU_COUNTRIES = {
+  AT:['autriche','austria','osterreich'], BE:['belgique','belgium','belgie'], BG:['bulgarie','bulgaria'],
+  CY:['chypre','cyprus'], CZ:['republique tcheque','tchequie','czech republic','czechia'], DE:['allemagne','germany','deutschland'],
+  DK:['danemark','denmark'], EE:['estonie','estonia'], EL:['grece','greece'], ES:['espagne','spain','espana'],
+  FI:['finlande','finland'], HR:['croatie','croatia'], HU:['hongrie','hungary'], IE:['irlande','ireland'],
+  IT:['italie','italy','italia'], LT:['lituanie','lithuania'], LU:['luxembourg'], LV:['lettonie','latvia'],
+  MT:['malte','malta'], NL:['pays-bas','pays bas','netherlands','nederland','hollande'], PL:['pologne','poland'],
+  PT:['portugal'], RO:['roumanie','romania'], SE:['suede','sweden'], SI:['slovenie','slovenia'], SK:['slovaquie','slovakia']
+};
+const FR_NAMES = ['france', 'fr', 'fra', 'monaco', 'guadeloupe', 'martinique', 'reunion', 'la reunion', 'guyane', 'mayotte', 'corse'];
+const normCountry = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+function euCode(country){
+  const n = normCountry(country);
+  if(!n) return '';
+  const up = n.toUpperCase();
+  if(EU_COUNTRIES[up]) return up;
+  if(up === 'GR') return 'EL';
+  return Object.keys(EU_COUNTRIES).find(k => EU_COUNTRIES[k].includes(n)) || '';
+}
+async function clientVatRegime(d){
+  const c = d.client || {};
+  let country = c.country || '', tva = c.tva || '';
+  try{
+    const co = await axonaut('/companies/' + c.id);   // fiche à jour : pays et n° de TVA
+    if(co){ country = co.address_country || country; tva = co.intracommunity_number || ''; c.tva = tva; }
+  }catch(e){}
+  tva = String(tva || '').replace(/\s/g, '').toUpperCase();
+  const prefix = /^[A-Z]{2}/.test(tva) ? tva.slice(0, 2) : '';
+  const n = normCountry(country);
+  let code = euCode(country);
+  if(!code && !n && prefix && prefix !== 'FR' && (EU_COUNTRIES[prefix] || prefix === 'GR')) code = prefix === 'GR' ? 'EL' : prefix;
+  if(code) return tva ? { type: 'ue', country: country || code, tva } : { type: 'ue-particulier', country, tva };
+  if(!n || FR_NAMES.includes(n)) return { type: 'fr', country, tva };
+  return { type: 'hors-ue', country, tva };
+}
+function vatMention(r){
+  if(r.type === 'ue') return `Exonération de TVA - livraison intracommunautaire (article 262 ter I du CGI). Autoliquidation : TVA due par le preneur (article 283-2 du CGI, article 196 de la directive 2006/112/CE). N° de TVA intracommunautaire du client : ${r.tva}`;
+  if(r.type === 'hors-ue') return 'Exonération de TVA - exportation hors Union européenne (article 262 I du CGI).';
+  return '';
+}
+
+function buildInvoicePayload(d, opts){
+  opts = opts || {};
+  const products = buildAxonautProducts(d);
+  if(opts.ht) products.forEach(p => { p.tax_rate = 0; });
+  const payload = { company_id: d.client.id, order_number: d.axonautOrderName || d.numero || '', products };
   if(d.linkedContractId) payload.contract_id = Number(d.linkedContractId); // commande Axonaut reprise : la facture s'y rattache
   if(d.addressId) payload.company_address_id = d.addressId;
   if(d.themeId) payload.theme_id = d.themeId;
   if((d.paymentTerms || '').trim()) payload.payment_terms = d.paymentTerms;
   if((d.mandatoryMentions || '').trim()) payload.mandatory_mentions = d.mandatoryMentions;
+  if(opts.mention && !String(payload.mandatory_mentions || '').includes('262')){
+    payload.mandatory_mentions = [String(payload.mandatory_mentions || '').trim(), opts.mention].filter(Boolean).join('\n');
+  }
   if(num(d.globalDiscount)){
     if(d.globalDiscountIsPercent) payload.global_discount_percent = num(d.globalDiscount);
     else payload.global_discount_flat = num(d.globalDiscount);
@@ -2645,21 +2696,38 @@ async function invoiceInAxonaut(){
   if(freeLines && !moduleSettings.genericProductId){
     msg += `\n\n⚠ ${freeLines} ligne(s) libre(s) : Axonaut va créer un NOUVEAU PRODUIT pour chacune. Pour l'éviter, choisis un produit générique dans « ⚙︎ Réglages du module ».`;
   }
-  if(!confirm(msg)) return;
+  // Régime de TVA : client français, entreprise de l'UE (HT, autoliquidation), hors UE (HT).
+  const regime = await clientVatRegime(d);
+  const taxed = ov.lines.filter(l => l.type !== 'section' && num(l.taxRate) > 0).length;
+  let vatOpts = {};
+  if((regime.type === 'ue' || regime.type === 'hors-ue') && taxed){
+    const why = regime.type === 'ue'
+      ? `Client de l'Union européenne hors France (${regime.country || 'pays'}) avec un n° de TVA intracommunautaire (${regime.tva}) : la facture doit être en HT (TVA 0 %, autoliquidation par le client).`
+      : `Client hors Union européenne (${regime.country}) : la facture doit être en HT (exportation, TVA 0 %).`;
+    if(confirm(`⚠ TVA\n\n${why}\n\nOK = facturer en HT : TVA à 0 % sur toutes les lignes et mention légale ajoutée sur la facture.\nAnnuler = ne pas facturer en HT.`)){
+      vatOpts = { ht: true, mention: vatMention(regime) };
+    }else if(!confirm(`Facturer quand même AVEC la TVA française ?`)) return;
+  }else if(regime.type === 'ue-particulier'){
+    if(!confirm(`⚠ TVA\n\nClient de l'Union européenne (${regime.country}) SANS n° de TVA intracommunautaire dans sa fiche Axonaut : la TVA française s'applique (vente à un particulier).\n\nSi c'est une entreprise, annule et ajoute d'abord son n° de TVA dans sa fiche client : la facture sera alors faite en HT.\n\nContinuer avec la TVA française ?`)) return;
+  }else if((regime.type === 'ue' || regime.type === 'hors-ue') && !taxed){
+    vatOpts = { mention: vatMention(regime) };
+  }
+  const tFinal = vatOpts.ht ? { ht: t.ht, ttc: t.ht } : t;
+  if(!confirm(msg.replace(`${eur(t.ht)} HT / ${eur(t.ttc)} TTC`, `${eur(tFinal.ht)} HT / ${eur(tFinal.ttc)} TTC${vatOpts.ht ? ' (facture HT, TVA 0 %)' : ''}`))) return;
   invoicing = true;
   const btn = document.getElementById('aInvoice');
   if(btn){ btn.disabled = true; btn.textContent = 'Facturation en cours…'; }
   try{
     d.facturationEnCours = new Date().toISOString();
     await saveCurrent();
-    const created = await axonaut('/invoices', 'POST', buildInvoicePayload(ov));
+    const created = await axonaut('/invoices', 'POST', buildInvoicePayload(ov, vatOpts));
     if(!created || !created.id) throw new Error("réponse d'Axonaut inattendue");
     let inv = created;
     try{ inv = (await axonaut('/invoices/' + created.id)) || created; }catch(e){}
     d.facture = { id: inv.id, numero: inv.number || '', date: new Date().toISOString(), publicPath: inv.public_path || '', total: inv.total != null ? inv.total : null };
     delete d.facturationEnCours;
     d.statut = 'facture';
-    addHisto('Facturé dans Axonaut' + (d.facture.numero ? ' — facture ' + d.facture.numero : ''));
+    addHisto('Facturé dans Axonaut' + (d.facture.numero ? ' — facture ' + d.facture.numero : '') + (vatOpts.ht ? ' (HT, TVA 0 % — ' + (regime.type === 'ue' ? 'autoliquidation, n° TVA ' + regime.tva : 'exportation') + ')' : ''));
     await saveCurrent();
     renderEditor();
     return true;

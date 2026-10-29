@@ -407,6 +407,25 @@
   .st-cbar{ height:8px; border-radius:4px; background:#B5452F; min-width:2px; }
   .st-cols{ display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:16px; }
   @media (max-width:1000px){ .st-cols{ grid-template-columns:1fr; } }
+
+  /* ---------- Onglet Suivi colis ---------- */
+  #tabPanelSuivi .sc-wrap{ padding:14px 22px 40px; }
+  .sc-toolbar{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .sc-toolbar input, .sc-toolbar select{ padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:.85rem; background:var(--white); }
+  .sc-table{ width:100%; border-collapse:collapse; background:var(--white); border:1px solid var(--line); border-radius:var(--radius); font-size:.82rem; }
+  .sc-table th{ text-align:left; font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); padding:8px 10px; border-bottom:1px solid var(--line); }
+  .sc-table td{ padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .sc-table tr.sc-row{ cursor:pointer; } .sc-table tr.sc-row:hover{ background:var(--paper); }
+  .sc-badge{ display:inline-block; font-size:.72rem; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+  .sc-b0{ background:#EEF1F5; color:#4A5568; } .sc-b1, .sc-b2, .sc-b3{ background:#E3ECF8; color:#1F3A66; }
+  .sc-b4{ background:#FFF1C9; color:#8A5A00; } .sc-b5{ background:#E3F2E4; color:#2E7D32; } .sc-berr{ background:#F7E3DC; color:#B5452F; }
+  .sc-steps{ display:flex; gap:4px; margin:6px 0 10px; }
+  .sc-steps span{ flex:1; font-size:.68rem; text-align:center; padding:5px 2px; border-radius:6px; background:#EEF1F5; color:#8A8074; }
+  .sc-steps span.on{ background:#2E7D32; color:#fff; font-weight:700; }
+  .sc-ev{ display:flex; gap:12px; padding:4px 0; font-size:.8rem; } .sc-ev .d{ color:var(--muted); white-space:nowrap; min-width:118px; }
+  .sc-link{ color:#1F3A66; text-decoration:underline dotted; cursor:pointer; }
+  .st-table tbody tr.sel{ background:#FBE7E4; } .st-table tbody tr.sel td:first-child{ font-weight:700; }
+  .st-late1{ color:#3E9B5A; font-weight:700; } .st-late2{ color:#E08A1E; font-weight:700; } .st-late3{ color:#C8372D; font-weight:700; }
   .fx-row .l1{ display:flex; justify-content:space-between; gap:8px; font-size:.82rem; font-weight:700; }
   .fx-row .l2{ display:flex; justify-content:space-between; gap:8px; font-size:.74rem; color:var(--muted); margin-top:2px; }
   .fx-paid{ color:var(--silk-green); font-weight:700; }
@@ -415,6 +434,7 @@
   #fxDetail th{ text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:6px 8px; border-bottom:1.5px solid var(--ink); }
   #fxDetail td{ padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
   #fxDetail td.n, #fxDetail th.n{ text-align:right; white-space:nowrap; }
+  #fxDetail tr.fx-section td{ padding:12px 8px 4px; font-weight:700; color:var(--accent, #1F3A66); text-transform:uppercase; font-size:.72rem; letter-spacing:.04em; border-bottom:2px solid var(--line); }
   .fx-cards{ display:flex; gap:12px; flex-wrap:wrap; margin:12px 0 16px; }
   .fx-card{ flex:1; min-width:180px; border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--white); font-family:sans-serif; font-size:.8rem; }
   .fx-card h4{ margin:0 0 6px; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
@@ -475,6 +495,15 @@
   .devis-line-item .title{ font-weight:700; margin-bottom:4px; }
   .devis-line-item .meta{ font-size:.78rem; color:var(--muted); margin-bottom:6px; }
   .devis-line-item .details{ font-size:.82rem; color:var(--ink); white-space:pre-line; }
+  /* Fenêtre « Relance » (factures non réglées d'un client) */
+  #rlEditor{ border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:260px; max-height:48vh; overflow:auto; background:#fff; outline:none; }
+  #rlEditor:focus{ border-color:var(--poste-yellow-dark); }
+  .rl-row{ display:flex; gap:8px; align-items:center; margin-bottom:8px; font-size:.8rem; }
+  .rl-row label{ width:60px; color:var(--muted); }
+  .rl-row input{ flex:1; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:.82rem; }
+  #rlContacts button{ font-size:.72rem; margin:0 6px 6px 0; padding:3px 8px; border:1px solid var(--line); border-radius:12px; background:var(--paper-2); cursor:pointer; }
+  #rlStatus{ font-size:.78rem; color:var(--muted); }
+  #rlStatus.err{ color:var(--silk-red); } #rlStatus.ok{ color:var(--silk-green); }
 </style>
 </head>
 <body>
@@ -482,6 +511,8 @@
   <button class="tab-btn" data-tab="devis" id="tabBtnDevis">📑 Devis</button>
   <button class="tab-btn active" data-tab="commande" id="tabBtnCommande">📦 Commande</button>
   <button class="tab-btn" data-tab="factures" id="tabBtnFactures">💶 Factures</button>
+  <!-- Suivi colis masqué pour le moment : retirer style="display:none" pour le réafficher -->
+  <button class="tab-btn" data-tab="suivi" id="tabBtnSuivi" style="display:none">🚚 Suivi colis</button>
   <button class="tab-btn" data-tab="stats" id="tabBtnStats">📊 Statistiques</button>
   <button class="tab-btn" data-tab="params" id="tabBtnParams">⚙︎ Paramètres</button>
 </div>
@@ -1059,6 +1090,7 @@
       <input type="text" class="search" id="fxNumber" placeholder="N° de facture" style="width:150px;">
       <button class="btn ghost" id="fxReset" title="Effacer les filtres">✕ Filtres</button>
       <button class="btn ghost" id="fxRefresh">↻ Actualiser</button>
+      <button class="btn" id="fxRelanceBtn" title="Préparer un mail de relance pour les factures non réglées affichées (un seul client)">✉️ Relance</button>
       <span id="fxCount" style="font-family:sans-serif; font-size:.75rem; color:var(--muted);"></span>
     </div>
   </div>
@@ -1067,6 +1099,25 @@
     <div id="fxDetail"><div style="font-family:sans-serif; color:var(--muted);">Choisis une facture dans la liste.</div></div>
   </div>
 </div><!-- /tabPanelFactures -->
+
+<div id="tabPanelSuivi" class="tab-panel">
+  <div class="sc-wrap">
+    <div class="sc-toolbar">
+      <select id="scFilter" title="Colis affichés">
+        <option value="encours">En cours</option>
+        <option value="livres">Livrés</option>
+        <option value="tous">Tous</option>
+      </select>
+      <input type="text" id="scSearch" placeholder="Rechercher (commande, client, n° de suivi)…" style="min-width:260px;">
+      <span style="flex:1;"></span>
+      <input type="text" id="scAddNum" placeholder="Suivre un autre n° de colis…" style="width:210px;">
+      <button class="btn ghost" id="scAddBtn">＋ Suivre</button>
+      <button class="btn primary" id="scRefreshBtn">↻ Actualiser</button>
+    </div>
+    <div id="scInfo" style="font-family:sans-serif; font-size:.78rem; color:var(--muted); margin-bottom:8px;"></div>
+    <div id="scBody"></div>
+  </div>
+</div>
 
 <div id="tabPanelStats" class="tab-panel">
   <div id="stHeader">
@@ -1111,6 +1162,33 @@
     <div class="col-modal-body" style="display:flex; flex-direction:column; gap:10px;">
       <button class="btn primary" id="carrierChoiceColissimo" style="padding:14px;">📦 Colissimo</button>
       <button class="btn ghost" id="carrierChoiceFranceExpress" style="padding:14px;">🚚 France Express</button>
+    </div>
+  </div>
+</div>
+
+<div id="rlOverlay" style="display:none; position:fixed; inset:0; background:rgba(28,26,23,.6); z-index:225; align-items:center; justify-content:center; padding:20px;">
+  <div class="addr-modal" style="width:min(860px,100%);">
+    <div class="col-modal-head">
+      <div>
+        <h3>Relance — factures en attente de règlement</h3>
+        <div class="sub" id="rlSub" style="font-family:sans-serif; font-size:.8rem; color:var(--muted);"></div>
+      </div>
+      <button class="btn ghost icon" id="rlClose">✕</button>
+    </div>
+    <div class="col-modal-body" style="overflow:auto;">
+      <div class="rl-row"><label>À</label><input type="text" id="rlTo" placeholder="adresse@client.fr (plusieurs : séparer par des virgules)"></div>
+      <div id="rlContacts" style="margin:-2px 0 6px 68px;"></div>
+      <div class="rl-row"><label>Cc</label><input type="text" id="rlCc"></div>
+      <div class="rl-row"><label>Objet</label><input type="text" id="rlSubject"></div>
+      <div style="font-size:.72rem; color:var(--muted); margin:6px 0 4px;">Message (modifiable directement) :</div>
+      <div id="rlEditor" contenteditable="true"></div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap;">
+        <span id="rlStatus"></span>
+        <span style="margin-left:auto; display:flex; gap:8px;">
+          <button class="btn ghost" id="rlCopy">📋 Copier le message</button>
+          <button class="btn primary" id="rlSend">✉️ Envoyer</button>
+        </span>
+      </div>
     </div>
   </div>
 </div>
@@ -5712,7 +5790,7 @@ function setAdminMode(on){
 
 // ---------- Onglets ----------
 const ACTIVE_TAB_KEY = 'csb_envoi_axonaut_active_tab';
-const TAB_SUFFIX = { devis:'Devis', commande:'Commande', factures:'Factures', stats:'Stats', params:'Params' };
+const TAB_SUFFIX = { devis:'Devis', commande:'Commande', factures:'Factures', suivi:'Suivi', stats:'Stats', params:'Params' };
 function activateTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -5722,7 +5800,160 @@ function activateTab(tab){
   if(tab === 'devis') ensureDevisModuleFrame();
   if(tab === 'factures') fxOpen();
   if(tab === 'stats') stOpen();
+  if(tab === 'suivi') scOpen();
 }
+
+// ---------- Onglet Suivi colis (Colissimo) ----------
+// Les colis = n° de suivi des étiquettes faites depuis l'appli (envois des commandes), plus les
+// n° ajoutés à la main. Le suivi est lu dans le Web Service Colissimo « Suivi TL » par le relais
+// Cloudflare (?colissimoSuivi=), avec la même clé que les étiquettes. Les réponses sont gardées
+// sur le poste : un colis livré n'est plus interrogé, les autres au plus toutes les 30 min.
+const SC_CACHE_KEY = 'csb_suivi_colis_cache', SC_EXTRA_KEY = 'csb_suivi_colis_extra';
+const SC_STEPS = ['Annoncé', 'Pris en charge', 'Acheminement', 'Arrivé sur site', 'En livraison', 'Livré'];
+const scIsColissimo = n => /^[0-9][A-Z][0-9]{11}$/.test(n) || /^[A-Z]{2}[0-9]{9}[A-Z]{2}$/.test(n);
+function scLoad(key, def){ try{ return JSON.parse(localStorage.getItem(key)) || def; }catch(e){ return def; } }
+function scSave(key, v){ try{ localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
+let scCache = scLoad(SC_CACHE_KEY, {}), scOpenNum = null, scBusy = false;
+// Résumé d'une réponse Colissimo : étape atteinte, dernier événement, livré ou non
+function scSummary(data){
+  if(!data) return null;
+  const st = data.status || {};
+  const code = String(st.code != null ? st.code : (data.code != null ? data.code : ''));
+  if(code && code !== '0') return { error: (st.message || data.message || 'erreur ' + code) };
+  if(data.error) return { error: data.error };
+  const parcel = data.parcel || {};
+  const steps = Array.isArray(parcel.step) ? parcel.step : (parcel.step ? [parcel.step] : []);
+  const events = (Array.isArray(parcel.event) ? parcel.event : (parcel.event ? [parcel.event] : []))
+    .slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const active = steps.filter(x => x.status === 'STEP_STATUS_ACTIVE').map(x => Number(x.stepId)).filter(n => !isNaN(n));
+  const step = active.length ? Math.max(...active) : (events.length ? 1 : 0);
+  const last = events[0] || null;
+  return { step, delivered: step >= 5, last, events, steps };
+}
+function scParcels(){
+  const list = [];
+  (contracts || []).forEach(r => (r.shipments || []).forEach(sh => {
+    const n = String(sh.numero_suivi || '').trim().toUpperCase();
+    if(n) list.push({ num: n, r, date: sh.date_generation || sh.created || '' });
+  }));
+  scLoad(SC_EXTRA_KEY, []).forEach(x => { if(!list.some(p => p.num === x.num)) list.push({ num: x.num, r: null, date: x.added, extra: true }); });
+  return list.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+async function scFetch(num){
+  const cfg = await getColConfig();
+  if(!cfg.workerUrl) throw new Error('URL du relais Colissimo non configurée (réglages ⚙︎)');
+  const res = await fetch(cfg.workerUrl.replace(/\/+$/, '') + '?colissimoSuivi=' + encodeURIComponent(num));
+  const text = await res.text();
+  let data = null; try{ data = JSON.parse(text); }catch(e){}
+  if(data && /manquant ou invalide/.test(data.error || '')) throw new Error('le relais Cloudflare doit être mis à jour pour le suivi (voir cloudflare/axonaut-proxy)');
+  if(!data) throw new Error('réponse illisible (HTTP ' + res.status + ')');
+  return data;
+}
+async function scRefresh(force){
+  if(scBusy) return;
+  scBusy = true;
+  const btn = document.getElementById('scRefreshBtn');
+  btn.disabled = true;
+  try{
+    if(!contracts.length) await refreshAll();
+    const todo = scParcels().filter(p => scIsColissimo(p.num)).filter(p => {
+      const c = scCache[p.num], sum = c && scSummary(c.data);
+      if(sum && sum.delivered) return false;
+      return force || !c || Date.now() - c.at > 30 * 60 * 1000;
+    });
+    let done = 0, firstErr = '';
+    const work = todo.slice();
+    const worker = async () => {
+      while(work.length){
+        const p = work.shift();
+        try{ scCache[p.num] = { at: Date.now(), data: await scFetch(p.num) }; }
+        catch(e){ firstErr = firstErr || e.message; }
+        done++;
+        document.getElementById('scInfo').textContent = `Mise à jour du suivi… ${done}/${todo.length}`;
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    scSave(SC_CACHE_KEY, scCache);
+    scRender(firstErr ? '⚠ ' + firstErr : '');
+  }finally{ scBusy = false; btn.disabled = false; }
+}
+function scOpen(){ scRender(); scRefresh(false); }
+function scRender(msg){
+  const filter = document.getElementById('scFilter').value;
+  const q = document.getElementById('scSearch').value.trim().toLowerCase();
+  const all = scParcels();
+  const rows = all.map(p => ({ p, sum: scCache[p.num] ? scSummary(scCache[p.num].data) : null })).filter(({ p, sum }) => {
+    const delivered = !!(sum && sum.delivered);
+    if(filter === 'encours' && delivered) return false;
+    if(filter === 'livres' && !delivered) return false;
+    // « En cours » : on ne traîne pas les vieux envois jamais suivis (plus de 60 jours)
+    if(filter === 'encours' && !sum && p.date && Date.now() - new Date(p.date) > 60 * 864e5) return false;
+    if(q){
+      const hay = [p.num, p.r && p.r.numeroCommande, p.r && (p.r.clientCompany || p.r.nomSoc), p.r && p.r.ville].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const counts = all.reduce((c, p) => { const s = scCache[p.num] && scSummary(scCache[p.num].data); if(s && s.delivered) c.l++; else c.e++; return c; }, { e: 0, l: 0 });
+  document.getElementById('scInfo').textContent = (msg ? msg + ' · ' : '') + `${all.length} colis · ${counts.e} en cours · ${counts.l} livré(s)`;
+  const badge = (p, sum) => {
+    if(!scIsColissimo(p.num)) return '<span class="sc-badge sc-b0" title="Ce n° ne ressemble pas à un colis Colissimo">autre transporteur</span>';
+    if(!sum) return '<span class="sc-badge sc-b0">pas encore suivi</span>';
+    if(sum.error) return `<span class="sc-badge sc-berr" title="${fxEsc(sum.error)}">${fxEsc(sum.error.slice(0, 40))}</span>`;
+    return `<span class="sc-badge sc-b${sum.step}">${SC_STEPS[sum.step] || '—'}</span>`;
+  };
+  const body = document.getElementById('scBody');
+  if(!rows.length){ body.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted); font-family:sans-serif;">Aucun colis dans cette vue.</div>'; return; }
+  body.innerHTML = `<table class="sc-table"><thead><tr><th>État</th><th>Commande</th><th>Client</th><th>N° de suivi</th><th>Envoyé le</th><th>Dernier événement</th></tr></thead><tbody>${rows.map(({ p, sum }) => {
+    const r = p.r, last = sum && sum.last;
+    const open = scOpenNum === p.num;
+    let html = `<tr class="sc-row" data-num="${fxEsc(p.num)}"><td>${badge(p, sum)}</td>
+      <td>${r ? `<span class="sc-link" data-cmd="${fxEsc(r.contractId)}">${fxEsc(r.numeroCommande || '')}</span>` : '<span style="color:var(--muted);">ajouté à la main</span>'}</td>
+      <td>${fxEsc(r ? (r.clientCompany || r.nomSoc || '') : '')}${r && r.ville ? `<div style="color:var(--muted); font-size:.74rem;">${fxEsc([r.cp, r.ville].filter(Boolean).join(' '))}</div>` : ''}</td>
+      <td style="font-family:monospace;">${fxEsc(p.num)}</td>
+      <td>${p.date ? fxDate(p.date) : ''}</td>
+      <td>${last ? `${fxEsc(last.labelLong || last.labelShort || last.code || '')}<div style="color:var(--muted); font-size:.74rem;">${fxDateTime(last.date)}${last.siteName ? ' · ' + fxEsc(last.siteName) : ''}</div>` : ''}</td></tr>`;
+    if(open){
+      html += `<tr><td colspan="6" style="background:var(--paper);">
+        ${sum && !sum.error ? `<div class="sc-steps">${SC_STEPS.map((l, k) => `<span class="${k <= sum.step && sum.step > 0 ? 'on' : ''}">${l}</span>`).join('')}</div>
+        ${sum.events.length ? sum.events.map(ev => `<div class="sc-ev"><span class="d">${fxDateTime(ev.date)}</span><span>${fxEsc(ev.labelLong || ev.labelShort || ev.code)}${ev.siteName ? ` <span style="color:var(--muted);">— ${fxEsc(ev.siteName)}${ev.siteZipCode ? ' (' + fxEsc(ev.siteZipCode) + ')' : ''}</span>` : ''}</span></div>`).join('') : '<div style="color:var(--muted);">Aucun événement pour l\'instant.</div>'}` : ''}
+        <div style="margin-top:8px; display:flex; gap:8px;">
+          <button class="btn ghost" data-ext="${fxEsc(p.num)}">🌐 Voir sur laposte.fr</button>
+          ${p.extra ? `<button class="btn ghost" data-rm="${fxEsc(p.num)}">Retirer de la liste</button>` : ''}
+        </div></td></tr>`;
+    }
+    return html;
+  }).join('')}</tbody></table>`;
+  body.querySelectorAll('tr.sc-row').forEach(tr => tr.addEventListener('click', (e) => {
+    const cmd = e.target.closest('[data-cmd]');
+    if(cmd){ e.stopPropagation(); jumpToCommande(isNaN(Number(cmd.dataset.cmd)) ? cmd.dataset.cmd : Number(cmd.dataset.cmd)); return; }
+    scOpenNum = scOpenNum === tr.dataset.num ? null : tr.dataset.num;
+    scRender(msg);
+  }));
+  body.querySelectorAll('[data-ext]').forEach(b => b.addEventListener('click', () => {
+    const url = 'https://www.laposte.fr/outils/suivre-vos-envois?code=' + encodeURIComponent(b.dataset.ext);
+    if(window.csbHost && window.csbHost.openExternal) window.csbHost.openExternal(url); else window.open(url, '_blank');
+  }));
+  body.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+    scSave(SC_EXTRA_KEY, scLoad(SC_EXTRA_KEY, []).filter(x => x.num !== b.dataset.rm));
+    delete scCache[b.dataset.rm]; scSave(SC_CACHE_KEY, scCache); scRender();
+  }));
+}
+document.getElementById('scFilter').addEventListener('change', () => scRender());
+document.getElementById('scSearch').addEventListener('input', () => scRender());
+document.getElementById('scRefreshBtn').addEventListener('click', () => scRefresh(true));
+document.getElementById('scAddBtn').addEventListener('click', () => {
+  const inp = document.getElementById('scAddNum');
+  const num = inp.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if(!num) return;
+  const extra = scLoad(SC_EXTRA_KEY, []);
+  if(!extra.some(x => x.num === num)) extra.push({ num, added: new Date().toISOString() });
+  scSave(SC_EXTRA_KEY, extra);
+  inp.value = ''; scOpenNum = num;
+  document.getElementById('scFilter').value = 'tous';
+  scRender(); scRefresh(false);
+});
+document.getElementById('scAddNum').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('scAddBtn').click(); });
 
 // ---------- Onglet Factures : toutes les factures Axonaut ----------
 // Chargées une fois (toutes les pages), puis filtrées sur le poste : réglées / non réglées, dates,
@@ -5968,11 +6199,16 @@ async function fxShowDetail(id){
       </div>
       ${lines.length ? `<table>
         <thead><tr><th>Désignation</th><th class="n">Qté</th><th class="n">PU HT</th><th class="n">Total HT</th></tr></thead>
-        <tbody>${lines.map(l => `<tr>
+        <tbody>${(() => { let lastCh = null; return lines.map(l => {
+          // Section (chapitre Axonaut) : titre affiché quand elle change, comme sur la facture.
+          const ch = stripHtmlToText(l.chapter || '').trim();
+          const head = ch && ch !== lastCh ? `<tr class="fx-section"><td colspan="4">${fxEsc(ch)}</td></tr>` : '';
+          lastCh = ch;
+          return head + `<tr>
           <td><b>${fxEsc(l.name || l.product_name || '')}</b>${l.product_code ? ' <span style="color:var(--muted);">' + fxEsc(l.product_code) + '</span>' : ''}${l.details ? '<div style="color:var(--muted); font-size:.74rem;">' + fxText(l.details) + '</div>' : ''}</td>
           <td class="n">${fxNum(l.quantity).toLocaleString('fr-FR')} ${fxEsc(l.unit || '')}</td>
           <td class="n">${fxEur(l.price)}</td>
-          <td class="n">${fxEur(l.total_pre_tax_amount)}</td></tr>`).join('')}</tbody>
+          <td class="n">${fxEur(l.total_pre_tax_amount)}</td></tr>`; }).join(''); })()}</tbody>
       </table>` : '<div style="font-family:sans-serif; color:var(--muted);">Chargement des lignes…</div>'}
       ${inv.payment_terms ? `<div style="font-family:sans-serif; font-size:.78rem; color:var(--muted); margin-top:12px;">Conditions de paiement : ${fxText(inv.payment_terms)}</div>` : ''}`;
     fxWireLinks(inv, contract);
@@ -5995,6 +6231,144 @@ document.getElementById('fxReset').addEventListener('click', () => {
 });
 document.getElementById('fxRefresh').addEventListener('click', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); Object.keys(fxEventsCache).forEach(k => delete fxEventsCache[k]); fxOpen(true); });
 window.addEventListener('resize', fxUpdateHeaderHeight);
+
+// ---------- Relance : mail pour les factures non réglées affichées d'un client ----------
+// Coordonnées de l'atelier : réglages du module Devis (devis_reglages.atelier), à défaut
+// l'expéditeur Colissimo. Signature : celle du modèle de mail des devis (après « Cordialement »).
+async function rlAtelier(){
+  const reg = await fetchSharedSetting('devis_reglages').catch(() => null);
+  const a = Object.assign({}, (reg && reg.atelier) || {});
+  if(!a.nom || !a.tel){
+    const c = await fetchSharedSetting('colissimo').catch(() => null);
+    if(c){ a.nom = a.nom || c.senderCompany || ''; a.tel = a.tel || c.senderPhone || ''; }
+  }
+  let signature = '';
+  const body = (reg && reg.mailBody) || '';
+  const m = body.match(/(?:^|\n)\s*(cordialement|bien cordialement|salutations)[^\n]*\n([\s\S]+)$/i);
+  if(m) signature = m[2].trim();
+  if(!signature) signature = [a.nom, a.tel, a.email].filter(Boolean).join('\n');
+  return { nom: a.nom || '', tel: a.tel || '', email: a.email || '', signature };
+}
+function rlInvoices(){
+  return fxFiltered(true).filter(inv => !fxPaid(inv) && fxDuTTC(inv) > 0.001)
+    .sort((a, b) => fxIsoDay(a.due_date || a.date).localeCompare(fxIsoDay(b.due_date || b.date)));
+}
+function rlBuildHtml(list, at){
+  const td = 'padding:7px 10px; border-bottom:1px solid #e3ddd2;';
+  const th = 'padding:7px 10px; background:#f3efe7; text-align:left; font-weight:600; border-bottom:2px solid #d8cfbf;';
+  const r = 'text-align:right; white-space:nowrap;';
+  const late = list.filter(i => fxDaysLate(i) > 0);
+  const tot = list.reduce((t, i) => t + fxDuTTC(i), 0);
+  const totLate = late.reduce((t, i) => t + fxDuTTC(i), 0);
+  const many = list.length > 1;
+  const rows = list.map(inv => {
+    const d = fxDaysLate(inv);
+    const partial = fxNum(inv.total) - fxDuTTC(inv) > 0.009;
+    const ech = inv.due_date ? fxDate(inv.due_date) + (d ? `<br><span style="color:#b03a2e; font-size:12px;">échue depuis ${d} jour${d > 1 ? 's' : ''}</span>` : '<br><span style="color:#6b6458; font-size:12px;">à échoir</span>') : '—';
+    const num = inv.public_path ? `<a href="${fxEsc(inv.public_path)}">${fxEsc(inv.number || '#' + inv.id)}</a>` : fxEsc(inv.number || '#' + inv.id);
+    return `<tr><td style="${td}"><b>${num}</b></td><td style="${td}">${fxDate(inv.date)}</td><td style="${td}">${ech}</td>
+      <td style="${td}${r}">${fxEur(inv.total)}</td>
+      <td style="${td}${r}">${partial ? `<span style="color:#6b6458; font-size:12px;">déjà réglé ${fxEur(fxNum(inv.total) - fxDuTTC(inv))}</span><br>` : ''}<b>${fxEur(fxDuTTC(inv))}</b></td></tr>`;
+  }).join('');
+  const intro = late.length
+    ? `Sauf erreur ou omission de notre part, ${many ? 'les factures suivantes restent' : 'la facture suivante reste'} à ce jour en attente de règlement${late.length ? (late.length === list.length ? (many ? ', leur date d\'échéance étant dépassée' : ', sa date d\'échéance étant dépassée') : '') : ''} :`
+    : `Nous nous permettons de vous adresser ce petit rappel concernant ${many ? 'les factures suivantes, qui arrivent' : 'la facture suivante, qui arrive'} prochainement à échéance :`;
+  const ask = late.length
+    ? `Nous vous serions reconnaissants de bien vouloir procéder au règlement ${totLate < tot - 0.009 ? `des sommes échues (<b>${fxEur(totLate)} TTC</b>) ` : ''}dans les meilleurs délais.`
+    : `Nous vous remercions par avance de bien vouloir procéder au règlement à l'échéance indiquée.`;
+  const sig = fxEsc(at.signature).replace(/\n/g, '<br>');
+  return `<div style="font-family:Arial, Helvetica, sans-serif; font-size:14px; color:#222; line-height:1.5;">
+<p>Bonjour,</p>
+<p>${intro}</p>
+<table style="border-collapse:collapse; font-size:13px; margin:6px 0 4px; width:100%; max-width:680px;">
+<thead><tr><th style="${th}">Facture</th><th style="${th}">Date</th><th style="${th}">Échéance</th><th style="${th}${r}">Montant TTC</th><th style="${th}${r}">Reste à régler</th></tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr><td colspan="4" style="padding:9px 10px; text-align:right; font-weight:700;">Total restant à régler</td><td style="padding:9px 10px; ${r} font-weight:700; font-size:15px;">${fxEur(tot)} TTC</td></tr></tfoot>
+</table>
+${list.some(i => i.public_path) ? `<p style="font-size:13px; color:#555;">Un clic sur le numéro d'une facture permet de la consulter et de la télécharger ; nos coordonnées bancaires y figurent pour un règlement par virement.</p>` : ''}
+<p>${ask}</p>
+<p>Si votre règlement a été effectué entre-temps, nous vous remercions de ne pas tenir compte de ce message, et de nous indiquer si possible la date et le mode de paiement afin que nous puissions mettre à jour votre compte.</p>
+<p>Nous restons bien entendu à votre disposition pour toute question concernant ${many ? 'ces factures' : 'cette facture'}${at.tel ? ` au ${fxEsc(at.tel)}` : ''} ou par simple retour de mail.</p>
+<p>Nous vous remercions de votre confiance et vous prions d'agréer nos sincères salutations.</p>
+<p>${sig}</p>
+</div>`;
+}
+async function openRelance(){
+  if(!fxInvoices){ alert('Les factures ne sont pas encore chargées.'); return; }
+  const list = rlInvoices();
+  if(!list.length){ alert('Aucune facture non réglée dans la liste affichée.'); return; }
+  const clients = [...new Set(list.map(fxClient))];
+  if(clients.length > 1){ alert('La liste contient les factures de ' + clients.length + ' clients.\nChoisis d\'abord un client dans le filtre « Tous les clients ».'); return; }
+  const client = clients[0];
+  const at = await rlAtelier();
+  const tot = list.reduce((t, i) => t + fxDuTTC(i), 0);
+  document.getElementById('rlSub').textContent = `${client} · ${list.length} facture(s) · ${fxEur(tot)} TTC restant à régler`;
+  document.getElementById('rlSubject').value = `${list.some(i => fxDaysLate(i) > 0) ? 'Relance' : 'Rappel'} - ${list.length > 1 ? 'Factures' : 'Facture'} ${list.map(i => i.number).filter(Boolean).join(', ')} en attente de règlement${at.nom ? ' - ' + at.nom : ''}`;
+  document.getElementById('rlEditor').innerHTML = rlBuildHtml(list, at);
+  document.getElementById('rlTo').value = '';
+  document.getElementById('rlCc').value = '';
+  const st = document.getElementById('rlStatus'); st.className = ''; st.textContent = '';
+  const send = document.getElementById('rlSend');
+  send.disabled = !(window.csbHost && window.csbHost.emailSend);
+  send.title = send.disabled ? "Envoi disponible seulement dans l'application installée" : '';
+  document.getElementById('rlOverlay').style.display = 'flex';
+  // Contacts du client (Axonaut) : le contact de facturation est proposé d'office.
+  const chips = document.getElementById('rlContacts');
+  const companyId = list[0].company && list[0].company.id;
+  chips.innerHTML = companyId ? '<span style="font-size:.72rem; color:var(--muted);">Chargement des contacts Axonaut…</span>' : '';
+  if(!companyId) return;
+  try{
+    const res = await callAxonaut('/companies/' + companyId + '/employees');
+    const arr = Array.isArray(res.parsed) ? res.parsed : ((res.parsed && (res.parsed.data || res.parsed.employees)) || []);
+    const emps = arr.filter(e => e && e.email);
+    chips.innerHTML = emps.length ? emps.map(e => `<button type="button" data-mail="${fxEsc(e.email)}">＋ ${fxEsc([e.firstname, e.lastname].filter(Boolean).join(' ') || e.email)} &lt;${fxEsc(e.email)}&gt;${e.is_billing_contact ? ' · facturation' : ''}</button>`).join('')
+      : '<span style="font-size:.72rem; color:var(--muted);">Aucun contact avec email dans la fiche Axonaut de ce client.</span>';
+    chips.querySelectorAll('[data-mail]').forEach(b => b.addEventListener('click', () => {
+      const input = document.getElementById('rlTo');
+      const cur = input.value.split(/[,;\s]+/).filter(Boolean);
+      if(!cur.includes(b.dataset.mail)) cur.push(b.dataset.mail);
+      input.value = cur.join(', ');
+    }));
+    const billing = emps.find(e => e.is_billing_contact) || emps[0];
+    if(billing && !document.getElementById('rlTo').value) document.getElementById('rlTo').value = billing.email;
+  }catch(e){ chips.innerHTML = '<span style="font-size:.72rem; color:var(--muted);">Contacts Axonaut indisponibles.</span>'; }
+}
+document.getElementById('fxRelanceBtn').addEventListener('click', openRelance);
+document.getElementById('rlClose').addEventListener('click', () => { document.getElementById('rlOverlay').style.display = 'none'; });
+document.getElementById('rlCopy').addEventListener('click', async () => {
+  const ed = document.getElementById('rlEditor');
+  const st = document.getElementById('rlStatus');
+  try{
+    // HTML + texte : collé dans Gmail / Spark / Outlook, le tableau est conservé.
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([ed.innerHTML], { type: 'text/html' }),
+      'text/plain': new Blob([ed.innerText], { type: 'text/plain' })
+    })]);
+    st.className = 'ok'; st.textContent = 'Message copié : colle-le dans ton logiciel de mail.';
+  }catch(e){
+    const r = document.createRange(); r.selectNodeContents(ed);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    document.execCommand('copy'); sel.removeAllRanges();
+    st.className = 'ok'; st.textContent = 'Message copié.';
+  }
+});
+document.getElementById('rlSend').addEventListener('click', async () => {
+  const st = document.getElementById('rlStatus');
+  const mails = id => document.getElementById(id).value.split(/[,;\s]+/).map(x => x.trim()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  const to = mails('rlTo'), cc = mails('rlCc');
+  if(!to.length){ st.className = 'err'; st.textContent = 'Indique au moins une adresse email valide.'; return; }
+  const subject = document.getElementById('rlSubject').value.trim();
+  if(!confirm(`Envoyer la relance à ${to.join(', ')}${cc.length ? ' (copie : ' + cc.join(', ') + ')' : ''} ?`)) return;
+  const btn = document.getElementById('rlSend');
+  btn.disabled = true; st.className = ''; st.textContent = 'Envoi…';
+  try{
+    const ed = document.getElementById('rlEditor');
+    const sent = await window.csbHost.emailSend({ to: to.join(', '), cc: cc.join(', '), subject, text: ed.innerText, html: ed.innerHTML });
+    st.className = 'ok'; st.textContent = 'Relance envoyée' + (sent && sent.from ? ' depuis ' + sent.from : '') + '.';
+  }catch(e){
+    st.className = 'err'; st.textContent = 'Échec : ' + e.message;
+  }finally{ btn.disabled = false; }
+});
 
 // ---------- Onglet Statistiques : chiffre d'affaires d'après les factures Axonaut ----------
 // Mêmes factures que l'onglet Factures (chargées une seule fois). Regroupement par mois d'une
@@ -6189,11 +6563,57 @@ function stRender(){
     <tbody>${d.clients.map(c => `<tr class="click" data-client="${fxEsc(c.name)}"><td>${fxEsc(c.name)}</td><td><div class="st-cbar" style="width:${d.clients[0].ca > 0 ? Math.max(0, c.ca / d.clients[0].ca * 100) : 0}%"></div></td><td class="n">${c.n}</td><td class="n">${fxEur(c.ca)}</td><td class="n">${total ? (c.ca / total * 100).toFixed(1).replace('.', ',') + ' %' : ''}</td><td class="n">${stDueCell(c.du, c.nd)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Total</td><td></td><td class="n">${n}</td><td class="n">${fxEur(total)}</td><td></td><td class="n">${stDueCell(d.clients.reduce((t, c) => t + c.du, 0), d.clients.reduce((t, c) => t + c.nd, 0))}</td></tr></tfoot></table>` : '<div style="color:var(--muted);">Aucune facture sur la période.</div>'}</div>`;
   const body = document.getElementById('stBody');
-  body.innerHTML = kpis + chart + (top ? `<div class="st-cols">${table}${top}</div>` : table);
+  body.innerHTML = kpis + chart + (top ? `<div class="st-cols">${table}${top}</div>` : table) + stUnpaidHtml();
+  stWireUnpaid(body);
   stDrawChart(d, amtLabel);
   // un clic sur une année ouvre ses mois ; sur un mois, ses jours ; sur un client, son détail
   body.querySelectorAll('tr.click[data-key]').forEach(tr => tr.addEventListener('click', () => stDrill(d, tr.dataset.key)));
   body.querySelectorAll('tr.click[data-client]').forEach(tr => tr.addEventListener('click', () => { document.getElementById('stClient').value = tr.dataset.client; stRender(); }));
+}
+// ---------- Factures non réglées : total par client, et ses factures à côté ----------
+// Toutes les factures Axonaut encore dues, quelle que soit la période choisie au-dessus.
+let stUnpaidClient = null;
+const stLateCls = j => j > 30 ? 'st-late3' : j >= 15 ? 'st-late2' : j > 0 ? 'st-late1' : '';
+function stUnpaidData(){
+  const list = (fxInvoices || []).filter(i => fxDuTTC(i) > 0.005);
+  const by = {};
+  list.forEach(i => {
+    const c = fxClient(i);
+    const g = by[c] = by[c] || { name: c, n: 0, ht: 0, ttc: 0, late: 0, inv: [] };
+    g.n++; g.ht += fxDuHT(i); g.ttc += fxDuTTC(i); g.late = Math.max(g.late, fxDaysLate(i)); g.inv.push(i);
+  });
+  const clients = Object.values(by).sort((a, b) => b.ttc - a.ttc);
+  clients.forEach(c => c.inv.sort((a, b) => fxIsoDay(a.date).localeCompare(fxIsoDay(b.date))));
+  return clients;
+}
+function stUnpaidHtml(){
+  const clients = stUnpaidData();
+  if(!clients.length) return `<div class="st-card"><h3>Factures non réglées</h3><div style="color:var(--muted);">Toutes les factures sont réglées.</div></div>`;
+  if(!clients.some(c => c.name === stUnpaidClient)) stUnpaidClient = clients[0].name;
+  const cur = clients.find(c => c.name === stUnpaidClient);
+  const sum = (arr, f) => arr.reduce((t, x) => t + f(x), 0);
+  const left = `<div class="st-card"><h3>Factures non réglées — par client <span class="st-legend">toutes périodes · clic sur un client pour voir ses factures</span></h3>
+    <table class="st-table"><thead><tr><th>Client</th><th class="n">Factures</th><th class="n">Reste dû HT</th><th class="n">Reste dû TTC</th><th class="n" title="Plus grand retard de paiement parmi ses factures">Retard max</th></tr></thead>
+    <tbody>${clients.map(c => `<tr class="click ${c === cur ? 'sel' : ''}" data-unpaid="${fxEsc(c.name)}"><td>${fxEsc(c.name)}</td><td class="n">${c.n}</td><td class="n">${fxEur(c.ht)}</td><td class="n fx-unpaid">${fxEur(c.ttc)}</td><td class="n"><span class="${stLateCls(c.late)}">${c.late ? c.late + ' j' : 'à échoir'}</span></td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total (${clients.length} clients)</td><td class="n">${sum(clients, c => c.n)}</td><td class="n">${fxEur(sum(clients, c => c.ht))}</td><td class="n">${fxEur(sum(clients, c => c.ttc))}</td><td></td></tr></tfoot></table></div>`;
+  const right = `<div class="st-card"><h3>${fxEsc(cur.name)} <span class="st-legend">${cur.n} facture(s) non réglée(s) · clic pour ouvrir la facture</span></h3>
+    <table class="st-table"><thead><tr><th>N°</th><th>Date</th><th>Échéance</th><th class="n">Retard</th><th class="n">Total TTC</th><th class="n">Reste dû TTC</th></tr></thead>
+    <tbody>${cur.inv.map(i => { const j = fxDaysLate(i); return `<tr class="click" data-inv="${fxEsc(i.id)}"><td>${fxEsc(i.number || '#' + i.id)}</td><td>${fxDate(i.date)}</td><td>${fxDate(i.due_date) || '—'}</td><td class="n"><span class="${stLateCls(j)}">${j ? j + ' j' : '—'}</span></td><td class="n">${fxEur(i.total)}</td><td class="n fx-unpaid">${fxEur(fxDuTTC(i))}</td></tr>`; }).join('')}</tbody>
+    <tfoot><tr><td colspan="4">Total</td><td class="n">${fxEur(sum(cur.inv, i => fxNum(i.total)))}</td><td class="n">${fxEur(cur.ttc)}</td></tr></tfoot></table></div>`;
+  return `<div class="st-cols" id="stUnpaid">${left}${right}</div>`;
+}
+function stWireUnpaid(body){
+  body.querySelectorAll('tr[data-unpaid]').forEach(tr => tr.addEventListener('click', () => {
+    stUnpaidClient = tr.dataset.unpaid;
+    const box = document.getElementById('stUnpaid');
+    box.outerHTML = stUnpaidHtml();
+    stWireUnpaid(document.getElementById('stBody'));
+  }));
+  body.querySelectorAll('tr[data-inv]').forEach(tr => tr.addEventListener('click', () => {
+    activateTab('factures');
+    fxSelectedId = tr.dataset.inv;
+    fxShowDetail(tr.dataset.inv);
+  }));
 }
 function stDueCell(du, nd){
   return du > 0.005 ? `<span class="fx-unpaid" title="${nd} facture(s) non réglée(s)">${fxEur(du)}</span>` : '<span style="color:var(--muted);">—</span>';

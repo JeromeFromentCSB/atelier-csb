@@ -2,6 +2,16 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.64', items: [
+    "Email : Répondre, Répondre à tous, Transférer et « ✏️ Nouveau message » (pièces jointes, signature, message d'origine cité) — la réponse reste dans la même conversation Gmail / Spark",
+    "Email : sélection de plusieurs mails (Ctrl+clic, Maj+clic, clic sur l'avatar, Ctrl+A) pour les supprimer, déplacer, marquer lus / non lus, épingler ou imprimer ensemble",
+    "Email : ouverture des mails beaucoup plus rapide (pièces jointes téléchargées au clic, mail préchargé au survol) et suppression instantanée ; en-tête du mail fixe en haut",
+    "Factures : bouton « ✉️ Relance » — mail de relance prêt à envoyer pour les factures non réglées d'un client (tableau, échéances, retards, liens vers les factures)",
+    "Factures : les sections apparaissent dans le détail d'une facture",
+    "Facturation : contrôle de la TVA selon le client — entreprise de l'UE avec n° de TVA ou client hors UE : facture HT (TVA 0 %) avec la mention légale",
+    "Statistiques : factures non réglées par client, avec la liste des factures du client choisi",
+    "Clic droit : Copier / Couper / Coller dans toute l'appli, et propositions du correcteur orthographique (en français)",
+  ]},
   { v: '0.2.63', items: [
     "Bon de fabrication : QR codes de scan — « Commande » sous la date (ouvre la commande sur l'ordinateur), « Valider » sur chaque ligne (fabrication terminée) et « Expédition » en bas",
     "Gestion Commande : bouton « 🔫 Scanner » et prise en charge des douchettes 2D (même réglées en clavier QWERTY) — lignes cochées, expédition notée (🚚, heure et personne), bandeau et bip de confirmation",
