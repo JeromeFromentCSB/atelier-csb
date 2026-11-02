@@ -58,6 +58,8 @@
     ] },
     { id: 'recherche_editeur', label: 'Recherche / Éditeur', icon: '🔎', path: '../../modules/recherche_editeur/index.html', perms: [] },
     { id: 'simulateur', label: 'Simulateur', icon: '👕', path: '../../modules/simulateur/index.html', perms: [] },
+    // FilTrace : image / texte / modèle → fichier de broderie (DST, PES, JEF, EXP, VP3).
+    { id: 'filtrace', label: 'FilTrace', icon: '🪡', path: '../../modules/filtrace/index.html', perms: [] },
     { id: 'prospection', label: 'Prospection', icon: '📍', path: '../../modules/prospection/index.html', perms: [] },
     { id: 'pointage', label: 'Pointage', icon: '🕒', path: '../../modules/pointage/index.html', perms: [] },
     { id: 'email', label: 'Email', icon: '✉️', path: '../../modules/email/index.html', perms: [] },

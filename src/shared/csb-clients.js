@@ -186,6 +186,9 @@
       }catch(e){ status('Impossible de charger la fiche : ' + e.message, 'err'); }
     }else{
       field('name').value = opts.prefillName || '';
+      // Pré-remplissage facultatif (ex. module Prospection) : champs de la fiche et premier contact.
+      if(opts.prefill) Object.entries(opts.prefill).forEach(([k, v]) => { const f = field(k); if(f && v != null && v !== '') f.value = v; });
+      if(opts.prefillContact) contacts = [opts.prefillContact];
     }
     renderContacts();
     field('name').focus();

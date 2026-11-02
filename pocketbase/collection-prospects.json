@@ -1,0 +1,101 @@
+[
+  {
+    "id": "pbc_3916402871",
+    "name": "prospects",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\"",
+    "deleteRule": "@request.auth.id != \"\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "primaryKey": true,
+        "required": true,
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "pattern": "^[a-z0-9]+$",
+        "min": 15,
+        "max": 15,
+        "hidden": false,
+        "presentable": false
+      },
+      {
+        "id": "text2900010001",
+        "name": "nom",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 300,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text2900010002",
+        "name": "siret",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 20,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text2900010003",
+        "name": "statut",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 30,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text2900010004",
+        "name": "relance",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 20,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text2900010005",
+        "name": "modifie_par",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 120,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "json2900010006",
+        "name": "data",
+        "type": "json",
+        "required": false,
+        "maxSize": 2000000
+      },
+      {
+        "id": "autodate2900010007",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      },
+      {
+        "id": "autodate2900010008",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true
+      }
+    ],
+    "indexes": []
+  }
+]

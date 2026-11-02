@@ -6721,6 +6721,19 @@ function openInDevisTab(payload){
 async function handleGestionCommandeRequest(payload){
   if(!payload) return;
   if(payload.openDevis){ openInDevisTab(payload.openDevis); return; }
+  // « Préparer une relance » depuis la fiche d'un client (module Clients)
+  if(payload.factureClient){
+    activateTab('factures');
+    await fxOpen();
+    document.getElementById('fxPaid').value = 'unpaid';
+    ['fxFrom','fxTo','fxAmount','fxNumber'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('fxClient').value = '';
+    fxRender();
+    const sel = document.getElementById('fxClient');
+    const opt = [...sel.options].find(o => o.value === payload.factureClient);
+    if(opt){ sel.value = opt.value; fxRender(); openRelance(); }
+    return;
+  }
   // retour après « Facturer dans Axonaut » lancé depuis la fiche commande
   if(payload.invoiced){ await refreshAll(); await jumpToCommande(payload.invoiced); return; }
   if(payload.contractId){

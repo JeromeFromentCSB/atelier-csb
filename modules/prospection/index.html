@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prospection CSB — Mairies &amp; Associations</title>
+<title>Prospection CSB</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&display=swap">
@@ -215,11 +215,120 @@
   }
   .badge{font-size:11px;color:var(--muted);}
   small.hint{color:var(--muted);display:block;margin-top:6px;font-size:11.5px;}
+  /* ---- onglets + suivi des appels ---- */
+  .maintabs{display:flex;gap:4px;margin-bottom:16px;padding:4px;border-radius:12px;background:linear-gradient(135deg, var(--ink), var(--thread));width:max-content;max-width:100%;}
+  .maintabs button{background:transparent;color:rgba(255,255,255,.7);padding:8px 18px;font-size:14px;border-radius:9px;display:flex;align-items:center;gap:8px;}
+  .maintabs button:hover{color:#fff;filter:none;background:rgba(255,255,255,.08);}
+  .maintabs button.active{background:var(--paper);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.2);}
+  .pbadge{background:var(--thread);color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;min-width:20px;text-align:center;}
+  .pbadge[hidden]{display:none;}
+  #pBanner{background:#FFF7E6;border:1px solid #EBC77A;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;}
+  #pBanner[hidden]{display:none;}
+  #pBanner code{background:#fff;padding:1px 5px;border-radius:4px;}
+  .pkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px;}
+  .pkpi{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:2px;font-weight:500;}
+  .pkpi:hover{filter:none;border-color:#c9c2ad;background:#fffdf8;}
+  .pkpi.on{border-color:var(--thread);box-shadow:inset 0 0 0 1px var(--thread);}
+  .pkpi b{font-family:var(--font-display);font-size:26px;line-height:1;color:var(--thread-dark);}
+  .pkpi span{font-size:12px;color:var(--muted);}
+  .pkpi em{font-size:11.5px;color:#B42318;font-style:normal;font-weight:600;}
+  .ptool{align-items:center;margin-bottom:12px;}
+  .pviews{display:flex;border:1px solid #c9c2ad;border-radius:8px;overflow:hidden;}
+  .pviews button{background:#fff;color:var(--ink);border-radius:0;padding:8px 12px;font-weight:500;}
+  .pviews button + button{border-left:1px solid #e5dfd2;}
+  .pviews button.active{background:var(--ink);color:#fff;}
+  #pSearch{min-width:240px;flex:1;}
+  button.on{background:#efe6d5;}
+  #pScriptBox{margin-bottom:12px;}
+  #pScriptBox[hidden]{display:none;}
+  #pScriptBox textarea, #pdNote, .pf textarea{width:100%;min-height:90px;border:1px solid #c9c2ad;border-radius:6px;padding:8px 10px;font:inherit;font-size:13.5px;resize:vertical;}
+  .ptable{width:100%;border-collapse:collapse;font-size:13px;}
+  .ptable th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--line);padding:7px 8px;}
+  .ptable td{border-bottom:1px solid #efece3;padding:9px 8px;vertical-align:top;}
+  .ptable tbody tr{cursor:pointer;}
+  .ptable tbody tr:hover{background:#faf7f0;}
+  .ptable tr.late td:first-child{box-shadow:inset 3px 0 0 #B42318;}
+  .psub{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .pmuted{color:var(--muted);font-size:12px;}
+  .plate{color:#B42318;font-weight:600;}
+  .ptel{color:var(--thread-dark);font-weight:600;text-decoration:none;white-space:nowrap;}
+  .ptel:hover{text-decoration:underline;}
+  .ppill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:10px;color:var(--c);background:color-mix(in srgb, var(--c) 13%, #fff);border:1px solid color-mix(in srgb, var(--c) 35%, #fff);white-space:nowrap;}
+  .pcount{font-size:11.5px;color:var(--muted);margin-top:8px;}
+  .pempty{padding:28px 10px;text-align:center;color:var(--muted);font-size:13.5px;}
+  #pDrawerBg{position:fixed;inset:0;background:rgba(33,28,22,.35);z-index:50;display:flex;justify-content:flex-end;}
+  #pDrawerBg[hidden]{display:none;}
+  #pDrawer{width:min(560px,100%);height:100%;overflow-y:auto;background:var(--paper);box-shadow:-8px 0 30px rgba(0,0,0,.18);padding:18px 20px 30px;}
+  .pd-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;}
+  .pd-head h3{font-family:var(--font-display);font-size:21px;margin:0;line-height:1.2;}
+  .pd-head button{padding:6px 11px;}
+  .pd-call{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:12px;}
+  .pbig{background:linear-gradient(135deg, var(--ink), var(--thread));color:#fff;text-decoration:none;font-weight:700;padding:9px 14px;border-radius:8px;font-size:15px;}
+  .pbig.light{background:#fff;color:var(--ink);border:1px solid #c9c2ad;font-size:13px;font-weight:600;}
+  .pd-sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;}
+  .pd-sec h4{margin:0 0 10px;font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--thread-dark);}
+  .pd-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:8px 0;}
+  .pchips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+  .pchip{background:#fff;color:var(--ink);border:1px solid #c9c2ad;border-radius:16px;padding:6px 11px;font-weight:500;font-size:12.5px;}
+  .pchip:hover{filter:none;background:#f5efe3;}
+  .pchip.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .pchips.small .pchip{padding:4px 9px;font-size:11.5px;}
+  .pf{display:flex;flex-direction:column;gap:4px;font-size:12px;}
+  .pf span{color:var(--muted);font-weight:600;font-size:11.5px;}
+  .pf input, .pf select{min-width:0;width:100%;padding:7px 9px;font-size:13.5px;border:1px solid #c9c2ad;border-radius:6px;background:#fff;font-family:inherit;}
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .pgrid .wide{grid-column:1 / -1;}
+  .phist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .phist li{border-left:3px solid var(--line);padding:2px 0 2px 10px;font-size:13px;}
+  .pnote{white-space:pre-wrap;margin-top:2px;}
+  .pd-foot{display:flex;gap:10px;flex-wrap:wrap;}
+  .ptoast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;font-size:13.5px;opacity:0;pointer-events:none;transition:all .2s;z-index:80;max-width:90%;}
+  .ptoast.show{opacity:1;transform:translateX(-50%);}
+  .ptoast.bad{background:#B42318;}
+  .plinkedin{margin-top:4px;align-items:center;}
+  .plinkedin a{border-color:#9DB8D9;color:#0A66C2;}
+  .addsuivi{white-space:nowrap;}
+  .addsuivi.done{color:var(--green);}
+  [hidden]{display:none !important;}
 </style>
 </head>
 <body>
 
 <div class="wrap">
+
+  <nav class="maintabs" id="mainTabs">
+    <button data-tab="suivi">📞 Suivi des appels <span class="pbadge" id="pDueBadge" hidden></span></button>
+    <button data-tab="find">🔎 Trouver des prospects</button>
+  </nav>
+
+  <div id="tabSuivi" hidden>
+    <div id="pBanner" hidden></div>
+    <div class="pkpis" id="pKpis"></div>
+    <div class="panel">
+      <div class="row ptool">
+        <div class="pviews" id="pViews">
+          <button data-vue="todo">À appeler</button>
+          <button data-vue="open">En cours</button>
+          <button data-vue="closed">Terminés</button>
+          <button data-vue="all">Tous</button>
+        </div>
+        <input type="text" id="pSearch" placeholder="Rechercher : nom, ville, contact, téléphone…">
+        <select id="pStatut"></select>
+        <button id="pNew">＋ Nouveau prospect</button>
+        <button class="secondary" id="pImport" title="Fichier Excel ou CSV avec au moins une colonne Nom (Téléphone, Email, Contact, Ville… reconnus automatiquement)">Importer</button>
+        <input type="file" id="pImportFile" accept=".xlsx,.xls,.csv" hidden>
+        <button class="secondary" id="pExport" title="Exporte la vue affichée en Excel">Exporter</button>
+        <button class="secondary" id="pScriptBtn" title="Votre texte d'appel, à garder sous les yeux">🗒 Argumentaire</button>
+      </div>
+      <div id="pScriptBox" hidden>
+        <textarea id="pScript" placeholder="Votre argumentaire d'appel, par ex. :&#10;Bonjour, Jérôme de L'Atelier CSB, atelier de broderie à … Je vous appelle car nous brodons les tenues de clubs / associations / entreprises de la région…&#10;Questions : qui s'occupe des tenues ? Quand renouvelez-vous ? Combien de pièces ? …"></textarea>
+        <small class="hint">Gardé sur ce poste.</small>
+      </div>
+      <div id="pList"></div>
+    </div>
+  </div>
+
+  <div id="tabFind" hidden>
 
   <div class="panel">
     <h2>1. Zone de recherche</h2>
@@ -289,6 +398,7 @@
     <span class="badge" id="selCount">0 ligne(s) sélectionnée(s)</span>
     <button class="secondary" id="btnSelectAll">Tout sélectionner</button>
     <button class="secondary" id="btnSelectNone">Tout désélectionner</button>
+    <button data-add-suivi="selection">📞 Ajouter la sélection au suivi</button>
     <select id="exportFormat">
       <option value="axonaut_csv">Export CSV — modèle import Axonaut (sociétés)</option>
       <option value="generic_csv">Export CSV — générique (toutes colonnes)</option>
@@ -298,7 +408,11 @@
     <button class="secondary" id="btnClearAll" style="margin-left:auto;">🗑 Vider toutes les données enregistrées</button>
   </div>
 
+  </div><!-- /tabFind -->
 </div>
+
+<div id="pDrawerBg" hidden><aside id="pDrawer"></aside></div>
+<div class="ptoast" id="pToast"></div>
 
 <script>
 /* =========================================================================
@@ -938,6 +1052,7 @@ function renderMairieListInner(){
           <div><span class="lbl">Email mairie</span>${esc(c.email)||'—'}</div>
           <div><span class="lbl">Site web</span>${c.web?`<a href="${esc(c.web)}" target="_blank">${esc(c.web)}</a>`:'—'}</div>
           <div><span class="lbl">Adresse</span>${esc(c.adresse)||'—'}</div>
+          <div><span class="lbl">Suivi des appels</span>${(typeof mairieInSuivi === 'function' && mairieInSuivi(m)) ? `<button class="ghost addsuivi done" data-add-suivi="mairie" data-code="${esc(m.code)}">✓ Ouvrir la fiche</button>` : `<button class="ghost addsuivi" data-add-suivi="mairie" data-code="${esc(m.code)}">＋ Ajouter la mairie</button>`}</div>
         </div>
         <div class="orgs-holder"></div>
       </div>`;
@@ -964,7 +1079,7 @@ function renderOrgsTable(holder, mairie, orgs){
   table.innerHTML = `
     <thead><tr>
       <th></th><th>Type</th><th>Nom</th><th>Activité (NAF)</th><th>Adresse</th>
-      <th>Téléphone</th><th>Email</th><th>Contact évènement</th><th>Recherche</th>
+      <th>Téléphone</th><th>Email</th><th>Contact évènement</th><th>Recherche</th><th>Suivi</th>
     </tr></thead><tbody></tbody>`;
   const tbody = table.querySelector('tbody');
   orgs.sort((a,b)=> (a.type||'').localeCompare(b.type||'') || (a.nom||'').localeCompare(b.nom||''));
@@ -991,7 +1106,9 @@ function renderOrgsTable(holder, mairie, orgs){
         <a href="${pj}" target="_blank">P.Jaunes</a>
         <a href="${gsearch}" target="_blank">Google</a>
         <a href="${socCom}" target="_blank">Societe.com</a>
-      </td>${o.manualStub ? '<td style="color:var(--thread-dark);font-size:10.5px;">Fiche à compléter (non retrouvée automatiquement)</td>' : ''}`;
+        <a href="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(o.nom)}" target="_blank">LinkedIn</a>
+      </td>
+      <td>${(typeof orgInSuivi === 'function' && orgInSuivi(o)) ? `<button class="ghost addsuivi done" data-add-suivi="org" data-siret="${esc(o.siret)}" title="Ouvrir la fiche de suivi">✓ Suivi</button>` : `<button class="ghost addsuivi" data-add-suivi="org" data-siret="${esc(o.siret)}" title="Ajouter au suivi des appels">＋ Suivi</button>`}</td>${o.manualStub ? '<td style="color:var(--thread-dark);font-size:10.5px;">Fiche à compléter (non retrouvée automatiquement)</td>' : ''}`;
     tr.querySelector('.rowSel').addEventListener('change', e=>{
       o.selected = e.target.checked;
       tr.classList.toggle('selected', o.selected);
@@ -1093,5 +1210,9 @@ if(Object.keys(state.mairies).length){
   setStatus('statusCommunes', `${Object.keys(state.mairies).length} mairie(s) rechargée(s) depuis la session précédente.`, 'ok');
 }
 </script>
+<script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-clients.js"></script>
+<script src="suivi.js"></script>
 </body>
 </html>

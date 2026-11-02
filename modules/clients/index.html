@@ -31,6 +31,36 @@
   .tag{ display:inline-block; font-size:11px; font-weight:600; border-radius:999px; padding:2px 8px; }
   .tag.client{ background:#E4EFE6; color:#3E7A52; } .tag.prospect{ background:#EAF0F8; color:#2D5B9A; } .tag.off{ background:#F1ECE4; color:#8A8074; }
   .empty{ text-align:center; color:var(--muted); padding:30px; background:#fff; border-radius:12px; }
+  .cname{ color:var(--ink); cursor:pointer; text-decoration:none; }
+  .cname:hover{ color:var(--accent); text-decoration:underline; }
+  tr[data-row]{ cursor:pointer; }
+  /* ---------- Fiche client ---------- */
+  #ficheOverlay{ display:none; position:fixed; inset:0; background:rgba(33,28,22,.55); z-index:100; align-items:flex-start; justify-content:center; padding:24px 16px; overflow:auto; }
+  #ficheOverlay.show{ display:flex; }
+  .fiche{ background:var(--bg); border-radius:14px; width:min(1050px,100%); box-shadow:0 20px 60px rgba(0,0,0,.35); overflow:hidden; }
+  .fiche-head{ display:flex; align-items:flex-start; gap:12px; padding:18px 22px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; }
+  .fiche-head h2{ font-family:var(--font-display); font-size:22px; margin:0; }
+  .fiche-body{ padding:16px 22px 24px; display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; }
+  .fcard{ background:#fff; border-radius:12px; padding:14px 16px; box-shadow:0 1px 2px rgba(33,28,22,.05); }
+  .fcard.wide{ grid-column:1 / -1; }
+  .fcard h3{ margin:0 0 10px; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+  .kv{ display:grid; grid-template-columns:130px 1fr; gap:4px 10px; font-size:13px; }
+  .kv .k{ color:var(--muted); }
+  .kv .v{ overflow-wrap:anywhere; }
+  .kpis{ display:flex; gap:10px; flex-wrap:wrap; }
+  .kpi{ flex:1; min-width:140px; background:var(--bg); border-radius:10px; padding:10px 12px; }
+  .kpi .n{ font-size:18px; font-weight:700; } .kpi .l{ font-size:11.5px; color:var(--muted); }
+  .kpi.warn .n{ color:var(--accent); }
+  .fcard table{ box-shadow:none; border-radius:0; font-size:12.5px; }
+  .fcard th{ background:#F6F2EA; padding:7px 8px; } .fcard td{ padding:6px 8px; }
+  .r{ text-align:right; white-space:nowrap; }
+  .late{ color:var(--accent); font-weight:600; }
+  .contact{ border-top:1px solid var(--line); padding:8px 0; font-size:13px; }
+  .contact:first-of-type{ border-top:none; padding-top:0; }
+  .contact a, .fcard a{ color:#2D5B9A; }
+  .badge{ display:inline-block; font-size:10.5px; font-weight:600; border-radius:999px; padding:1px 7px; background:#EAF0F8; color:#2D5B9A; margin-left:4px; }
+  .note{ white-space:pre-wrap; font-size:13px; }
+  .loadingtxt{ color:var(--muted); font-size:12.5px; }
 </style>
 </head>
 <body>
@@ -48,6 +78,8 @@
   </div>
   <div id="list"><div class="empty">Chargement…</div></div>
 </div>
+
+<div id="ficheOverlay"><div class="fiche" id="fiche"></div></div>
 
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
@@ -70,15 +102,16 @@ function renderList(){
   if(!rows.length){ box.innerHTML = `<div class="empty">${loading ? 'Chargement…' : 'Aucun client trouvé.'}</div>`; return; }
   box.innerHTML = `<table>
     <thead><tr><th>Nom</th><th>Adresse</th><th>SIRET</th><th>Type</th><th></th></tr></thead>
-    <tbody>${rows.map(c => `<tr>
-      <td><strong>${esc(c.name)}</strong></td>
+    <tbody>${rows.map(c => `<tr data-row="${c.id}">
+      <td><a class="cname" data-fiche="${c.id}" title="Voir la fiche du client"><strong>${esc(c.name)}</strong></a></td>
       <td>${esc([c.address_street, [c.address_zip_code, c.address_city].filter(Boolean).join(' ')].filter(Boolean).join(' — '))}</td>
       <td>${esc(c.siret || '')}</td>
       <td>${typeTag(c)}</td>
       <td style="text-align:right;">${canEdit() ? `<button class="small" data-edit="${c.id}">✏️ Modifier</button>` : ''}</td>
     </tr>`).join('')}</tbody></table>
     <div class="muted" style="margin-top:8px;">${rows.length} ${typeLabel()}${loading ? ' — chargement de la suite…' : ''}</div>`;
-  box.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editClient(b.dataset.edit)));
+  box.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); editClient(b.dataset.edit); }));
+  box.querySelectorAll('tr[data-row]').forEach(tr => tr.addEventListener('click', () => openFiche(tr.dataset.row)));
 }
 // Sans recherche : toute la liste du type choisi (clients, prospects ou les deux), page par page,
 // gardée en mémoire le temps de la session. Avec une recherche : la recherche Axonaut, même filtre.
@@ -138,9 +171,175 @@ function editClient(id){
       return;
     }
     if(i >= 0){ results[i] = Object.assign({}, results[i], c); renderList(); }
+    if(ficheId && String(ficheId) === String(id)) openFiche(id);
     Object.values(listCache).forEach(list => { const j = list.findIndex(r => String(r.id) === String(id)); if(j >= 0) list[j] = Object.assign({}, list[j], c); });
   } });
 }
+// ================== Fiche client ==================
+// Tout ce qu'Axonaut sait du client : identité, adresses, contacts, chiffre d'affaires, factures
+// (dont celles en attente de règlement), devis (appli et Axonaut), historique des échanges.
+let ficheId = null, ficheRun = 0;
+const eur = v => (Number(v) || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+const fdate = v => { if(!v) return ''; const d = new Date(v); return isNaN(d) ? String(v).slice(0, 10) : d.toLocaleDateString('fr-FR'); };
+const STATUT_DEVIS = { brouillon:'Brouillon', envoye:'Envoyé', accepte:'Commande', facture:'Facturé', refuse:'Refusé', annule:'Annulé' };
+const STATUT_AX = { pending:'En attente', accepted:'Accepté', refused:'Refusé', draft:'Brouillon', sent:'Envoyé', canceled:'Annulé' };
+// Toutes les pages d'une liste Axonaut. Axonaut peut renvoyer la même page plusieurs fois (ou
+// ignorer le n° de page) : chaque élément n'est gardé qu'une fois, et on s'arrête dès qu'une page
+// n'apporte rien de nouveau.
+async function axAll(path, maxPages){
+  const seen = new Set(); const all = [];
+  for(let page = 1; page <= (maxPages || 10); page++){
+    const arr = asArray(await CSBClients.axonaut(path + (path.includes('?') ? '&' : '?') + 'page=' + page));
+    const fresh = arr.filter(x => x && x.id != null && !seen.has(String(x.id)));
+    if(!fresh.length) break;
+    fresh.forEach(x => { seen.add(String(x.id)); all.push(x); });
+  }
+  return all;
+}
+function daysLate(inv){
+  if(!(Number(inv.outstanding_amount) > 0.001) || !inv.due_date) return 0;
+  const d = Math.floor((Date.now() - new Date(inv.due_date).getTime()) / 86400000);
+  return Math.max(0, d);
+}
+function openLink(url){
+  if(!url) return;
+  try{ if(window.csbHost && window.csbHost.openExternal) { window.csbHost.openExternal(url); return; } }catch(e){}
+  window.open(url, '_blank');
+}
+function toParent(module, payload){
+  if(window.parent === window){ alert("Disponible dans l'application Atelier CSB."); return; }
+  window.parent.postMessage({ type: 'csb:open-module', module, payload }, '*');
+}
+function ficheClose(){ document.getElementById('ficheOverlay').classList.remove('show'); ficheId = null; }
+async function openFiche(id){
+  ficheId = id;
+  const run = ++ficheRun;
+  const base = results.find(r => String(r.id) === String(id)) || { id, name: '' };
+  const box = document.getElementById('fiche');
+  document.getElementById('ficheOverlay').classList.add('show');
+  const card = (key, title, wide) => `<div class="fcard ${wide ? 'wide' : ''}" id="fc-${key}"><h3>${title}</h3><div class="loadingtxt">Chargement…</div></div>`;
+  box.innerHTML = `<div class="fiche-head">
+      <div style="flex:1; min-width:0;"><h2 id="fName">${esc(base.name)}</h2><div class="muted" id="fSub">${typeTag(base)}</div></div>
+      ${canEdit() ? '<button id="fEdit">✏️ Modifier</button>' : ''}
+      <button id="fClose" title="Fermer (Échap)">✕</button>
+    </div>
+    <div class="fiche-body">
+      ${card('kpi', "Chiffre d'affaires et règlements", true)}
+      ${card('id', 'Identité')}
+      ${card('addr', 'Adresses')}
+      ${card('contacts', 'Contacts')}
+      ${card('unpaid', 'Factures en attente de règlement', true)}
+      ${card('inv', 'Dernières factures', true)}
+      ${card('devis', 'Devis', true)}
+      ${card('events', 'Historique des échanges (Axonaut)', true)}
+    </div>`;
+  document.getElementById('fClose').addEventListener('click', ficheClose);
+  const ed = document.getElementById('fEdit'); if(ed) ed.addEventListener('click', () => editClient(id));
+  const set = (key, html) => { if(run !== ficheRun) return; const el = document.querySelector('#fc-' + key + ' .loadingtxt, #fc-' + key + ' .content'); if(el){ el.outerHTML = `<div class="content">${html}</div>`; } };
+  const fail = (key, e) => set(key, `<span class="loadingtxt">Indisponible : ${esc(e.message || e)}</span>`);
+
+  // --- identité
+  CSBClients.axonaut('/companies/' + id).then(co => {
+    if(run !== ficheRun) return;
+    document.getElementById('fName').textContent = co.name || base.name;
+    const since = co.creation_date ? ' · client depuis le ' + fdate(co.creation_date) : '';
+    document.getElementById('fSub').innerHTML = typeTag(co) + (co.isB2C ? ' <span class="badge">particulier</span>' : '') + `<span class="muted">${esc(since)}</span>`;
+    const row = (k, v) => v ? `<div class="k">${k}</div><div class="v">${v}</div>` : '';
+    const cats = (co.categories || []).map(c => esc(c.name || c)).join(', ');
+    const custom = co.custom_fields && typeof co.custom_fields === 'object' ? Object.entries(co.custom_fields).filter(([, v]) => v !== '' && v != null).map(([k, v]) => row(esc(k), esc(typeof v === 'object' ? JSON.stringify(v) : v))).join('') : '';
+    set('id', `<div class="kv">
+      ${row('Adresse', esc([co.address_street, [co.address_zip_code, co.address_city].filter(Boolean).join(' '), co.address_country].filter(Boolean).join(', ')))}
+      ${row('SIRET', esc(co.siret))}
+      ${row('N° TVA intracom.', esc(co.intracommunity_number))}
+      ${row('Code tiers', esc(co.thirdparty_code))}
+      ${row('Réf. interne', esc(co.internal_id))}
+      ${row('IBAN', esc(co.iban))}${row('BIC', esc(co.bic))}
+      ${row('Langue / devise', esc([co.language, co.currency].filter(Boolean).join(' / ')))}
+      ${row('Commercial', esc(co.business_manager && (co.business_manager.name || co.business_manager.email || co.business_manager)))}
+      ${row('Catégories', cats)}
+      ${custom}
+    </div>${co.comments ? `<div style="margin-top:10px;"><div class="muted" style="margin-bottom:3px;">Commentaire</div><div class="note">${esc(String(co.comments).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''))}</div></div>` : ''}`);
+  }).catch(e => fail('id', e));
+
+  // --- adresses
+  CSBClients.axonaut('/companies/' + id + '/addresses').then(r => {
+    const arr = asArray(r);
+    set('addr', arr.length ? arr.map(a => {
+      const roles = [a.is_for_invoice && 'facturation', a.is_for_delivery && 'livraison', a.is_for_quotation && 'devis'].filter(Boolean).map(x => `<span class="badge">${x}</span>`).join('');
+      return `<div class="contact"><b>${esc(a.name || a.company_name || 'Adresse')}</b>${roles}<br>${esc([a.contact_name, a.address_street, [a.address_zip_code, a.address_city].filter(Boolean).join(' '), a.address_country].filter(Boolean).join(', '))}</div>`;
+    }).join('') : '<span class="loadingtxt">Aucune adresse supplémentaire.</span>');
+  }).catch(e => fail('addr', e));
+
+  // --- contacts
+  CSBClients.axonaut('/companies/' + id + '/employees').then(r => {
+    const arr = asArray(r);
+    set('contacts', arr.length ? arr.map(e => {
+      const name = [e.gender, e.firstname, e.lastname].filter(Boolean).join(' ') || e.email || 'Contact';
+      return `<div class="contact"><b>${esc(name)}</b>${e.is_billing_contact ? '<span class="badge">facturation</span>' : ''}${e.job ? ` <span class="muted">— ${esc(e.job)}</span>` : ''}
+        ${e.email ? `<br>✉️ <a href="#" data-mail="${esc(e.email)}" title="Écrire depuis le module Email">${esc(e.email)}</a>` : ''}
+        ${e.phone_number ? `<br>☎️ ${esc(e.phone_number)}` : ''}${e.cellphone_number ? `<br>📱 ${esc(e.cellphone_number)}` : ''}</div>`;
+    }).join('') : '<span class="loadingtxt">Aucun contact.</span>');
+    document.querySelectorAll('#fc-contacts [data-mail]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); toParent('email', { compose: { to: a.dataset.mail } }); }));
+  }).catch(e => fail('contacts', e));
+
+  // --- factures : CA, impayés, dernières
+  axAll('/companies/' + id + '/invoices', 20).then(invs => {
+    invs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    const ht = i => (Number(i.total) || 0) - (Number(i.tax_amount) || 0);
+    const y = new Date().getFullYear();
+    const sumYear = yr => invs.filter(i => String(i.date || '').startsWith(String(yr))).reduce((t, i) => t + ht(i), 0);
+    const unpaid = invs.filter(i => Number(i.outstanding_amount) > 0.001);
+    const due = unpaid.reduce((t, i) => t + Number(i.outstanding_amount), 0);
+    const late = unpaid.filter(i => daysLate(i) > 0);
+    const dueLate = late.reduce((t, i) => t + Number(i.outstanding_amount), 0);
+    const total = invs.reduce((t, i) => t + ht(i), 0);
+    // délai moyen de règlement (factures réglées)
+    const paid = invs.filter(i => i.paid_date && i.date);
+    const delay = paid.length ? Math.round(paid.reduce((t, i) => t + (new Date(i.paid_date) - new Date(i.date)) / 86400000, 0) / paid.length) : null;
+    set('kpi', `<div class="kpis">
+      <div class="kpi"><div class="n">${eur(sumYear(y))}</div><div class="l">CA HT ${y}</div></div>
+      <div class="kpi"><div class="n">${eur(sumYear(y - 1))}</div><div class="l">CA HT ${y - 1}</div></div>
+      <div class="kpi"><div class="n">${eur(total)}</div><div class="l">CA HT total · ${invs.length} facture(s)</div></div>
+      <div class="kpi ${due > 0.001 ? 'warn' : ''}"><div class="n">${eur(due)}</div><div class="l">Reste à régler TTC${late.length ? ` · dont ${eur(dueLate)} en retard` : ''}</div></div>
+      <div class="kpi"><div class="n">${delay != null ? delay + ' j' : '—'}</div><div class="l">Délai moyen de règlement</div></div>
+      <div class="kpi"><div class="n">${invs[0] ? fdate(invs[0].date) : '—'}</div><div class="l">Dernière facture</div></div>
+    </div>`);
+    const invTable = list => `<table><thead><tr><th>Facture</th><th>Date</th><th>Échéance</th><th class="r">Total TTC</th><th class="r">Reste dû</th><th></th></tr></thead><tbody>${list.map(i => {
+      const d = daysLate(i);
+      return `<tr><td><b>${esc(i.number || '#' + i.id)}</b></td><td>${fdate(i.date)}</td><td>${fdate(i.due_date)}${d ? ` <span class="late">+${d} j</span>` : ''}</td>
+        <td class="r">${eur(i.total)}</td><td class="r ${Number(i.outstanding_amount) > 0.001 ? 'late' : ''}">${Number(i.outstanding_amount) > 0.001 ? eur(i.outstanding_amount) : '<span class="muted">réglée</span>'}</td>
+        <td class="r">${i.public_path ? `<a href="#" data-open="${esc(i.public_path)}">📄 PDF</a>` : ''}</td></tr>`;
+    }).join('')}</tbody></table>`;
+    set('unpaid', unpaid.length ? invTable(unpaid) + `<div style="margin-top:8px;"><button class="small" id="fRelance">✉️ Préparer une relance</button> <span class="muted">(onglet Factures de Gestion Commande)</span></div>` : '<span class="loadingtxt">Aucune facture en attente de règlement. 👍</span>');
+    set('inv', invs.length ? invTable(invs.slice(0, 12)) + (invs.length > 12 ? `<div class="muted" style="margin-top:6px;">… et ${invs.length - 12} facture(s) plus ancienne(s).</div>` : '') : '<span class="loadingtxt">Aucune facture.</span>');
+    document.querySelectorAll('#fiche [data-open]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openLink(a.dataset.open); }));
+    const rl = document.getElementById('fRelance');
+    if(rl) rl.addEventListener('click', () => toParent('axonaut', { factureClient: (invs[0] && invs[0].company && invs[0].company.name) || document.getElementById('fName').textContent }));
+  }).catch(e => { fail('kpi', e); fail('unpaid', e); fail('inv', e); });
+
+  // --- devis : ceux de l'appli (module Devis) puis ceux d'Axonaut
+  Promise.all([
+    CSBAuth.authedFetch(CSBAuth.getPbUrl().replace(/\/+$/, '') + '/api/collections/devis/records?perPage=50&sort=-updated&fields=id,numero,statut,date_devis,total_ht,axonaut_facture_numero,data&filter=' + encodeURIComponent(`(client_id=${Number(id)})`))
+      .then(r => r.ok ? r.json() : { items: [] }).then(j => j.items || []).catch(() => []),
+    axAll('/companies/' + id + '/quotations?sort=-date', 3).catch(() => [])
+  ]).then(([mine, ax]) => {
+    const rows = mine.map(r => `<tr><td><a href="#" data-devis="${esc(r.id)}"><b>${esc(r.numero || 'brouillon')}</b></a></td><td>${esc((r.data && r.data.title) || '')}</td><td>${fdate(r.date_devis)}</td><td>${esc(STATUT_DEVIS[r.statut] || r.statut || '')}${r.axonaut_facture_numero ? ' · ' + esc(r.axonaut_facture_numero) : ''}</td><td class="r">${eur(r.total_ht)} HT</td><td class="muted">appli</td></tr>`)
+      .concat(ax.slice(0, 15).map(q => `<tr><td>${q.public_path ? `<a href="#" data-open="${esc(q.public_path)}"><b>${esc(q.number || '#' + q.id)}</b></a>` : `<b>${esc(q.number || '#' + q.id)}</b>`}</td><td>${esc(q.title || '')}</td><td>${fdate(q.date)}</td><td>${esc(STATUT_AX[q.status] || q.status || '')}</td><td class="r">${eur(q.pre_tax_amount)} HT</td><td class="muted">Axonaut</td></tr>`));
+    set('devis', rows.length ? `<table><thead><tr><th>N°</th><th>Objet</th><th>Date</th><th>État</th><th class="r">Montant</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<span class="loadingtxt">Aucun devis.</span>');
+    document.querySelectorAll('#fc-devis [data-devis]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); toParent('devis', { recId: a.dataset.devis }); }));
+    document.querySelectorAll('#fc-devis [data-open]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openLink(a.dataset.open); }));
+  });
+
+  // --- historique (mails, appels, notes enregistrés dans Axonaut)
+  axAll('/companies/' + id + '/events', 2).then(evs => {
+    evs.sort((a, b) => (Number(b.timestamp) || new Date(b.date).getTime() / 1000) - (Number(a.timestamp) || new Date(a.date).getTime() / 1000));
+    const strip = h => String(h || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    set('events', evs.length ? `<table><tbody>${evs.slice(0, 15).map(ev => `<tr><td style="white-space:nowrap;">${fdate(ev.date || (ev.timestamp && ev.timestamp * 1000))}</td><td><span class="badge">${esc(ev.nature || '')}</span></td><td><b>${esc(ev.title || '')}</b><div class="muted">${esc(strip(ev.content).slice(0, 160))}</div></td></tr>`).join('')}</tbody></table>` : '<span class="loadingtxt">Aucun échange enregistré.</span>');
+  }).catch(e => fail('events', e));
+}
+document.getElementById('ficheOverlay').addEventListener('click', e => { if(e.target.id === 'ficheOverlay') ficheClose(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && ficheId) ficheClose(); });
+
 let t = null;
 document.getElementById('q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(search, 350); });
 document.getElementById('type').addEventListener('change', search);

@@ -1016,6 +1016,35 @@ let currentBodyResizeFn = null;
 // redimensionnement du mail actuellement affiché, mise à jour par wireBodyIframe().
 window.addEventListener('resize', () => { if(currentBodyResizeFn) currentBodyResizeFn(); });
 
+// Liens dans un mail : le cadre protégé les bloque, on les ouvre nous-mêmes — page web dans le
+// navigateur, adresse mail dans « Nouveau message ». Seuls http(s) et mailto sont acceptés.
+function wireMailLinks(iframe){
+  let doc;
+  try{ doc = iframe.contentWindow.document; }catch(e){ return; }
+  if(!doc || doc.__csbLinks) return;
+  doc.__csbLinks = true;
+  doc.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if(!a) return;
+    e.preventDefault();
+    const href = (a.getAttribute('href') || '').trim();
+    if(/^mailto:/i.test(href)){
+      const addr = decodeURIComponent(href.slice(7).split('?')[0] || '');
+      const q = new URLSearchParams(href.split('?')[1] || '');
+      openCompose('new', null).then(() => {
+        if(addr) document.getElementById('cmpTo').value = addr;
+        if(q.get('subject')) document.getElementById('cmpSubject').value = q.get('subject');
+        if(q.get('cc')) document.getElementById('cmpCc').value = q.get('cc');
+      });
+      return;
+    }
+    if(href.startsWith('#')) return; // ancre interne au mail
+    let url;
+    try{ url = new URL(href); }catch(err){ return; }
+    if(url.protocol !== 'http:' && url.protocol !== 'https:') return;
+    try{ requireCsbHost().openExternal(url.href); }catch(err){ window.open(url.href, '_blank'); }
+  }, true);
+}
 function wireBodyIframe(){
   if(bodyResizeObserver){ bodyResizeObserver.disconnect(); bodyResizeObserver = null; }
   currentBodyResizeFn = null;
@@ -1038,6 +1067,7 @@ function wireBodyIframe(){
   }
   currentBodyResizeFn = resizeToContent;
   iframe.addEventListener('load', () => {
+    wireMailLinks(iframe);
     resizeToContent();
     // Le contenu peut encore changer de hauteur après le chargement (images qui finissent
     // d'arriver, polices, etc.) — on observe le corps de l'iframe pour continuer à l'ajuster.
@@ -1602,7 +1632,7 @@ async function dmToggleMsg(t, uid, forceOpen){
       ${(msg.attachments || []).length ? `<div class="attach-list">${msg.attachments.map((a, i) => `<div class="attach-chip" data-idx="${base + i}"><span class="ic">${attachIcon(a.contentType)}</span><span class="meta"><span class="fn">${escapeHtml(a.filename)}</span><span class="sz">${formatSize(a.size)}</span></span></div>`).join('')}</div><div class="att-preview"></div>` : ''}`;
     const fr = box.querySelector('iframe');
     fr.srcdoc = `<style>html,body{margin:0;padding:6px;font-family:sans-serif;font-size:14px}img{max-width:100%!important;height:auto!important}*{max-width:100%;box-sizing:border-box}</style>${doc}`;
-    fr.addEventListener('load', () => { try{ fr.style.height = Math.min(1200, fr.contentWindow.document.documentElement.scrollHeight + 16) + 'px'; }catch(e){} });
+    fr.addEventListener('load', () => { wireMailLinks(fr); try{ fr.style.height = Math.min(1200, fr.contentWindow.document.documentElement.scrollHeight + 16) + 'px'; }catch(e){} });
     box.querySelectorAll('.attach-chip').forEach(chip => chip.addEventListener('click', () => previewAttachment(parseInt(chip.dataset.idx, 10))));
     box.querySelectorAll('[data-cmp]').forEach(b => b.addEventListener('click', () => openCompose(b.dataset.cmp, msg)));
   }catch(e){ box.innerHTML = `<div style="color:var(--silk-red);">Message illisible : ${escapeHtml(e.message)}</div>`; }
@@ -1787,7 +1817,17 @@ function dmInitSettings(){
 // Ouverture demandée depuis un autre module (lien « Voir la demande » d'un devis)
 window.addEventListener('message', event => {
   const msg = event.data;
-  if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload || !msg.payload.openDemande) return;
+  if(event.source !== window.parent || !msg || msg.type !== 'csb:open-item' || !msg.payload) return;
+  // « Écrire » depuis un autre module (ex. contact d'une fiche client)
+  if(msg.payload.compose){
+    const c = msg.payload.compose;
+    openCompose('new', null).then(() => {
+      if(c.to) document.getElementById('cmpTo').value = c.to;
+      if(c.subject) document.getElementById('cmpSubject').value = c.subject;
+    });
+    return;
+  }
+  if(!msg.payload.openDemande) return;
   const tid = String(msg.payload.openDemande);
   const go = () => { const t = dmFind(tid); dmOpenView(t && t.etat === 'traite' ? 'traitees' : 'atraiter'); dmSelId = tid; dmRenderList(); dmRenderDetail(); };
   if(dmLoadedAt) go(); else { dmLoad(true).then(go); }
@@ -2047,6 +2087,7 @@ async function openCompose(mode, orig){
     document.getElementById('cmpQuoteOn').checked = true;
     document.getElementById('cmpQuoteLabel').textContent = mode === 'forward' ? 'Inclure le message transféré' : 'Inclure le message d\'origine';
     const fr = document.getElementById('cmpQuoteFrame');
+    fr.onload = () => wireMailLinks(fr);
     fr.srcdoc = `<style>html,body{margin:0;padding:8px;font-family:sans-serif;font-size:13px;color:#444}img{max-width:100%!important;height:auto!important}*{max-width:100%;box-sizing:border-box}</style><div style="color:#777;white-space:pre-wrap;margin-bottom:8px;">${cmpEsc(cmpQuoteHeader(orig, mode === 'forward'))}</div>${cmpOrigHtml(orig)}`;
   }else qw.style.display = 'none';
   cmpRenderAtts();

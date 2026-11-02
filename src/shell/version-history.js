@@ -2,6 +2,18 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.65', items: [
+    "Prospection : nouvel onglet « 📞 Suivi des appels » — liste des appels du jour (retards en rouge), fiche prospect avec appel en un clic, résultat de l'appel, note, prochaine relance proposée automatiquement et historique des échanges",
+    "Prospection : bouton « ＋ Suivi » sur les résultats de recherche (et les mairies), import Excel / CSV, export Excel, argumentaire d'appel, création du client dans Axonaut quand le prospect est gagné",
+    "Prospection : liens LinkedIn dans chaque fiche (personnes de la structure, page entreprise, interlocuteur) et champ pour enregistrer son profil",
+    "Prospection : pour partager le suivi entre les postes, importer pocketbase/collection-prospects.json dans PocketBase (sinon enregistré sur le poste)",
+    "Nouveau module FilTrace 🪡 : image, texte ou modèle → fichier de broderie (DST, PES, JEF, EXP, VP3)",
+    "FilTrace : fils de liaison à couper (au lieu de points cousus), chaque forme terminée avant de passer à la suivante, réglages des points de dessous et du sens de broderie, type de point conservé quand on change un réglage",
+    "FilTrace : mode « Par forme » — réglages, coupe-fil et couleur pour chaque forme, regroupement des formes qui ont les mêmes réglages",
+    "FilTrace : palette de couleurs toujours visible sur l'aperçu, avec ajout de couleurs (+ ou nuancier) gardées d'une séance à l'autre",
+    "Clients : fiche client complète (identité, adresses, contacts, chiffre d'affaires, factures en attente, devis, historique) et « Préparer une relance » des factures non réglées",
+    "Email : les liens dans les mails s'ouvrent (pages web dans le navigateur, adresses mail dans « Nouveau message ») ; « Écrire » depuis la fiche d'un client",
+  ]},
   { v: '0.2.64', items: [
     "Email : Répondre, Répondre à tous, Transférer et « ✏️ Nouveau message » (pièces jointes, signature, message d'origine cité) — la réponse reste dans la même conversation Gmail / Spark",
     "Email : sélection de plusieurs mails (Ctrl+clic, Maj+clic, clic sur l'avatar, Ctrl+A) pour les supprimer, déplacer, marquer lus / non lus, épingler ou imprimer ensemble",
