@@ -295,6 +295,7 @@ function renderDrawer() {
         ${p.contact ? `<a href="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(p.contact + ' ' + (p.nom || ''))}" data-ext title="Rechercher l'interlocuteur">🔎 ${esc(p.contact)}</a>` : ''}
         ${p.linkedin ? `<a href="${esc(/^https?:/i.test(p.linkedin) ? p.linkedin : 'https://' + p.linkedin)}" data-ext>⭐ Profil enregistré</a>` : ''}
       </div>
+      <div id="pdGoogle" style="width:100%;margin-top:4px"></div>
     </div>
 
     <section class="pd-sec">
@@ -373,6 +374,7 @@ function renderDrawer() {
     try { await pDelete(p); pClose(); renderSuivi(); pToast('Fiche supprimée.'); } catch (e) { pToast('Suppression impossible : ' + e.message, true); }
   };
   if ($p('pdAxonaut')) $p('pdAxonaut').onclick = () => pToAxonaut(p);
+  if (typeof pGoogleWire === 'function') pGoogleWire(p);
 }
 async function pEditField(inp) {
   const p = pCur(); if (!p) return;
@@ -541,13 +543,53 @@ $p('pList').addEventListener('click', (e) => {
   if (e.target.closest('a')) return;
   const tr = e.target.closest('tr[data-pid]'); if (tr) pOpen(tr.dataset.pid);
 });
-$p('pNew').addEventListener('click', async () => {
-  const nom = prompt('Nom du prospect (société, association, mairie…) :');
-  if (!nom || !nom.trim()) return;
-  const p = pNew({ nom: nom.trim(), source: 'Saisie manuelle' });
-  if (pFind(pKey(p)) && !confirm('Une fiche porte déjà ce nom. En créer une autre quand même ?')) return pOpen(pFind(pKey(p)).id);
-  try { await pSave(p); renderSuivi(); pOpen(p.id); } catch (e) { pToast('Création impossible : ' + e.message, true); }
-});
+// Ajout à la main (appel entrant, recommandation, structure repérée…) : petit formulaire dans le panneau.
+function pNewForm() {
+  pst.openId = null;
+  const f = (k, label, type = 'text', wide) =>
+    `<label class="pf${wide ? ' wide' : ''}"><span>${label}</span><input type="${type}" data-nk="${k}"></label>`;
+  $p('pDrawer').innerHTML = `
+    <div class="pd-head">
+      <div style="flex:1"><h3>Nouveau prospect</h3><div class="psub">Un contact qui vous a appelé, une recommandation, un club ou un commerce repéré…</div></div>
+      <button class="secondary" id="pnClose" title="Fermer (Échap)">✕</button>
+    </div>
+    <section class="pd-sec">
+      <div class="pgrid">
+        ${f('nom', 'Nom de la structure *', 'text', true)}
+        <label class="pf"><span>Type</span><select data-nk="type">${Object.entries(P_TYPES).map(([k, l]) => `<option value="${k}"${k === 'societe' ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        ${f('contact', 'Interlocuteur')}
+        ${f('tel', 'Téléphone', 'tel')}
+        ${f('tel2', 'Portable', 'tel')}
+        ${f('email', 'Email', 'email', true)}
+        ${f('cp', 'Code postal')}
+        ${f('ville', 'Ville')}
+        <label class="pf wide"><span>Infos utiles</span><textarea data-nk="notes" placeholder="Besoin, quantités, date de l'évènement, qui vous l'a recommandé…"></textarea></label>
+      </div>
+      <div class="status err" id="pnErr" style="min-height:0"></div>
+      <div class="pd-foot" style="margin-top:12px">
+        <button id="pnSave">Créer la fiche</button>
+        <button class="secondary" id="pnCancel">Annuler</button>
+      </div>
+    </section>`;
+  $p('pDrawerBg').hidden = false;
+  const nomInput = $p('pDrawer').querySelector('[data-nk=nom]');
+  nomInput.focus();
+  $p('pnClose').onclick = $p('pnCancel').onclick = pClose;
+  const save = async () => {
+    const fields = { source: 'Saisie manuelle' };
+    $p('pDrawer').querySelectorAll('[data-nk]').forEach((i) => { const v = i.value.trim(); if (v) fields[i.dataset.nk] = v; });
+    if (!fields.nom) { $p('pnErr').textContent = 'Indiquez au moins le nom.'; nomInput.focus(); return; }
+    const p = pNew(fields);
+    const dup = pFind(pKey(p));
+    if (dup && !confirm(`Une fiche « ${dup.nom} » existe déjà. En créer une autre quand même ?\n(Annuler ouvre la fiche existante.)`)) return pOpen(dup.id);
+    $p('pnSave').disabled = true;
+    try { await pSave(p); renderSuivi(); pOpen(p.id); pToast('Fiche créée.'); }
+    catch (e) { $p('pnSave').disabled = false; $p('pnErr').textContent = 'Création impossible : ' + e.message; }
+  };
+  $p('pnSave').onclick = save;
+  $p('pDrawer').querySelectorAll('input[data-nk]').forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); }));
+}
+$p('pNew').addEventListener('click', pNewForm);
 $p('pImport').addEventListener('click', () => $p('pImportFile').click());
 $p('pImportFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) pImportFile(f); });
 $p('pExport').addEventListener('click', pExport);
@@ -555,7 +597,7 @@ $p('pScriptBtn').addEventListener('click', () => { const b = $p('pScriptBox'); b
 $p('pScript').value = localStorage.getItem(LS_SCRIPT) || '';
 $p('pScript').addEventListener('input', (e) => { try { localStorage.setItem(LS_SCRIPT, e.target.value); } catch (er) {} });
 $p('pDrawerBg').addEventListener('mousedown', (e) => { if (e.target === $p('pDrawerBg')) pClose(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pst.openId && !document.querySelector('.csbc-bg')) pClose(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$p('pDrawerBg').hidden && !document.querySelector('.csbc-bg')) pClose(); });
 // liens tel:/mailto:/web ouverts par Windows (Lien avec le téléphone, messagerie, navigateur)
 document.addEventListener('click', (e) => {
   const a = e.target.closest('a[data-ext]'); if (!a) return;
@@ -576,9 +618,10 @@ document.addEventListener('click', async (e) => {
     if (mairieInSuivi(m)) { pSetTab('suivi'); return pOpen(pFind('m' + m.code).id); }
     b.disabled = true; pReport(await pAddMany([mairieToProspect(m)]));
   } else if (kind === 'selection') {
-    const sel = Object.values(state.orgs).filter((o) => o.selected);
+    const sel = Object.values(state.orgs).filter((o) => o.selected).map(orgToProspect)
+      .concat(Object.values(state.mairies).filter((m) => m.listed && m.selected).map(mairieToProspect));
     if (!sel.length) return pToast('Cochez d\'abord des lignes dans les résultats.', true);
-    b.disabled = true; pReport(await pAddMany(sel.map(orgToProspect))); b.disabled = false;
+    b.disabled = true; pReport(await pAddMany(sel)); b.disabled = false;
   }
 }, true);
 

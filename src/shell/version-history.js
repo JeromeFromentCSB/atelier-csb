@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.66', items: [
+    "Prospection : recherche par département, avec distance maximale depuis l'atelier — une seule liste triée par distance, filtrable par type (mairies, associations, commerces, entreprises, autres), par texte et par distance",
+    "Prospection : case « 🐴 Monde équestre » — centres équestres, écuries, haras, pensions, éleveurs, maréchaux et selleries, classés par famille avec un filtre par famille",
+    "Prospection : Google Maps dans le suivi des appels — téléphone, site web et note Google d'une fiche, ou de toute la liste en un clic (clé Google à saisir dans « ⚙ Google »)",
+    "Prospection : le bouton « Nouveau prospect » ouvre un formulaire de saisie",
+    "Prospection : les mairies cochées peuvent être ajoutées au suivi et exportées",
+  ]},
   { v: '0.2.65', items: [
     "Prospection : nouvel onglet « 📞 Suivi des appels » — liste des appels du jour (retards en rouge), fiche prospect avec appel en un clic, résultat de l'appel, note, prochaine relance proposée automatiquement et historique des échanges",
     "Prospection : bouton « ＋ Suivi » sur les résultats de recherche (et les mairies), import Excel / CSV, export Excel, argumentaire d'appel, création du client dans Axonaut quand le prospect est gagné",
