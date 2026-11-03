@@ -43,6 +43,7 @@
     border-bottom:2px solid var(--ink);
     padding:8px 22px;
   }
+  #pageHeader{ top:var(--tabbar-h,45px); } /* sous la barre d'onglets, comme les en-têtes Devis / Factures */
   #pageHeader .btn{ padding:6px 12px; }
   .headrow{ display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
   .brand{ display:flex; align-items:baseline; gap:10px; }
@@ -850,7 +851,7 @@
 </header>
 
 <main style="padding:0;">
-  <div id="commandeBody" style="display:flex; height:calc(100vh - var(--header-h,120px));">
+  <div id="commandeBody" style="display:flex; height:calc(100vh - var(--tabbar-h,45px) - var(--header-h,120px));">
     <div id="commandeLeftPane" style="flex:1; overflow:auto; padding:22px 26px; min-width:0;">
       <div class="empty" id="emptyState">
         <span class="flag-big"></span>
@@ -879,6 +880,7 @@
           <button class="btn ghost" id="blLivraisonBtn" style="display:none;" title="Bon de livraison à remettre au client (lignes et quantités de la commande, sans prix)">🚚 Bon de livraison</button>
           <button class="btn ghost" id="blTakeOverBtn" style="display:none;" title="Recopie le devis de cette commande dans le module Devis pour le modifier ; la commande garde tout ce qui y est attaché">✏️ Modifier le devis dans le module Devis</button>
           <button class="btn primary" id="blInvoiceBtn" style="display:none;" title="Crée la facture dans Axonaut avec les lignes du devis de cette commande (comme dans le devis)">🧾 Facturer dans Axonaut</button>
+          <button class="btn" id="blInvoicePartialBtn" style="display:none;" title="Choisir les quantités à facturer maintenant">🧾 Facturation partielle</button>
           <button class="btn ghost" id="blDeleteOrderBtn" style="display:none; color:var(--silk-red,#c0392b);" title="Supprime la commande et son devis (module Devis)">🗑 Supprimer la commande</button>
         </div>
         <div id="blShipmentsBox" style="margin-bottom:14px;">
@@ -3565,6 +3567,13 @@ function updateHeaderHeight(){
 }
 window.addEventListener('resize', updateHeaderHeight);
 new ResizeObserver(updateHeaderHeight).observe(document.getElementById('pageHeader'));
+// hauteur réelle de la barre d'onglets (masquée tant qu'on n'est pas connecté)
+function updateTabbarHeight(){
+  const t = document.getElementById('tabBar');
+  document.documentElement.style.setProperty('--tabbar-h', (t ? t.offsetHeight : 0) + 'px');
+}
+updateTabbarHeight();
+new ResizeObserver(updateTabbarHeight).observe(document.getElementById('tabBar'));
 
 // Même mécanique que updateHeaderHeight(), mais pour l'en-tête propre de l'onglet Devis
 // (--devis-header-h n'était jamais calculée : le tableau des devis restait cadré sur une
@@ -4254,6 +4263,11 @@ async function openBlModal(r){
   const invoiceBtn = document.getElementById('blInvoiceBtn');
   invoiceBtn.style.display = (isAdminUser() && isModuleOrder(r) && r.moduleRec.statut === 'accepte' && CSBAuth.can('devis', 'facturer')) ? 'inline-flex' : 'none';
   invoiceBtn.onclick = () => openInDevisTab({ recId: r.moduleRec.id, invoice: true, returnTo: r.contractId });
+  const partials = isModuleOrder(r) && r.moduleRec.data && (r.moduleRec.data.facturesPartielles || []).length;
+  invoiceBtn.textContent = partials ? '🧾 Facturer le reste' : '🧾 Facturer dans Axonaut';
+  const partialBtn = document.getElementById('blInvoicePartialBtn');
+  partialBtn.style.display = invoiceBtn.style.display;
+  partialBtn.onclick = () => openInDevisTab({ recId: r.moduleRec.id, invoice: true, partial: true, returnTo: r.contractId });
   updateFabricationBtnLabel(r.contractId);
   fabricationBtn.onclick = async () => {
     if(!currentBlQuotation){ alert('Devis introuvable pour cette commande.'); return; }

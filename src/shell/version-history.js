@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.67', items: [
+    "Facturation partielle : bouton « 🧾 Facturation partielle » (fiche commande de Gestion Commande et devis) — choix des quantités à facturer ligne par ligne, puis « Facturer le reste » ; liste des factures partielles et reste à facturer dans le devis",
+    "Gestion Commande : la zone du haut de l'onglet Commande reste fixe, seule la liste défile",
+  ]},
   { v: '0.2.66', items: [
     "Prospection : recherche par département, avec distance maximale depuis l'atelier — une seule liste triée par distance, filtrable par type (mairies, associations, commerces, entreprises, autres), par texte et par distance",
     "Prospection : case « 🐴 Monde équestre » — centres équestres, écuries, haras, pensions, éleveurs, maréchaux et selleries, classés par famille avec un filtre par famille",
