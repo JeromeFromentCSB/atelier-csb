@@ -138,7 +138,7 @@ async function loadProducts(){
 }
 function renderCategories(){
   const sel = document.getElementById('cat'), cur = sel.value;
-  const cats = [...new Set(products.map(p => (p.category || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const cats = allCategories();
   sel.innerHTML = '<option value="">Toutes les catégories</option>' + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   sel.value = cats.includes(cur) ? cur : '';
 }
@@ -224,7 +224,8 @@ function renderForm(p, isNew){
         <div class="f"><label>Référence interne</label><input data-k="internal_id" value="${esc(p.internal_id)}" ${dis}></div>
         <div class="f"><label>Catégorie</label>
           <select id="catSel" ${dis}>${catOptions(p.category)}</select>
-          <input data-k="category" value="${esc(p.category)}" placeholder="Nom de la nouvelle catégorie" style="display:none; margin-top:4px;" ${dis}></div>
+          <input type="hidden" data-k="category" value="${esc(p.category)}">
+          <div id="catNewBox" style="display:none; margin-top:4px; gap:6px;"><input id="catNew" placeholder="Nom de la nouvelle catégorie" style="flex:1;"><button type="button" id="catNewOk">Ajouter</button><button type="button" id="catNewNo">✕</button></div></div>
         <div class="f"><label>Type de produit</label>
           <select data-k="product_type" ${dis}>${PRODUCT_TYPES.some(t => t.label === p.type) ? '' : `<option value="" selected>${esc(p.type || '— non renseigné —')}</option>`}${PRODUCT_TYPES.map(t => `<option value="${t.code}" ${t.label === p.type ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
         <div class="f"><label>Unité</label><input data-k="unit" value="${esc(p.unit)}" ${dis}></div>
@@ -257,10 +258,26 @@ function renderForm(p, isNew){
   showThumb(p.product_code);
   // Catégorie : liste de toutes les catégories existantes, ou saisie d'une nouvelle
   const catSel = document.getElementById('catSel'), catInput = main.querySelector('[data-k="category"]');
+  const catBox = document.getElementById('catNewBox'), catNew = document.getElementById('catNew');
   catSel.addEventListener('change', () => {
-    if(catSel.value === '__new__'){ catInput.value = ''; catInput.style.display = ''; catInput.focus(); }
-    else { catInput.value = catSel.value; catInput.style.display = 'none'; }
+    if(catSel.value === '__new__'){ catSel.value = catInput.value; catNew.value = ''; catBox.style.display = 'flex'; catNew.focus(); }
+    else { catInput.value = catSel.value; catBox.style.display = 'none'; }
   });
+  // Nouvelle catégorie : ajoutée tout de suite à la liste (et aux autres fiches) puis sélectionnée
+  const addCat = () => {
+    const name = catNew.value.trim().replace(/\s+/g, ' ');
+    if(!name){ catNew.focus(); return; }
+    const exist = allCategories().find(c => c.localeCompare(name, 'fr', { sensitivity:'base' }) === 0);
+    const val = exist || name;
+    if(!exist){ extraCats.add(val); saveExtraCats(); }
+    catSel.innerHTML = catOptions(val);
+    catSel.value = val; catInput.value = val;
+    catBox.style.display = 'none';
+    renderCategories();
+  };
+  document.getElementById('catNewOk').addEventListener('click', addCat);
+  document.getElementById('catNewNo').addEventListener('click', () => { catBox.style.display = 'none'; });
+  catNew.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addCat(); } else if(e.key === 'Escape') catBox.style.display = 'none'; });
   const btn = document.getElementById('save');
   if(btn) btn.addEventListener('click', () => isNew ? create() : save(p));
   if(edit) wireVignette(p, isNew);
@@ -441,6 +458,19 @@ async function save(p){
         if(await window.csbHost.renameAxonautImage(oldCode, newCode)){ delete thumbs[oldCode]; delete thumbs[newCode]; imgMsg = ' · vignette renommée'; }
       }
     }catch(e){ imgMsg = ' · vignette : ' + e.message; }
+    // Vérifie auprès d'Axonaut que la catégorie a bien été gardée
+    if('category' in body){
+      const chk = await CSBClients.axonaut('/products/' + p.id).catch(() => null);
+      const got = String((chk ? chk.category : p.category) || '').trim();
+      if(got.localeCompare(body.category, 'fr', { sensitivity:'base' }) !== 0){
+        if(chk) Object.assign(p, chk);
+        renderCategories(); renderList();
+        const s3 = document.getElementById('st');
+        if(s3){ s3.className = 'status err'; s3.textContent = `⚠ Axonaut n'a pas gardé la catégorie « ${body.category} » (catégorie actuelle : ${got ? '« ' + got + ' »' : 'aucune'}). Crée d'abord la catégorie dans Axonaut, puis réessaie.`; }
+        return;
+      }
+      p.category = got;
+    }
     st.className = 'status ok'; st.textContent = '✔ Enregistré dans Axonaut' + imgMsg;
     renderCategories(); renderList();
     const keepId = p.id; setTimeout(() => { if(String(selectedId) === String(keepId)) openProduct(keepId); }, 1200);
@@ -448,7 +478,17 @@ async function save(p){
     st.className = 'status err'; st.textContent = 'Échec : ' + e.message;
   }finally{ btn.disabled = false; }
 }
-function allCategories(){ return [...new Set(products.map(x => (x.category || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity:'base' })); }
+// Catégories ajoutées à la main mais encore utilisées par aucun article (gardées sur ce poste)
+const extraCats = new Set((() => { try{ return JSON.parse(localStorage.getItem('csb_articles_extra_cats') || '[]'); }catch(_){ return []; } })());
+function saveExtraCats(){ try{ localStorage.setItem('csb_articles_extra_cats', JSON.stringify([...extraCats])); }catch(_){} }
+function allCategories(){
+  const used = products.map(x => (x.category || '').trim()).filter(Boolean);
+  // une catégorie ajoutée qui est maintenant portée par un article n'a plus besoin d'être gardée à part
+  let changed = false;
+  for(const c of [...extraCats]) if(used.includes(c)){ extraCats.delete(c); changed = true; }
+  if(changed) saveExtraCats();
+  return [...new Set([...used, ...extraCats])].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity:'base' }));
+}
 function catOptions(cur){
   cur = (cur || '').trim();
   const cats = allCategories();

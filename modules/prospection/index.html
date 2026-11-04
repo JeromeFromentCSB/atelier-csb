@@ -281,6 +281,10 @@
   .phist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
   .phist li{border-left:3px solid var(--line);padding:2px 0 2px 10px;font-size:13px;}
   .pnote{white-space:pre-wrap;margin-top:2px;}
+  .phist li{position:relative;}
+  .phist-act{position:absolute;right:0;top:0;display:flex;gap:2px;opacity:.35;}
+  .phist li:hover .phist-act{opacity:1;}
+  .phist-act button{padding:2px 6px;font-size:13px;}
   .pd-foot{display:flex;gap:10px;flex-wrap:wrap;}
   .ptoast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;font-size:13.5px;opacity:0;pointer-events:none;transition:all .2s;z-index:80;max-width:90%;}
   .ptoast.show{opacity:1;transform:translateX(-50%);}

@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.68', items: [
+    "Prospection : chaque échange de l'historique d'un prospect peut être modifié (✏️ date, type, résultat, note) ou supprimé (🗑)",
+    "Articles : « ➕ Nouvelle catégorie… » ajoute la catégorie tout de suite à la liste et la sélectionne dans la fiche ; après l'enregistrement, l'appli vérifie qu'Axonaut l'a bien gardée",
+  ]},
   { v: '0.2.67', items: [
     "Facturation partielle : bouton « 🧾 Facturation partielle » (fiche commande de Gestion Commande et devis) — choix des quantités à facturer ligne par ligne, puis « Facturer le reste » ; liste des factures partielles et reste à facturer dans le devis",
     "Gestion Commande : la zone du haut de l'onglet Commande reste fixe, seule la liste défile",

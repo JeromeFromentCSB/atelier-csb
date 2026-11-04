@@ -322,7 +322,9 @@ function renderDrawer() {
       <h4>Historique <span class="pmuted">(${hist.length})</span></h4>
       ${hist.length ? `<ul class="phist">${hist.map((a) => {
         const r = P_RESULTS.find((x) => x.k === a.res);
-        return `<li><div class="pmuted">${esc(pFrDT(a.d))} · ${esc(P_CANAUX[a.canal] || '')}${a.par ? ' · ' + esc(a.par) : ''}</div><b>${r ? esc(r.l) : ''}</b>${a.note ? `<div class="pnote">${esc(a.note)}</div>` : ''}</li>`;
+        const idx = p.appels.indexOf(a);
+        return `<li data-ai="${idx}"><div class="phist-act"><button type="button" class="ghost" data-aedit="${idx}" title="Modifier cet échange">✏️</button><button type="button" class="ghost" data-adel="${idx}" title="Supprimer cet échange">🗑</button></div>
+          <div class="pmuted">${esc(pFrDT(a.d))} · ${esc(P_CANAUX[a.canal] || '')}${a.par ? ' · ' + esc(a.par) : ''}${a.modifie ? ' · modifié' : ''}</div><b>${r ? esc(r.l) : ''}</b>${a.note ? `<div class="pnote">${esc(a.note)}</div>` : ''}</li>`;
       }).join('')}</ul>` : '<div class="pmuted">Aucun échange noté.</div>'}
     </section>
 
@@ -368,6 +370,8 @@ function renderDrawer() {
     $p('pdNext').value = n ? (n >= 5 ? pAddDays(n === 5 ? 7 : 30) : pAddWorkdays(n)) : '';
   });
   $p('pdSaveCall').onclick = pSaveCall;
+  $p('pDrawer').querySelectorAll('[data-adel]').forEach((b) => b.onclick = () => pDeleteCall(p, Number(b.dataset.adel)));
+  $p('pDrawer').querySelectorAll('[data-aedit]').forEach((b) => b.onclick = () => pEditCall(p, Number(b.dataset.aedit)));
   $p('pDrawer').querySelectorAll('[data-pk]').forEach((inp) => inp.addEventListener('change', () => pEditField(inp)));
   $p('pdDelete').onclick = async () => {
     if (!confirm(`Supprimer définitivement la fiche « ${p.nom} » et son historique ?`)) return;
@@ -406,6 +410,39 @@ async function pSaveCall() {
     pToast('Enregistrement impossible : ' + e.message, true);
   }
 }
+// ---- modifier / supprimer un échange de l'historique ------------------------
+async function pDeleteCall(p, idx) {
+  const a = (p.appels || [])[idx]; if (!a) return;
+  if (!confirm(`Supprimer l'échange du ${pFrDT(a.d)} ?`)) return;
+  p.appels.splice(idx, 1);
+  try { await pSave(p); renderSuivi(); renderDrawer(); pToast('Échange supprimé.'); }
+  catch (e) { p.appels.splice(idx, 0, a); pToast('Suppression impossible : ' + e.message, true); }
+}
+function pEditCall(p, idx) {
+  const a = (p.appels || [])[idx]; if (!a) return;
+  const li = $p('pDrawer').querySelector(`li[data-ai="${idx}"]`); if (!li) return;
+  const local = (() => { const d = new Date(a.d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); })();
+  li.innerHTML = `<div class="pd-row" style="margin-top:0">
+      <label class="pf"><span>Date</span><input type="datetime-local" data-ek="d" value="${local}"></label>
+      <label class="pf"><span>Type</span><select data-ek="canal">${Object.entries(P_CANAUX).map(([k, l]) => `<option value="${k}"${k === a.canal ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="pf"><span>Résultat</span><select data-ek="res">${P_RESULTS.map((r) => `<option value="${r.k}"${r.k === a.res ? ' selected' : ''}>${r.l}</option>`).join('')}</select></label>
+    </div>
+    <textarea data-ek="note" style="width:100%;min-height:70px">${esc(a.note || '')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:6px"><button type="button" data-esave>Enregistrer</button><button type="button" class="secondary" data-ecancel>Annuler</button></div>`;
+  li.querySelector('[data-ecancel]').onclick = renderDrawer;
+  li.querySelector('[data-esave]').onclick = async () => {
+    const before = Object.assign({}, a);
+    const v = (k) => li.querySelector(`[data-ek="${k}"]`).value;
+    const d = new Date(v('d'));
+    if (!isNaN(d)) a.d = d.toISOString();
+    a.canal = v('canal'); a.res = v('res'); a.note = v('note').trim();
+    a.modifie = new Date().toISOString(); a.modifie_par = pUser();
+    p.appels.sort((x, y) => String(x.d).localeCompare(String(y.d)));
+    try { await pSave(p); renderSuivi(); renderDrawer(); pToast('Échange modifié.'); }
+    catch (e) { Object.assign(a, before); pToast('Modification impossible : ' + e.message, true); renderDrawer(); }
+  };
+}
+
 function pToAxonaut(p) {
   const parts = String(p.contact || '').trim().split(/\s+/);
   CSBClients.open({
