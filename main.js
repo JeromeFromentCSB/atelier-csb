@@ -404,6 +404,55 @@ ipcMain.handle('csb:open-temp-pdf', async (_event, { base64, name }) => {
   if (err) throw new Error(err);
   return filePath;
 });
+// Visionneuse de documents dans une vraie fenêtre (déplaçable sur un autre écran) : une seule
+// fenêtre réutilisée, qui se rouvre à la même place et à la même taille.
+let docWindow = null;
+function docWindowBounds() {
+  const b = readConfig().docWindowBounds;
+  if (!b || !b.width || !b.height) return { width: 900, height: 1000 };
+  const { screen } = require('electron');
+  const onScreen = screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    return b.x + 60 > a.x && b.x < a.x + a.width - 60 && b.y >= a.y - 10 && b.y < a.y + a.height - 60;
+  });
+  return onScreen ? b : { width: b.width, height: b.height };
+}
+ipcMain.handle('csb:open-doc-window', async (_event, { base64, name, url, title }) => {
+  let target = url;
+  if (base64) {
+    const dir = path.join(os.tmpdir(), 'atelier-csb-docs');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, String(name || 'document').replace(/[\\/:*?"<>|]+/g, '-'));
+    fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+    target = require('node:url').pathToFileURL(filePath).href;
+  }
+  if (!/^(https?:|file:)/i.test(String(target || ''))) throw new Error('document invalide');
+  if (!docWindow || docWindow.isDestroyed()) {
+    docWindow = new BrowserWindow({
+      ...docWindowBounds(), autoHideMenuBar: true, show: false,
+      webPreferences: { plugins: true, sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    const save = () => { try { if (docWindow && !docWindow.isDestroyed() && !docWindow.isMinimized() && !docWindow.isMaximized()) writeConfig({ docWindowBounds: docWindow.getBounds() }); } catch (e) {} };
+    let t = null;
+    const later = () => { clearTimeout(t); t = setTimeout(save, 400); };
+    docWindow.on('move', later);
+    docWindow.on('resize', later);
+    docWindow.on('close', save);
+    docWindow.on('closed', () => { docWindow = null; });
+    docWindow.on('page-title-updated', (e) => e.preventDefault()); // garde le nom du document
+    docWindow.webContents.setWindowOpenHandler(({ url: u }) => { shell.openExternal(u); return { action: 'deny' }; });
+    if (readConfig().docWindowMaximized) docWindow.maximize();
+    docWindow.on('maximize', () => writeConfig({ docWindowMaximized: true }));
+    docWindow.on('unmaximize', () => writeConfig({ docWindowMaximized: false }));
+  }
+  const winTitle = String(title || name || 'Document');
+  await docWindow.loadURL(target);
+  docWindow.setTitle(winTitle);
+  if (docWindow.isMinimized()) docWindow.restore();
+  docWindow.show();
+  docWindow.focus();
+  return true;
+});
 // Scan depuis un téléphone associé à ce poste : la fenêtre revient au premier plan.
 ipcMain.handle('csb:bring-to-front', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);

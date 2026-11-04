@@ -244,6 +244,7 @@
   .dm-cands button.kw.on{ background:#1F3A66; color:#fff; }
   .dm-kw-list{ display:flex; flex-wrap:wrap; gap:3px; width:100%; max-height:150px; overflow-y:auto; padding:4px; margin-top:2px; border:1px solid #C9D6EA; border-radius:8px; background:#fff; }
   .dm-prop input[type=number]{ width:70px; } .dm-prop input[type=text]{ width:100%; } .dm-prop select{ max-width:260px; }
+  .sec-count{ flex-shrink:0; white-space:nowrap; font-weight:800; font-size:13px; color:#A0522D; background:#FBF4EE; border:1px solid #E3C9B5; border-radius:999px; padding:2px 10px; }
 </style>
 </head>
 <body>
@@ -319,11 +320,11 @@
   </div>
 </div>
 
-<div class="modal-bg" id="docViewer">
-  <div class="modal" style="width:min(900px,100%); height:min(85vh,900px); display:flex; flex-direction:column; padding:14px 16px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+<div class="modal-bg" id="docViewer" style="background:transparent; pointer-events:none; padding:0;">
+  <div class="modal" id="docViewerWin" style="position:absolute; pointer-events:auto; width:min(900px,calc(100vw - 40px)); height:min(85vh,900px); min-width:320px; min-height:240px; max-height:calc(100vh - 10px); resize:both; overflow:hidden; display:flex; flex-direction:column; padding:14px 16px; box-shadow:0 12px 40px rgba(0,0,0,.35);">
+    <div id="docViewerHead" style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; cursor:move; user-select:none;" title="Glisser pour déplacer la fenêtre — coin en bas à droite pour la redimensionner">
       <h3 id="docViewerTitle" style="margin:0; font-size:15px; word-break:break-word;"></h3>
-      <button class="btn small" id="docViewerClose">✕</button>
+      <span style="display:flex; gap:6px; flex-shrink:0;"><button class="btn small" id="docViewerDetach" title="Ouvrir dans une fenêtre séparée, que l'on peut déplacer sur un autre écran">🖥 Fenêtre séparée</button><button class="btn small" id="docViewerClose">✕</button></span>
     </div>
     <div id="docViewerBody" style="flex:1; overflow:hidden; display:flex;"></div>
   </div>
@@ -1513,7 +1514,7 @@ function renderActionsBar(){
     if(['brouillon','envoye','accepte'].includes(d.statut) && CSBAuth.can('devis', 'envoyer')) html += b('aEmail', d.envois && d.envois.length ? '📨 Renvoyer par email' : '📨 Envoyer par email', d.statut === 'brouillon' ? 'primary' : '');
     if(d.statut === 'brouillon') html += b('aSend', 'Marquer comme envoyé', '', "Attribue un numéro et passe à l'état « Envoyé » sans envoyer d'email (devis remis en main propre, envoyé autrement…)");
     if(['brouillon','envoye'].includes(d.statut) && canValider) html += b('aAccept', '✔ Valider — accepté par le client', 'primary', 'Le devis devient une commande');
-    if(d.statut === 'envoye') html += b('aRefuse', '✕ Refusé par le client');
+    if(['brouillon','envoye'].includes(d.statut)) html += b('aRefuse', '✕ Refusé', 'danger', 'Le client a refusé ce devis : il passe à l’état « Refusé » (liste « Refusés / annulés »), comme dans Axonaut');
     if(d.statut === 'accepte' && canValider) html += b('aUnaccept', '↩ Annuler la validation', '', "Repasse le devis à l'état « Envoyé »");
     if(d.statut === 'accepte' && CSBAuth.can('devis', 'facturer')){
       const hasP = (d.facturesPartielles || []).length > 0;
@@ -1534,7 +1535,7 @@ function renderActionsBar(){
   on('aSend', () => setStatut('envoye', 'Marqué comme envoyé'));
   on('aEmail', openSendModal);
   on('aAccept', () => { if(confirm('Valider ce devis ? Il devient une commande.')) setStatut('accepte', 'Validé — accepté par le client'); });
-  on('aRefuse', () => setStatut('refuse', 'Refusé par le client'));
+  on('aRefuse', () => { if(confirm('Marquer ce devis comme refusé par le client ?')) setStatut('refuse', 'Refusé par le client'); });
   on('aUnaccept', () => { if(confirm('Annuler la validation ? Le devis repasse à « Envoyé ».')) setStatut('envoye', 'Validation annulée'); });
   on('aReopen', () => setStatut(current.numero ? 'envoye' : 'brouillon', 'Devis rouvert'));
   on('aCancel', () => { if(confirm('Annuler ce devis ? Il reste dans la liste « Refusés / annulés » et peut être rouvert.')) setStatut('annule', 'Devis annulé'); });
@@ -2268,6 +2269,7 @@ async function openDocument(filename, category){
     const file = await (await docsHandles[category].getFileHandle(filename)).getFile();
     if(docViewerUrl) URL.revokeObjectURL(docViewerUrl);
     const url = docViewerUrl = URL.createObjectURL(file);
+    docViewerSource = { file, title: filename };
     const body = document.getElementById('docViewerBody');
     document.getElementById('docViewerTitle').textContent = filename;
     if(file.type === 'application/pdf' || file.type === 'text/html' || /\.html?$/i.test(filename)) body.innerHTML = `<iframe src="${url}" style="width:100%; height:100%; border:none; background:#fff;"></iframe>`;
@@ -2276,11 +2278,58 @@ async function openDocument(filename, category){
     document.getElementById('docViewer').classList.add('show');
   }catch(e){ alert("Impossible d'ouvrir ce fichier : " + e.message); }
 }
-document.getElementById('docViewerClose').addEventListener('click', () => {
+function closeDocViewer(){
   document.getElementById('docViewer').classList.remove('show');
   document.getElementById('docViewerBody').innerHTML = '';
   if(docViewerUrl){ URL.revokeObjectURL(docViewerUrl); docViewerUrl = null; }
-});
+}
+document.getElementById('docViewerClose').addEventListener('click', closeDocViewer);
+document.getElementById('docViewerDetach').addEventListener('click', () => detachDocViewer());
+
+// « Fenêtre séparée » : le document s'ouvre dans une vraie fenêtre, qu'on peut mettre sur un autre écran.
+let docViewerSource = null; // { file } ou { url }, avec title
+async function detachDocViewer(){
+  const src = docViewerSource;
+  if(!src) return;
+  if(!(window.csbHost && window.csbHost.openDocWindow)){ alert("La fenêtre séparée n'est disponible que dans l'application Atelier CSB (mise à jour nécessaire)."); return; }
+  try{
+    if(src.file){
+      const buf = new Uint8Array(await src.file.arrayBuffer());
+      let bin = ''; for(let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      await window.csbHost.openDocWindow({ base64: btoa(bin), name: src.file.name || src.title, title: src.title });
+    }else{
+      await window.csbHost.openDocWindow({ url: src.url, title: src.title });
+    }
+    closeDocViewer();
+  }catch(e){ alert("Impossible d'ouvrir la fenêtre séparée : " + e.message); }
+}
+// Fenêtre d'aperçu flottante : déplacée par son titre, redimensionnée par son coin ; le reste
+// de l'écran reste utilisable pendant qu'elle est ouverte.
+(function(){
+  const ov = document.getElementById('docViewer'), win = document.getElementById('docViewerWin'), head = document.getElementById('docViewerHead');
+  let placed = false;
+  new MutationObserver(() => {
+    if(!ov.classList.contains('show') || placed) return;
+    placed = true;
+    win.style.left = Math.max(10, (window.innerWidth - win.offsetWidth) / 2) + 'px';
+    win.style.top = Math.max(10, (window.innerHeight - win.offsetHeight) / 2) + 'px';
+  }).observe(ov, { attributes: true, attributeFilter: ['class'] });
+  head.addEventListener('mousedown', (e) => {
+    if(e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY, l0 = win.offsetLeft, t0 = win.offsetTop;
+    const body = document.getElementById('docViewerBody');
+    body.style.pointerEvents = 'none'; // sinon le PDF (iframe) capte la souris pendant le glisser
+    const move = (ev) => {
+      win.style.left = Math.min(window.innerWidth - 80, Math.max(80 - win.offsetWidth, l0 + ev.clientX - sx)) + 'px';
+      win.style.top = Math.min(window.innerHeight - 40, Math.max(0, t0 + ev.clientY - sy)) + 'px';
+    };
+    const up = () => { body.style.pointerEvents = ''; document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape' && ov.classList.contains('show')) closeDocViewer(); });
+})();
 
 // ================== Envoi par email et suivi client (étape E) ==================
 // Le suivi est hébergé par le relais Axonaut (même adresse), sauf si une autre adresse est réglée.
@@ -3233,7 +3282,7 @@ function renderLines(){
     const selBox = `<input type="checkbox" class="l-sel" data-sel="${i}" ${selectedLines.has(l) ? 'checked' : ''} title="Sélectionner pour copier">`;
     const actions = locked ? `<div class="l-actions">${selBox}</div>` : `<div class="l-actions"><input type="checkbox" class="l-sel" data-sel="${i}" ${selectedLines.has(l) ? 'checked' : ''} title="Sélectionner (copier, dupliquer, supprimer plusieurs lignes)"><button class="iconbtn" data-act="dup" data-i="${i}" title="Dupliquer la ligne">⧉</button><button class="iconbtn" data-act="up" data-i="${i}" title="Monter">▲</button><button class="iconbtn" data-act="down" data-i="${i}" title="Descendre">▼</button><button class="iconbtn" data-act="del" data-i="${i}" title="Supprimer la ligne">✕</button></div>`;
     if(l.type === 'section'){
-      return `<tr class="section ${selectedLines.has(l) ? 'selected' : ''}" data-row="${i}"><td colspan="4"><div style="display:flex; align-items:center; gap:8px;"><input type="text" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Titre de section (ex. Casaques)">${actions.replace('l-actions', 'l-actions" style="margin-top:0;')}</div></td></tr>`;
+      return `<tr class="section ${selectedLines.has(l) ? 'selected' : ''}" data-row="${i}"><td colspan="4"><div style="display:flex; align-items:center; gap:8px;"><input type="text" data-f="name" data-i="${i}" value="${escapeHtml(l.name)}" placeholder="Titre de section (ex. Casaques)"><span class="sec-count" id="sc-${i}"></span>${actions.replace('l-actions', 'l-actions" style="margin-top:0;')}</div></td></tr>`;
     }
     const stock = productStock(l);
     const meta = [l.productCode ? 'Réf. ' + escapeHtml(l.productCode) : (l.productId ? '' : 'Ligne libre')].filter(Boolean).join(' · ');
@@ -3272,6 +3321,7 @@ function renderLines(){
     return `<div data-tva="${i}"><div class="tva-pill"><span class="tag">TVA</span><select data-f="taxRate" data-i="${i}" ${locked ? 'disabled' : ''}>${opts}</select></div></div>`;
   }).join('');
   alignTvaPills();
+  refreshSectionCounts();
 
   const refreshLine = (i) => {
     const l = current.lines[i];
@@ -3283,7 +3333,7 @@ function renderLines(){
     el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
       const i = Number(el.dataset.i);
       current.lines[i][el.dataset.f] = el.value;
-      refreshLine(i); renderTotals(); changed();
+      refreshLine(i); renderTotals(); refreshSectionCounts(); changed();
     });
   });
   body.querySelectorAll('[data-desc]').forEach(el => {
@@ -3317,6 +3367,21 @@ function renderLines(){
     renderLines(); renderTotals(); changed();
   }));
   bindSelection();
+}
+
+// Nombre d'articles (somme des quantités) de chaque section, recalculé pendant la saisie.
+function refreshSectionCounts(){
+  if(!current) return;
+  const lines = current.lines;
+  lines.forEach((l, i) => {
+    if(l.type !== 'section') return;
+    const el = document.getElementById('sc-' + i);
+    if(!el) return;
+    let q = 0;
+    for(let k = i + 1; k < lines.length && lines[k].type !== 'section'; k++) q += num(lines[k].quantity);
+    q = Math.round(q * 100) / 100;
+    el.textContent = q.toLocaleString('fr-FR') + ' article' + (q > 1 ? 's' : '');
+  });
 }
 
 // ---------- Copie de lignes ----------

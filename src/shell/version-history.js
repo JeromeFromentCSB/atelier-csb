@@ -2,6 +2,14 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.69', items: [
+    "Gestion Commande : quantité validée par ligne dans la fiche commande (ex. 5 / 12) ; seule la case à cocher valide une ligne (plus le clic sur le texte)",
+    "Gestion Commande : nouvelle colonne « Avancement » dans la liste des commandes (barre, pourcentage et quantités validées)",
+    "Gestion Commande : dans le détail d'une facture, titres de section plus grands, en gras et en couleur, avec le nombre d'articles et le total HT de la section",
+    "Devis : bouton « ✕ Refusé » aussi sur les brouillons, comme dans Axonaut",
+    "Devis : chaque titre de section affiche son nombre d'articles, mis à jour pendant la saisie",
+    "Aperçu des documents (devis et Gestion Commande) : fenêtre déplaçable et redimensionnable, et bouton « 🖥 Fenêtre séparée » pour l'ouvrir dans une vraie fenêtre à mettre sur un autre écran",
+  ]},
   { v: '0.2.68', items: [
     "Prospection : chaque échange de l'historique d'un prospect peut être modifié (✏️ date, type, résultat, note) ou supprimé (🗑)",
     "Articles : « ➕ Nouvelle catégorie… » ajoute la catégorie tout de suite à la liste et la sélectionne dans la fiche ; après l'enregistrement, l'appli vérifie qu'Axonaut l'a bien gardée",
