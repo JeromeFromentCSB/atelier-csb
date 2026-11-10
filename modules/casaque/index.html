@@ -365,6 +365,8 @@
   }
   .casaqueBtn:hover{ transform:scale(1.1); border-color:var(--silk-green); }
   .casaqueBtn.linked{ background:#eaf4ec; border-color:var(--silk-green); color:var(--silk-green); font-weight:700; }
+  /* Programmes de la casaque faits (« Programme généré » coché) : cadre vert */
+  .casaqueBtn.prog-done{ border:2.5px solid #1E9E4A; box-shadow:0 0 0 2px rgba(30,158,74,.25); }
   td.deletecol{ text-align:center; }
   .deleteRowBtn{
     width:28px; height:28px; border-radius:8px; border:1.5px solid var(--line); background:var(--paper);
@@ -727,6 +729,11 @@
   #fabricationPane .atelier-layout{display:flex;gap:22px;align-items:flex-start;}
   #fabricationPane .atelier-main{flex:1 1 0;min-width:0;}
   #fabricationPane .atelier-sidebar{flex:0 0 clamp(300px, 27vw, 420px);border-left:1px solid var(--fab-line);padding-left:22px;min-width:0;}
+  /* Colonne « Programmes disponibles » : reste en haut de l'écran pendant le défilement ; sa liste défile à l'intérieur */
+  @media (min-width: 981px){
+    #fabricationPane .atelier-sidebar{position:sticky;top:calc(var(--top-tabs-h, 0px) + 12px);align-self:flex-start;max-height:calc(100vh - var(--top-tabs-h, 0px) - 24px);display:flex;flex-direction:column;}
+    #fabricationPane .atelier-sidebar #libList{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:4px;}
+  }
   @media (max-width: 980px){
     #fabricationPane .atelier-layout{flex-direction:column;}
     #fabricationPane .atelier-sidebar{flex:1 1 auto;border-left:none;border-top:1px solid var(--fab-line);padding-left:0;padding-top:16px;width:100%;}
@@ -4299,7 +4306,8 @@ function cellHtml(key, r, st, badges, silkCell){
       const title = linked
         ? `Montage « ${escapeHtml(linked.programme_nom || '')} » déjà créé pour cette fiche — cliquer pour le rouvrir ou en créer un nouveau`
         : 'Créer le programme de broderie de cette casaque dans l\'onglet Fabrication';
-      return `<button class="casaqueBtn${linked ? ' linked' : ''}" title="${title}">🧵${linked ? ' ✓' : ''}</button>`;
+      const done = !!(st && st.programGenerated);
+      return `<button class="casaqueBtn${linked ? ' linked' : ''}${done ? ' prog-done' : ''}" title="${done ? 'Programmes de cette casaque faits — ' : ''}${title}">🧵${linked ? ' ✓' : ''}</button>`;
     }
     case 'delete': return isAdmin() ? `<button class="deleteRowBtn" title="Supprimer cette fiche">🗑</button>` : '';
     case 'nomadr': return `<input type="text" class="editField" data-field="nomAdresse" value="${escapeHtml(r.nomAdresse)}" ${canEditGeneral() ? '' : 'disabled'}>`;

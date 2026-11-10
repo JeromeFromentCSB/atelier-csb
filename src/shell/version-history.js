@@ -2,6 +2,10 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.71', items: [
+    "Gestion Casaque : l'icône 🧵 « Créer le programme de broderie » a un cadre vert quand les programmes de la casaque sont faits (« Programme généré » coché)",
+    "Gestion Casaque, onglet Fabrication : la colonne « Programmes disponibles » reste en haut de l'écran pendant le défilement",
+  ]},
   { v: '0.2.70', items: [
     "Articles : bouton « ⧉ Dupliquer » — crée une copie de l'article (avec sa vignette) puis l'ouvre pour modification",
     "Articles : bouton « 🗑 Supprimer » — supprime l'article d'Axonaut (ou propose de le désactiver si Axonaut refuse)",
