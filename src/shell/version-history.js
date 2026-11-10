@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.70', items: [
+    "Articles : bouton « ⧉ Dupliquer » — crée une copie de l'article (avec sa vignette) puis l'ouvre pour modification",
+    "Articles : bouton « 🗑 Supprimer » — supprime l'article d'Axonaut (ou propose de le désactiver si Axonaut refuse)",
+    "Statistiques : tableau « Articles vendus par client », avec cases à cocher et total de la sélection en haut du tableau",
+    "Devis : commentaires du client (Axonaut) et notes de prospection affichés sous l'objet du devis, à l'écran seulement",
+    "Mails : correction de la fenêtre « Répondre » (impossible à fermer, boutons Signature et Envoyer sans effet)",
+  ]},
   { v: '0.2.69', items: [
     "Gestion Commande : quantité validée par ligne dans la fiche commande (ex. 5 / 12) ; seule la case à cocher valide une ligne (plus le clic sur le texte)",
     "Gestion Commande : nouvelle colonne « Avancement » dans la liste des commandes (barre, pourcentage et quantités validées)",

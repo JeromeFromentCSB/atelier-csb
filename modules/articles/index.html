@@ -237,7 +237,7 @@ function renderForm(p, isNew){
         ${isNew ? '' : `<div class="f wide"><label style="display:flex; gap:8px; align-items:center; font-weight:400;"><input type="checkbox" data-k="disabled" style="width:auto;" ${off ? 'checked' : ''} ${dis}> Article désactivé (n'apparaît plus dans les recherches de produits)</label></div>`}
       </div>
       <div style="margin-top:14px; display:flex; align-items:center;">
-        ${edit ? `<button class="primary" id="save">${isNew ? 'Créer dans Axonaut' : 'Enregistrer dans Axonaut'}</button>` : '<span class="muted">Lecture seule — tu n\'as pas le droit de modifier les articles.</span>'}
+        ${edit ? `<button class="primary" id="save">${isNew ? 'Créer dans Axonaut' : 'Enregistrer dans Axonaut'}</button>${isNew ? '' : '<button id="dupBtn" style="margin-left:8px;" title="Créer une copie de cet article dans Axonaut, puis l\'ouvrir pour la modifier">⧉ Dupliquer</button><button id="delBtn" style="margin-left:8px; color:var(--accent);" title="Supprimer cet article d\'Axonaut">🗑 Supprimer</button>'}` : '<span class="muted">Lecture seule — tu n\'as pas le droit de modifier les articles.</span>'}
         <span class="status" id="st"></span>
       </div>
     </div>
@@ -280,6 +280,10 @@ function renderForm(p, isNew){
   catNew.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addCat(); } else if(e.key === 'Escape') catBox.style.display = 'none'; });
   const btn = document.getElementById('save');
   if(btn) btn.addEventListener('click', () => isNew ? create() : save(p));
+  const dupBtn = document.getElementById('dupBtn');
+  if(dupBtn) dupBtn.addEventListener('click', () => duplicate(p));
+  const delBtn = document.getElementById('delBtn');
+  if(delBtn) delBtn.addEventListener('click', () => removeProduct(p));
   if(edit) wireVignette(p, isNew);
 }
 function setVignette(url){
@@ -433,6 +437,89 @@ async function create(){
     st.className = 'status err'; st.textContent = 'Échec : ' + e.message;
     btn.disabled = false;
   }
+}
+// Duplique l'article (tel qu'enregistré dans Axonaut) avec un nouveau code, copie sa vignette,
+// puis ouvre la copie pour la modifier.
+async function duplicate(p){
+  const st = document.getElementById('st'), btn = document.getElementById('dupBtn');
+  const oldCode = String(p.product_code || '').trim();
+  let code = '';
+  if(oldCode){
+    const used = c => products.some(x => norm(String(x.product_code || '').trim()) === norm(c));
+    code = oldCode + '-COPIE';
+    for(let n = 2; used(code); n++) code = oldCode + '-COPIE' + n;
+  }
+  if(!confirm(`Dupliquer « ${p.name || '(sans nom)'} » ?\nLa copie sera créée dans Axonaut${code ? ' avec le code « ' + code + ' »' : ''}, puis ouverte pour modification.`)) return;
+  const body = { name: (p.name || '') + ' (copie)', price: Number(p.price) || 0, tax_rate: p.tax_rate != null && p.tax_rate !== '' ? Number(p.tax_rate) : 20 };
+  if(code) body.product_code = code;
+  ['internal_id', 'category', 'unit', 'location'].forEach(k => { const v = String(p[k] == null ? '' : p[k]).trim(); if(v) body[k] = v; });
+  if(p.job_costing != null && p.job_costing !== '' && !isNaN(Number(p.job_costing))) body.job_costing = Number(p.job_costing);
+  const t = PRODUCT_TYPES.find(x => x.label === p.type);
+  if(t) body.product_type = t.code;
+  if(p.description) body.description = p.description;
+  if(btn) btn.disabled = true;
+  st.className = 'status'; st.textContent = 'Duplication…';
+  try{
+    const saved = await CSBClients.axonaut('/products', 'POST', body);
+    if(!saved || !saved.id) throw new Error('réponse inattendue d\'Axonaut');
+    const np = Object.assign({}, body, saved);
+    if(!saved.type && t) np.type = t.label;
+    products.push(np);
+    notifyProductChanged(np);
+    let imgMsg = '';
+    if(oldCode && code){
+      try{
+        const img = await thumbFor(oldCode);
+        if(img) await writeImage(code, { dataUrl: img });
+      }catch(e){ imgMsg = ' (vignette non copiée : ' + e.message + ')'; }
+    }
+    imgState = null;
+    selectedId = String(np.id);
+    renderCategories(); renderList();
+    await openProduct(np.id);
+    const s2 = document.getElementById('st');
+    if(s2){ s2.className = 'status ok'; s2.textContent = '✔ Copie créée dans Axonaut — modifie-la puis enregistre' + imgMsg; }
+    const nameIn = main.querySelector('[data-k="name"]');
+    if(nameIn){ nameIn.focus(); nameIn.select(); }
+  }catch(e){
+    st.className = 'status err'; st.textContent = 'Échec de la duplication : ' + e.message;
+    if(btn) btn.disabled = false;
+  }
+}
+// Supprime l'article d'Axonaut. Si Axonaut refuse (article déjà utilisé dans des devis ou
+// factures, ou suppression non permise), on propose de le désactiver à la place.
+async function removeProduct(p){
+  const st = document.getElementById('st'), btn = document.getElementById('delBtn');
+  const label = `« ${p.name || '(sans nom)'} »${p.product_code ? ' (' + p.product_code + ')' : ''}`;
+  if(!confirm(`Supprimer définitivement l'article ${label} d'Axonaut ?\nCette action est irréversible.`)) return;
+  if(btn) btn.disabled = true;
+  st.className = 'status'; st.textContent = 'Suppression…';
+  try{
+    await CSBClients.axonaut('/products/' + p.id, 'DELETE');
+  }catch(e){
+    if(btn) btn.disabled = false;
+    const off = p.disabled === true || p.disabled === 'true';
+    if(off){ st.className = 'status err'; st.textContent = 'Axonaut refuse la suppression : ' + e.message + ' (l\'article est déjà désactivé).'; return; }
+    if(!confirm(`Axonaut refuse de supprimer cet article :\n${e.message}\n\nLe désactiver à la place ? (il n'apparaîtra plus dans les recherches de produits)`)){ st.className = 'status err'; st.textContent = 'Suppression refusée par Axonaut : ' + e.message; return; }
+    try{
+      const saved = await CSBClients.axonaut('/products/' + p.id, 'PATCH', { disabled: 'true' });
+      Object.assign(p, saved && saved.id ? saved : {}); p.disabled = true;
+      notifyProductChanged(p);
+      renderList(); openProduct(p.id);
+      setTimeout(() => { const s2 = document.getElementById('st'); if(s2){ s2.className = 'status ok'; s2.textContent = '✔ Article désactivé'; } }, 50);
+    }catch(e2){ st.className = 'status err'; st.textContent = 'Échec : ' + e2.message; }
+    return;
+  }
+  // Supprimé : on retire l'article de la liste, et sa vignette si aucun autre article n'a ce code
+  products = products.filter(x => String(x.id) !== String(p.id));
+  notifyProductChanged(Object.assign({}, p, { deleted: true, disabled: true }));
+  const code = String(p.product_code || '').trim();
+  if(code && !products.some(x => norm(String(x.product_code || '').trim()) === norm(code)) && window.csbHost && window.csbHost.deleteAxonautImage){
+    try{ await window.csbHost.deleteAxonautImage(code); delete thumbs[code]; }catch(_){}
+  }
+  selectedId = null;
+  renderCategories(); renderList();
+  main.innerHTML = `<div class="card"><span class="status ok" style="margin:0;">✔ Article ${esc(label)} supprimé d'Axonaut.</span></div>`;
 }
 async function save(p){
   const st = document.getElementById('st'), btn = document.getElementById('save');

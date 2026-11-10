@@ -387,6 +387,13 @@
   .st-kpi .s{ font-size:.74rem; color:var(--muted); margin-top:2px; }
   .st-up{ color:var(--silk-green); font-weight:700; } .st-down{ color:var(--silk-red); font-weight:700; }
   .st-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; }
+  .st-art td{ font-size:.82rem; color:var(--ink); }
+  .st-table .st-ck{ width:22px; padding-right:0; text-align:center; }
+  .st-table .st-ck input{ margin:0; cursor:pointer; }
+  .st-table tr.st-picked td{ background:#FBEEDC !important; }
+  .st-sel-sum{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 18px; margin:0 0 8px; padding:7px 12px; border-radius:8px; background:#FBF4EE; border:1px solid #EAD7C5; font-size:.82rem; color:#A0522D; }
+  .st-sel-sum span{ color:var(--ink); }
+  .st-art-client td{ background:var(--paper-2); }
   .st-card h3{ margin:0 0 10px; font-size:.95rem; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .st-legend{ font-size:.72rem; font-weight:400; color:var(--muted); display:flex; gap:14px; align-items:center; }
   .st-legend i{ display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:5px; }
@@ -6623,6 +6630,7 @@ function stRender(){
   document.getElementById('stYear').style.display = view === 'month' ? '' : 'none';
   document.querySelectorAll('.st-custom').forEach(el => el.style.display = view === 'custom' ? '' : 'none');
   const d = stCompute();
+  stLastData = d;
   const amtLabel = document.getElementById('stAmt').value === 'ttc' ? 'TTC' : 'HT';
   const total = d.rows.reduce((t, r) => t + r.ca, 0);
   const n = d.inv.length;
@@ -6659,13 +6667,118 @@ function stRender(){
     <tbody>${d.clients.map(c => `<tr class="click" data-client="${fxEsc(c.name)}"><td>${fxEsc(c.name)}</td><td><div class="st-cbar" style="width:${d.clients[0].ca > 0 ? Math.max(0, c.ca / d.clients[0].ca * 100) : 0}%"></div></td><td class="n">${c.n}</td><td class="n">${fxEur(c.ca)}</td><td class="n">${total ? (c.ca / total * 100).toFixed(1).replace('.', ',') + ' %' : ''}</td><td class="n">${stDueCell(c.du, c.nd)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Total</td><td></td><td class="n">${n}</td><td class="n">${fxEur(total)}</td><td></td><td class="n">${stDueCell(d.clients.reduce((t, c) => t + c.du, 0), d.clients.reduce((t, c) => t + c.nd, 0))}</td></tr></tfoot></table>` : '<div style="color:var(--muted);">Aucune facture sur la période.</div>'}</div>`;
   const body = document.getElementById('stBody');
-  body.innerHTML = kpis + chart + (top ? `<div class="st-cols">${table}${top}</div>` : table) + stUnpaidHtml();
+  body.innerHTML = kpis + chart + (top ? `<div class="st-cols">${table}${top}</div>` : table) + stArticlesHtml(d) + stUnpaidHtml();
   stWireUnpaid(body);
+  stWireArticles(body);
   stDrawChart(d, amtLabel);
   // un clic sur une année ouvre ses mois ; sur un mois, ses jours ; sur un client, son détail
   body.querySelectorAll('tr.click[data-key]').forEach(tr => tr.addEventListener('click', () => stDrill(d, tr.dataset.key)));
   body.querySelectorAll('tr.click[data-client]').forEach(tr => tr.addEventListener('click', () => { document.getElementById('stClient').value = tr.dataset.client; stRender(); }));
 }
+// ---------- Articles vendus par client (lignes des factures Axonaut de la période) ----------
+// Les factures Sage de l'historique n'ont pas de lignes : elles ne comptent pas ici.
+const stArtOpen = new Set();
+// Lignes cochées : « c|client » pour un client entier, « a|client|article » pour un article.
+const stArtSel = new Set();
+const stLinesOf = i => Array.isArray(i.invoice_lines) ? i.invoice_lines : (fxDetailCache[i.id] && fxDetailCache[i.id].invoice_lines) || null;
+// Factures dont la liste Axonaut n'a pas donné les lignes : relues une par une à la demande.
+async function stLoadMissingLines(list){
+  const btn = document.getElementById('stArtLoad');
+  let done = 0;
+  for(const i of list){
+    try{ const res = await callAxonaut('/invoices/' + i.id); if(res.ok && res.parsed) fxDetailCache[i.id] = res.parsed; }catch(e){}
+    done++; if(btn) btn.textContent = `Chargement… ${done}/${list.length}`;
+  }
+  stRefreshArticles();
+}
+function stArticlesData(d){
+  const by = {};
+  d.inv.filter(i => i._src !== 'sage').forEach(i => {
+    const c = fxClient(i);
+    const g = by[c] = by[c] || { name: c, ht: 0, q: 0, arts: {} };
+    (stLinesOf(i) || []).forEach(l => {
+      const label = String(l.product_name || l.name || '').trim() || 'Ligne sans nom';
+      const key = (l.product_code || '') + '|' + label.toLowerCase();
+      const a = g.arts[key] = g.arts[key] || { key, label, code: l.product_code || '', q: 0, ht: 0, inv: new Set(), last: '', unit: l.unit || '' };
+      const q = fxNum(l.quantity), ht = fxNum(l.total_pre_tax_amount);
+      a.q += q; a.ht += ht; a.inv.add(i.id);
+      const day = fxIsoDay(i.date); if(day > a.last) a.last = day;
+      g.q += q; g.ht += ht;
+    });
+  });
+  return Object.values(by).filter(g => Object.keys(g.arts).length)
+    .map(g => Object.assign(g, { list: Object.values(g.arts).sort((a, b) => b.ht - a.ht) }))
+    .sort((a, b) => b.ht - a.ht);
+}
+function stArticlesHtml(d){
+  const groups = stArticlesData(d);
+  const missing = d.inv.filter(i => i._src !== 'sage' && !stLinesOf(i));
+  const missHtml = missing.length ? `<div style="margin:0 0 8px; font-size:.78rem; color:#8A5A00;">⚠ ${missing.length} facture(s) sans détail des lignes. <button class="btn ghost" id="stArtLoad" style="padding:3px 10px; font-size:.72rem;">Charger les lignes</button></div>` : '';
+  const fq = n => (Math.round(n * 100) / 100).toLocaleString('fr-FR');
+  const head = `<h3>Articles vendus par client <span class="st-legend">${d.client ? 'période choisie' : 'clic sur un client pour voir ses articles'} · montants HT des lignes, factures Axonaut seulement</span></h3>`;
+  if(!groups.length) return `<div class="st-card" id="stArticles">${head}${missHtml}<div style="color:var(--muted);">Aucun article vendu sur la période.</div></div>`;
+  const ck = (k, on) => `<td class="st-ck"><input type="checkbox" data-art-sel="${fxEsc(k)}" ${on ? 'checked' : ''}></td>`;
+  const artRows = g => g.list.map(a => { const k = 'a|' + g.name + '|' + a.key, on = stArtSel.has(k); return `<tr class="st-art${on ? ' st-picked' : ''}">${ck(k, on)}<td style="padding-left:${d.client ? 8 : 26}px;">${fxEsc(a.label)}${a.code ? ` <span style="color:var(--muted); font-size:.72rem;">${fxEsc(a.code)}</span>` : ''}</td><td class="n">${fq(a.q)}${a.unit ? ' ' + fxEsc(a.unit) : ''}</td><td class="n">${fxEur(a.ht)}</td><td class="n">${a.q ? fxEur(a.ht / a.q) : '—'}</td><td class="n">${a.inv.size}</td><td class="n">${fxDate(a.last)}</td></tr>`; }).join('');
+  const thead = `<thead><tr><th class="st-ck" title="Cocher des lignes pour voir leur total en haut du tableau"></th><th>${d.client ? 'Article' : 'Client / article'}</th><th class="n">Quantité</th><th class="n">CA HT</th><th class="n">Prix moyen HT</th><th class="n">Factures</th><th class="n">Dernière vente</th></tr></thead>`;
+  let body;
+  if(d.client){
+    body = groups.map(artRows).join('');
+  }else{
+    body = groups.map(g => {
+      const open = stArtOpen.has(g.name);
+      const k = 'c|' + g.name, on = stArtSel.has(k);
+      return `<tr class="click st-art-client${on ? ' st-picked' : ''}" data-art-client="${fxEsc(g.name)}">${ck(k, on)}<td><b>${open ? '▾' : '▸'} ${fxEsc(g.name)}</b> <span style="color:var(--muted); font-size:.72rem;">${g.list.length} article(s)</span></td><td class="n"><b>${fq(g.q)}</b></td><td class="n"><b>${fxEur(g.ht)}</b></td><td></td><td></td><td></td></tr>` + (open ? artRows(g) : '');
+    }).join('');
+  }
+  const tq = groups.reduce((t, g) => t + g.q, 0), tht = groups.reduce((t, g) => t + g.ht, 0);
+  const tools = d.client ? '' : `<div style="margin:-4px 0 8px; display:flex; gap:6px;"><button class="btn ghost" id="stArtAll" style="padding:3px 10px; font-size:.72rem;">Tout déplier</button><button class="btn ghost" id="stArtNone" style="padding:3px 10px; font-size:.72rem;">Tout replier</button></div>`;
+  return `<div class="st-card" id="stArticles">${head}${missHtml}${tools}<div id="stArtSum" class="st-sel-sum">${stArtSelSumHtml(groups)}</div><table class="st-table">${thead}<tbody>${body}</tbody>
+    <tfoot><tr><td></td><td>Total</td><td class="n">${fq(tq)}</td><td class="n">${fxEur(tht)}</td><td></td><td></td><td></td></tr></tfoot></table></div>`;
+}
+// Total des lignes cochées (un article coché dans un client déjà coché n'est pas compté deux fois).
+function stArtSelSumHtml(groups){
+  let q = 0, ht = 0, n = 0;
+  groups.forEach(g => {
+    if(stArtSel.has('c|' + g.name)){ q += g.q; ht += g.ht; n++; return; }
+    g.list.forEach(a => { if(stArtSel.has('a|' + g.name + '|' + a.key)){ q += a.q; ht += a.ht; n++; } });
+  });
+  if(!n) return `<span style="color:var(--muted);">Coche des lignes (clients ou articles) pour voir leur total ici.</span>`;
+  const fq = v => (Math.round(v * 100) / 100).toLocaleString('fr-FR');
+  return `<b>Sélection : ${n} ligne(s)</b><span>Quantité <b>${fq(q)}</b></span><span>CA HT <b>${fxEur(ht)}</b></span><span>Prix moyen HT <b>${q ? fxEur(ht / q) : '—'}</b></span><button class="btn ghost" id="stArtSelClear" style="padding:2px 10px; font-size:.72rem; margin-left:auto;">Tout décocher</button>`;
+}
+let stLastData = null;
+function stWireArticles(body){
+  const box = document.getElementById('stArticles');
+  const wireClear = () => { const c = document.getElementById('stArtSelClear'); if(c) c.onclick = () => { stArtSel.clear(); stRefreshArticles(); }; };
+  if(box) box.querySelectorAll('input[data-art-sel]').forEach(cb => {
+    cb.addEventListener('click', e => e.stopPropagation());
+    cb.addEventListener('change', () => {
+      const k = cb.dataset.artSel;
+      if(cb.checked) stArtSel.add(k); else stArtSel.delete(k);
+      cb.closest('tr').classList.toggle('st-picked', cb.checked);
+      document.getElementById('stArtSum').innerHTML = stArtSelSumHtml(stArticlesData(stLastData));
+      wireClear();
+    });
+  });
+  wireClear();
+  body.querySelectorAll('tr[data-art-client]').forEach(tr => tr.addEventListener('click', () => {
+    const n = tr.dataset.artClient;
+    if(stArtOpen.has(n)) stArtOpen.delete(n); else stArtOpen.add(n);
+    stRefreshArticles();
+  }));
+  const all = document.getElementById('stArtAll'), none = document.getElementById('stArtNone');
+  if(all) all.onclick = () => { stArticlesData(stLastData).forEach(g => stArtOpen.add(g.name)); stRefreshArticles(); };
+  if(none) none.onclick = () => { stArtOpen.clear(); stRefreshArticles(); };
+  const load = document.getElementById('stArtLoad');
+  if(load) load.onclick = () => { load.disabled = true; stLoadMissingLines(stLastData.inv.filter(i => i._src !== 'sage' && !stLinesOf(i))); };
+}
+function stRefreshArticles(){
+  const box = document.getElementById('stArticles');
+  if(!box || !stLastData) return;
+  box.outerHTML = stArticlesHtml(stLastData);
+  stWireArticles(document.getElementById('stBody'));
+}
+
 // ---------- Factures non réglées : total par client, et ses factures à côté ----------
 // Toutes les factures Axonaut encore dues, quelle que soit la période choisie au-dessus.
 let stUnpaidClient = null;

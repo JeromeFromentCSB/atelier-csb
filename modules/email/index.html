@@ -2165,7 +2165,8 @@ function cmpToast(t){
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3500);
 }
-(() => {
+// La fenêtre de rédaction est déclarée après ce script : on branche ses boutons une fois la page lue.
+function cmpWire(){
   document.getElementById('composeBtn').addEventListener('click', () => openCompose('new', null));
   document.getElementById('cmpClose').addEventListener('click', () => cmpClose(false));
   document.getElementById('cmpCancel').addEventListener('click', () => cmpClose(false));
@@ -2204,7 +2205,8 @@ function cmpToast(t){
     if(e.key === 'Escape'){ e.preventDefault(); cmpClose(false); }
     if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); cmpSend(); }
   }, true);
-})();
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cmpWire); else cmpWire();
 </script>
 
 <div id="cmpOverlay">
