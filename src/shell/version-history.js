@@ -2,6 +2,9 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.72', items: [
+    "Gestion Casaque : réouverture d'un montage déjà créé beaucoup plus rapide (programmes téléchargés en parallèle, sans doublons)",
+  ]},
   { v: '0.2.71', items: [
     "Gestion Casaque : l'icône 🧵 « Créer le programme de broderie » a un cadre vert quand les programmes de la casaque sont faits (« Programme généré » coché)",
     "Gestion Casaque, onglet Fabrication : la colonne « Programmes disponibles » reste en haut de l'écran pendant le défilement",

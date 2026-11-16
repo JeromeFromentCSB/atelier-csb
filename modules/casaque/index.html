@@ -5649,9 +5649,16 @@ async function ensureDecoded(item) {
   if (item.decoded) return item.decoded;
   const r = item.record;
   if (r.type === 'dst') {
-    const url = fileUrl(r, 'fichier');
-    const buf = new Uint8Array(await (await CSBAuth.authedFetch(url, { cache: 'no-store' })).arrayBuffer());
-    item.decoded = decodeDst(buf);
+    // Une seule requête par programme même si plusieurs affichages le demandent en même temps.
+    if (!item._decoding) {
+      item._decoding = (async () => {
+        const url = fileUrl(r, 'fichier');
+        const buf = new Uint8Array(await (await CSBAuth.authedFetch(url)).arrayBuffer());
+        item.decoded = decodeDst(buf);
+        return item.decoded;
+      })().finally(() => { item._decoding = null; });
+    }
+    return item._decoding;
   }
   return item.decoded;
 }
@@ -7275,6 +7282,13 @@ async function sendToFabrication(r){
         if(typeof drawCombinedPreview === 'function') drawCombinedPreview();
       };
       if(!library.length && typeof refreshLibrary === 'function') await refreshLibrary();
+      // Télécharge tous les programmes du montage en parallèle (au lieu d'un par un à l'affichage).
+      if(data && Array.isArray(data.items)){
+        await Promise.all(data.items.map(it => {
+          const li = library.find(l => l.record.id === it.id);
+          return li ? ensureDecoded(li).catch(() => {}) : null;
+        }));
+      }
       doRestore();
       return;
     }
