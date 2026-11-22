@@ -7255,6 +7255,20 @@ function restoreAssemblyFromJson(data){
 // rouvrir tel quel plutôt que de repartir de zéro (et permet quand même de
 // démarrer un nouveau montage, ex. redigitalisation complète).
 async function sendToFabrication(r){
+  // Curseur d'attente + message pendant le chargement (peut durer plusieurs secondes).
+  const busy = document.createElement('div');
+  busy.style.cssText = 'position:fixed;inset:0;z-index:99999;cursor:wait;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;font:600 15px sans-serif;color:#333;';
+  busy.innerHTML = '<div style="background:#fff;border:1px solid #ccc;border-radius:10px;padding:16px 26px;box-shadow:0 4px 18px rgba(0,0,0,.2);">⏳ Chargement de la casaque…</div>';
+  document.body.appendChild(busy);
+  document.body.style.cursor = 'wait';
+  try{
+    await sendToFabricationInner(r, busy);
+  } finally {
+    busy.remove();
+    document.body.style.cursor = '';
+  }
+}
+async function sendToFabricationInner(r, busy){
   await pbFetchCasaqueLinks();
   if(window.csbCasaqueLinksError){
     alert('⚠ Impossible de vérifier/rouvrir les montages existants :\n\n' + window.csbCasaqueLinksError +
@@ -7262,10 +7276,12 @@ async function sendToFabrication(r){
   }
   const existing = getCasaqueLinkFor(r._key);
   if(existing && existing.assemblage_json){
+    busy.style.display = 'none';
     const proceed = confirm(
       `Un montage (« ${existing.programme_nom || '?'} ») existe déjà pour ${r.nom} ${r.prenom}.\n\n` +
       `OK = rouvrir ce montage tel quel\nAnnuler = repartir de zéro (nouveau montage)`
     );
+    busy.style.display = 'flex';
     if(proceed){
       if(window.csbActivateTopPane) window.csbActivateTopPane('fabricationPane');
       if(window.activateFabricationTab) window.activateFabricationTab('atelier');

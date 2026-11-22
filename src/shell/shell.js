@@ -3,6 +3,8 @@
     { id: 'axonaut', label: 'Gestion Commande', icon: '📦', path: '../../modules/axonaut/index.html', perms: [
       { key: 'devis', label: 'Onglet Devis' },
       { key: 'commandes', label: 'Onglet Commande' },
+      { key: 'avancement', label: 'Onglet Avancement (suivi des lignes bipées)' },
+      { key: 'achats', label: 'Onglet Achats matières' },
       { key: 'factures', label: 'Onglet Factures (liste des factures Axonaut)' },
       { key: 'stats', label: "Onglet Statistiques (chiffre d'affaires)" },
       { key: 'etiquettes', label: 'Gestion des étiquettes' },

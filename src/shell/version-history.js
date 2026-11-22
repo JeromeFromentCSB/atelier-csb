@@ -2,6 +2,16 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.73', items: [
+    "Gestion Commande : section « Achats matières » dans le détail d'une commande — tableau des lignes avec case « Achat », état (À commander, En commande, Reçu, Vérifié), fournisseur et date ; ces achats ont leur QR code sur le bon de fabrication (un bip = état suivant, douchette ou téléphone)",
+    "Gestion Commande : nouvel onglet « 🛒 Achats matières » listant les achats de toutes les commandes avec leur état et leur date",
+    "Gestion Commande : nouvel onglet « 📈 Avancement » — commandes en cours / finies avec leurs lignes à valider, date du bip de chaque ligne, dernier bip et expédition ; tri par commande, client ou dernier bip",
+    "Gestion Commande : champ « Commentaire de la commande », affiché au-dessus des lignes et sur le bon de fabrication",
+    "Gestion Commande : documents de fabrication déposables dans la commande et affichés en vignettes ; correction des devis et commandes en double dans les listes",
+    "Recherche / Éditeur : case « Corbeille NAS », colonnes réglables à la souris, menu clic droit « Ouvrir le dossier »",
+    "Gestion Casaque : curseur d'attente à l'ouverture d'une casaque déjà faite",
+    "Gérer les utilisateurs : droits « Onglet Avancement » et « Onglet Achats matières » (à accorder aux utilisateurs concernés)",
+  ]},
   { v: '0.2.72', items: [
     "Gestion Casaque : réouverture d'un montage déjà créé beaucoup plus rapide (programmes téléchargés en parallèle, sans doublons)",
   ]},

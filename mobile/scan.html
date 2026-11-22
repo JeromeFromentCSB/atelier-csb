@@ -10169,6 +10169,8 @@ const orderId = (params.get('o') || '').replace(/[^A-Za-z0-9_-]/g, '');
 const lineIdx = params.has('l') ? parseInt(params.get('l'), 10) : null;
 const isExp = params.get('x') === '1';
 const isOpen = params.get('v') === '1';
+const achatId = (params.get('a') || '').replace(/[^A-Za-z0-9]/g, '');
+const ACHAT_ETATS = ['À commander', 'En commande', 'Reçu', 'Vérifié'];
 const PAIR_KEY = 'csb_scan_pair';
 function pair(){ try{ return JSON.parse(localStorage.getItem(PAIR_KEY)) || null; }catch(e){ return null; } }
 // Prévient l'ordinateur associé : il revient au premier plan et ouvre la commande.
@@ -10258,7 +10260,7 @@ async function run(){
     if(!auth()) setTimeout(() => showLogin(), 1500);
     return;
   }
-  if(!orderId || (lineIdx === null && !isExp && !isOpen)){
+  if(!orderId || (lineIdx === null && !isExp && !isOpen && !achatId)){
     app.innerHTML = `<div class="result info"><div class="t">Prêt à scanner</div><div class="d">Touche « 📷 Scanner un QR code » en bas de l'écran et photographie un QR code du bon de fabrication.</div></div>` + pairFooter();
     wireFooter();
     return;
@@ -10294,25 +10296,44 @@ async function run(){
         title = '🚚 Expédition enregistrée'; detail = label;
         lastUndo = st => { delete st._expedie; };
       }
+    }else if(achatId){
+      const achats = (Array.isArray(state._achats) ? state._achats : []).map(a => Object.assign({}, a));
+      const a = achats.find(x => x.id === achatId);
+      if(!a){ kind = 'err'; title = 'Achat introuvable'; detail = 'Réimprime le bon de fabrication.'; }
+      else{
+        const name = (a.d || 'achat') + (a.f ? ' (' + a.f + ')' : '');
+        if((a.e || 0) >= ACHAT_ETATS.length - 1){ kind = 'info'; title = 'Achat déjà vérifié'; detail = name; }
+        else{
+          const prev = a.e || 0;
+          a.e = prev + 1; a.at = at; a.by = who; changed = true;
+          state._achats = achats; log.push({ a: achatId, e: a.e, at, by: who });
+          title = '🛒 ' + ACHAT_ETATS[a.e]; detail = label + ' — ' + name;
+          lastUndo = st => { const x = (st._achats || []).find(y => y.id === achatId); if(x) x.e = prev; };
+        }
+      }
     }else{
       if(lines.length && (lineIdx < 0 || lineIdx >= lines.length)) throw new Error('ligne inexistante — le devis a changé, réimprime le bon');
       const name = (lines[lineIdx] && lines[lineIdx].titre) || ('ligne ' + (lineIdx + 1));
       if(state[lineIdx] === true){ kind = 'info'; title = 'Ligne déjà validée'; detail = name; }
       else{
         state[lineIdx] = true; log.push({ l: lineIdx, at, by: who }); changed = true;
+        state._ld = Object.assign({}, state._ld || {}, { [lineIdx]: at });
         const done = lines.length ? lines.filter((x, i) => state[i] === true).length : null;
         title = `✔ Ligne ${lineIdx + 1} validée` + (done !== null ? ` (${done}/${lines.length})` : ''); detail = name;
-        lastUndo = st => { delete st[lineIdx]; };
+        lastUndo = st => { delete st[lineIdx]; if(st._ld) delete st._ld[lineIdx]; };
       }
     }
     let saved = rec;
     if(changed){
       state._log = log;
       const allDone = lines.length > 0 && lines.every((x, i) => state[i] === true);
-      const body = { contract_id: orderId, numero_commande: order.numero_commande || '', lines_state: state, all_done: allDone, etat_valide: allDone };
+      // un scan d'achat ne touche pas à l'état « commande complète »
+      const body = achatId ? { contract_id: orderId, numero_commande: order.numero_commande || '', lines_state: state }
+                           : { contract_id: orderId, numero_commande: order.numero_commande || '', lines_state: state, all_done: allDone, etat_valide: allDone };
+      if(achatId && !rec){ body.all_done = false; body.etat_valide = false; }
       saved = rec ? await api(`/api/collections/bl_axonaut/records/${rec.id}`, { method:'PATCH', body: JSON.stringify(body) })
                   : await api('/api/collections/bl_axonaut/records', { method:'POST', body: JSON.stringify(body) });
-      if(allDone && !isExp) title += ' — commande complète';
+      if(allDone && !isExp && !achatId) title += ' — commande complète';
       // l'ordinateur associé affiche aussi la commande
       try{ await notifyPoste(orderId, title); }catch(e){ /* pas grave : la validation est enregistrée */ }
     }
@@ -10321,6 +10342,7 @@ async function run(){
     app.innerHTML = `<div class="result ${kind}"><div class="t">${esc(title)}</div><div class="d">${esc(detail)}</div></div>${extra}
       <div class="card"><b>${esc(label)}</b>
         ${lines.map((l, i) => `<div class="line ${i === lineIdx ? 'cur' : ''}"><span class="s">${st[i] === true ? '✅' : '⬜'}</span><span>${esc(l.titre || 'Ligne ' + (i + 1))}${l.qte ? ` <span class="muted">× ${esc(l.qte)} ${esc(l.unite || '')}</span>` : ''}</span></div>`).join('')}
+        ${(Array.isArray(st._achats) ? st._achats : []).map(a => `<div class="line ${a.id === achatId ? 'cur' : ''}"><span class="s">🛒</span><span>${esc(a.d || 'Achat')}${a.f ? ` <span class="muted">— ${esc(a.f)}</span>` : ''} <b>${esc(ACHAT_ETATS[a.e || 0])}</b></span></div>`).join('')}
         <div class="line"><span class="s">${st._expedie ? '🚚' : '⬜'}</span><span>Expédition${st._expedie ? ' <span class="muted">— ' + esc(new Date(st._expedie.at).toLocaleString('fr-FR')) + '</span>' : ''}</span></div>
       </div>
       ${changed ? '<button class="danger" id="undoBtn">↩ Annuler ce scan</button>' : ''}
@@ -10334,7 +10356,7 @@ async function run(){
         const cur = await api(`/api/collections/bl_axonaut/records/${saved.id}`);
         const s2 = Object.assign({}, cur.lines_state || {}); lastUndo(s2);
         const allDone = lines.length > 0 && lines.every((x, i) => s2[i] === true);
-        await api(`/api/collections/bl_axonaut/records/${saved.id}`, { method:'PATCH', body: JSON.stringify({ lines_state: s2, all_done: allDone, etat_valide: allDone }) });
+        await api(`/api/collections/bl_axonaut/records/${saved.id}`, { method:'PATCH', body: JSON.stringify(achatId ? { lines_state: s2 } : { lines_state: s2, all_done: allDone, etat_valide: allDone }) });
         app.innerHTML = `<div class="result info"><div class="t">Scan annulé</div><div class="d">${esc(label)}</div></div>`;
       }catch(e){ alert('Annulation impossible : ' + e.message); }
     };

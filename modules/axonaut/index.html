@@ -522,6 +522,8 @@
 <div id="tabBar">
   <button class="tab-btn" data-tab="devis" id="tabBtnDevis">📑 Devis</button>
   <button class="tab-btn active" data-tab="commande" id="tabBtnCommande">📦 Commande</button>
+  <button class="tab-btn" data-tab="avancement" id="tabBtnAvancement">📈 Avancement</button>
+  <button class="tab-btn" data-tab="achats" id="tabBtnAchats">🛒 Achats matières</button>
   <button class="tab-btn" data-tab="factures" id="tabBtnFactures">💶 Factures</button>
   <!-- Suivi colis masqué pour le moment : retirer style="display:none" pour le réafficher -->
   <button class="tab-btn" data-tab="suivi" id="tabBtnSuivi" style="display:none">🚚 Suivi colis</button>
@@ -923,6 +925,9 @@
           <div id="blDemandePrixDocs"></div>
         </div>
         <div class="col-result" id="blResult" style="margin-top:16px;"></div>
+        <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">🛒 Achats matières <span id="blAchatsStatus" style="font-weight:400; text-transform:none; color:var(--muted); margin-left:6px;"></span></div>
+        <div id="blAchatsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+        <datalist id="blAchatsFournisseurs"></datalist>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">💬 Commentaire de la commande <span id="blCommentStatus" style="font-weight:400; text-transform:none; color:var(--muted); margin-left:6px;"></span></div>
         <textarea id="blCommentInput" rows="3" placeholder="Ajouter un commentaire (affiché aussi sur le bon de fabrication)…" style="width:100%; box-sizing:border-box; font-family:sans-serif; font-size:.85rem; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--paper-2); color:var(--ink); resize:vertical;"></textarea>
         <div class="col-section-title" style="margin-top:16px; margin-bottom:6px;">📋 Lignes de la commande</div>
@@ -1112,6 +1117,44 @@
     <div id="fxDetail"><div style="font-family:sans-serif; color:var(--muted);">Choisis une facture dans la liste.</div></div>
   </div>
 </div><!-- /tabPanelFactures -->
+
+<div id="tabPanelAvancement" class="tab-panel">
+  <div class="sc-wrap" style="padding:14px 22px 40px;">
+    <div class="sc-toolbar">
+      <select id="avFilter" title="Commandes affichées">
+        <option value="cours">Commandes en cours</option>
+        <option value="finies">Commandes finies</option>
+        <option value="tous">Toutes</option>
+      </select>
+      <input type="text" id="avSearch" placeholder="Rechercher (commande, client, article)…" style="min-width:280px;">
+      <span style="flex:1;"></span>
+      <button class="btn ghost" id="avToggleAll">Tout déplier</button>
+      <button class="btn primary" id="avRefreshBtn">↻ Actualiser</button>
+    </div>
+    <div id="avInfo" style="font-family:sans-serif; font-size:.78rem; color:var(--muted); margin-bottom:8px;"></div>
+    <div id="avBody"></div>
+  </div>
+</div>
+
+<div id="tabPanelAchats" class="tab-panel">
+  <div class="sc-wrap" style="padding:14px 22px 40px;">
+    <div class="sc-toolbar">
+      <select id="acFilter" title="État des achats affichés">
+        <option value="actifs">À suivre (non vérifiés)</option>
+        <option value="0">À commander</option>
+        <option value="1">En commande</option>
+        <option value="2">Reçu</option>
+        <option value="3">Vérifié</option>
+        <option value="tous">Tous</option>
+      </select>
+      <input type="text" id="acSearch" placeholder="Rechercher (commande, client, article, réf, fournisseur)…" style="min-width:300px;">
+      <span style="flex:1;"></span>
+      <button class="btn primary" id="acRefreshBtn">↻ Actualiser</button>
+    </div>
+    <div id="acInfo" style="font-family:sans-serif; font-size:.78rem; color:var(--muted); margin-bottom:8px;"></div>
+    <div id="acBody"></div>
+  </div>
+</div>
 
 <div id="tabPanelSuivi" class="tab-panel">
   <div class="sc-wrap">
@@ -3170,6 +3213,41 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
   page.drawText('Total quantité', { x: right - 194, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
   page.drawText(totalQty.toFixed(2).replace('.', ','), { x: right - 55, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
   if(withCodes){
+    // Achats matières : un QR par achat, à biper pour passer à l'état suivant.
+    let achats = [];
+    try{
+      const rec = await blFetchByContract(q.contract_id);
+      // Seules les lignes cochées dans « Achats matières » ET encore présentes dans le devis ;
+      // texte, réf et quantité repris des lignes actuelles du devis.
+      achats = achatsOf(rec && rec.lines_state).map(a => {
+        const idx = /^l(\d+)$/.exec(a.id || '');
+        const l = idx && lines[parseInt(idx[1], 10)];
+        return l ? Object.assign({}, a, { d: stripHtmlToText(l.title || l.product_name || ''), ref: l.product_code || '', q: (l.quantity == null ? '' : String(l.quantity)) + (l.unit ? ' ' + l.unit : '') }) : null;
+      }).filter(Boolean);
+    }catch(e){ /* bon imprimé sans la section achats */ }
+    if(achats.length){
+      const AQ = 34, ROW = AQ + 8;
+      y -= 30;
+      if(y - 20 - ROW < bottom){ page = pdfDoc.addPage(PAGE_SIZE); y = height - 60; }
+      page.drawRectangle({ x: left, y: y - 18, width: right - left, height: 20, color: navy });
+      page.drawText('Achats matières', { x: left + 8, y: y - 13, size: 9, font: fontBold, color: PDFLib.rgb(1,1,1) });
+      page.drawText('Biper le code : À commander > En commande > Reçu > Vérifié', { x: right - 285, y: y - 13, size: 8, font, color: PDFLib.rgb(1,1,1) });
+      y -= 24;
+      achats.forEach((a, k) => {
+        if(y - ROW < bottom){ page = pdfDoc.addPage(PAGE_SIZE); y = height - 60; }
+        if(k % 2 === 1) page.drawRectangle({ x: left, y: y - ROW + 4, width: right - left, height: ROW, color: lightGrey });
+        drawPdfQr(page, scanUrlFor(q.contract_id, 'a:' + a.id), left + 8, y - 4 - AQ, AQ);
+        const tx = left + 8 + AQ + 10;
+        const title = wrapPdfText(pdfSafe(a.d || '(sans désignation)'), fontBold, 9.5, 270)[0];
+        page.drawText(title, { x: tx, y: y - 12, size: 9.5, font: fontBold });
+        const sub = [a.ref ? 'Réf : ' + a.ref : '', a.q ? 'Qté : ' + a.q : '', a.f ? 'Fournisseur : ' + a.f : ''].filter(Boolean).join('   ');
+        if(sub) page.drawText(pdfSafe(sub), { x: tx, y: y - 25, size: 8.5, font, color: PDFLib.rgb(0.3,0.3,0.3) });
+        page.drawText(ACHAT_ETATS[a.e || 0], { x: right - 90, y: y - 12, size: 9.5, font: fontBold, color: navy });
+        y -= ROW;
+      });
+    }
+  }
+  if(withCodes){
     // QR « Expédition » : à biper quand la commande part
     const XQ = 70;
     y -= 30;
@@ -4244,6 +4322,7 @@ async function openBlModal(r){
   loadBlPhotos(r.contractId);
   loadBlPrograms(r.contractId);
   loadBlComment(r.contractId);
+  loadBlAchats(r.contractId);
   const canViewQuotePdf = typeof CSBAuth !== 'undefined' && CSBAuth.can('axonaut', 'devis_pdf');
   const viewQuoteBtn = document.getElementById('blViewQuoteBtn');
   // Suppression : seulement les commandes du module Devis (l'API Axonaut ne supprime pas ses
@@ -4828,13 +4907,17 @@ async function onBlCheckboxChange(quiet){
   const checkboxes = document.querySelectorAll('#blLinesList input[type=checkbox]');
   const state = Object.assign({}, (currentBlPbRecord && currentBlPbRecord.lines_state) || {});
   const qtys = Object.assign({}, state._qty || {});
+  const ld = Object.assign({}, state._ld || {}); // dates de validation des lignes (avancement)
   checkboxes.forEach(cb => {
+    if(cb.checked && state[cb.dataset.idx] !== true) ld[cb.dataset.idx] = new Date().toISOString();
+    if(!cb.checked) delete ld[cb.dataset.idx];
     state[cb.dataset.idx] = cb.checked;
     const qi = document.querySelector(`#blLinesList .bl-qty[data-idx="${cb.dataset.idx}"]`);
     const v = qi ? Number(qi.value) || 0 : 0;
     if(cb.checked || v <= 0) delete qtys[cb.dataset.idx]; else qtys[cb.dataset.idx] = v;
   });
   state._qty = qtys;
+  state._ld = ld;
   if(currentBlQuotation && Array.isArray(currentBlQuotation.quotation_lines)) state._lq = currentBlQuotation.quotation_lines.map(blLineQty);
   r.blState = state;
   const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
@@ -4865,14 +4948,142 @@ async function onBlCheckboxChange(quiet){
 // où il est reconnu. Les validations sont enregistrées dans le même suivi que les cases à cocher
 // des lignes (bl_axonaut.lines_state) ; l'expédition y est notée sous la clé « _expedie ».
 function scanBaseUrl(){ return getConfig().url.replace(/\/+$/, '') + '/scan.html'; }
-// line : n° de ligne (à partir de 0), 'x' = expédition, 'v' = ouvrir la commande
+// line : n° de ligne (à partir de 0), 'x' = expédition, 'v' = ouvrir la commande, 'a:<id>' = achat matière
 function scanUrlFor(contractId, line){
-  return scanBaseUrl() + '?o=' + encodeURIComponent(String(contractId)) + (line === 'x' ? '&x=1' : line === 'v' ? '&v=1' : '&l=' + line);
+  const base = scanBaseUrl() + '?o=' + encodeURIComponent(String(contractId));
+  if(typeof line === 'string' && line.startsWith('a:')) return base + '&a=' + encodeURIComponent(line.slice(2));
+  return base + (line === 'x' ? '&x=1' : line === 'v' ? '&v=1' : '&l=' + line);
 }
 function parseScanCode(text){
-  const m = /[?&]o=([^&# ]+)&(?:l=([0-9]+)|(x)=1|(v)=1)/.exec(String(text || ''));
+  const m = /[?&]o=([^&# ]+)&(?:l=([0-9]+)|(x)=1|(v)=1|a=([A-Za-z0-9]+))/.exec(String(text || ''));
   if(!m) return null;
-  return { contractId: decodeURIComponent(m[1]), line: m[2] !== undefined ? parseInt(m[2], 10) : null, exp: !!m[3], open: !!m[4] };
+  return { contractId: decodeURIComponent(m[1]), line: m[2] !== undefined ? parseInt(m[2], 10) : null, exp: !!m[3], open: !!m[4], achat: m[5] || null };
+}
+
+/* ---------- Achats matières ----------
+   Liste par commande : désignation, quantité, fournisseur et état (À commander → En commande →
+   Reçu → Vérifié). Stockée dans bl_axonaut.lines_state._achats ; chaque achat a son QR code sur le
+   bon de fabrication : un bip fait passer à l'état suivant. */
+const ACHAT_ETATS = ['À commander', 'En commande', 'Reçu', 'Vérifié'];
+const ACHAT_COULEURS = ['#B3453A', '#C98A1B', '#2F6DB5', '#2E7D32'];
+let blAchatsCurrent = [];
+let blAchatsFournisseurs = [];
+function newAchatId(){ return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+// Date locale AAAA-MM-JJ d'un horodatage ISO (pour un champ date) et affichage JJ/MM/AAAA.
+function isoLocalDate(iso){ const d = new Date(iso); if(isNaN(d)) return ''; return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function frDate(iso){ const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('fr-FR'); }
+function achatsOf(state){ return Array.isArray(state && state._achats) ? state._achats : []; }
+let blAchatsLines = []; // lignes de la commande (même ordre que le bon de fabrication)
+async function loadBlAchats(contractId){
+  blAchatsCurrent = []; blAchatsLines = [];
+  const list = document.getElementById('blAchatsList');
+  list.innerHTML = '<div class="hint" style="font-size:.78rem;">Chargement…</div>';
+  try{
+    const [rec, fours, lines] = await Promise.all([
+      blFetchByContract(contractId),
+      fetchSharedSetting('achats_fournisseurs').catch(() => null),
+      scanOrderLines(currentBlRecord, true),
+    ]);
+    if(!currentBlRecord || currentBlRecord.contractId !== contractId) return;
+    blAchatsFournisseurs = Array.isArray(fours) ? fours : [];
+    blAchatsCurrent = achatsOf(rec && rec.lines_state);
+    blAchatsLines = lines || [];
+    renderBlAchats();
+  }catch(e){
+    if(currentBlRecord && currentBlRecord.contractId === contractId) list.innerHTML = `<div class="hint" style="color:var(--silk-red); font-size:.78rem;">Erreur de chargement : ${escapeHtml(e.message)}</div>`;
+  }
+}
+// Tableau des lignes de la commande : la case « Achat » signale une ligne de fournitures à acheter ;
+// elle reçoit alors un état et un fournisseur, et son QR code sur le bon de fabrication.
+function renderBlAchats(){
+  const list = document.getElementById('blAchatsList');
+  document.getElementById('blAchatsFournisseurs').innerHTML = blAchatsFournisseurs.map(f => `<option value="${escapeHtml(f)}">`).join('');
+  if(!blAchatsLines.length){ list.innerHTML = '<div class="hint" style="font-size:.78rem;">Aucune ligne dans cette commande.</div>'; return; }
+  const inp = 'padding:4px 6px; border:1px solid var(--line); border-radius:6px; font-size:.78rem; background:var(--paper-2); color:var(--ink); width:100%; box-sizing:border-box;';
+  const rows = blAchatsLines.map((l, i) => {
+    const a = blAchatsCurrent.find(x => x.id === 'l' + i);
+    const title = stripHtmlToText(l.title || l.product_name || '');
+    return `<tr data-i="${i}" style="border-top:1px solid var(--line);">
+      <td style="padding:5px 4px; text-align:center;"><input type="checkbox" class="achat-chk" ${a ? 'checked' : ''} style="width:16px; height:16px;"></td>
+      <td style="padding:5px 4px; font-size:.75rem; color:var(--muted); white-space:nowrap;">${escapeHtml(l.product_code || '—')}</td>
+      <td style="padding:5px 4px; font-size:.8rem;">${escapeHtml(title)} <span style="color:var(--muted);">× ${escapeHtml(String(l.quantity == null ? '' : l.quantity))}${l.unit ? ' ' + escapeHtml(l.unit) : ''}</span></td>
+      <td style="padding:5px 4px; width:112px;">${a ? `<select class="achat-etat" style="${inp} font-weight:700; color:#fff; background:${ACHAT_COULEURS[a.e || 0]};">${ACHAT_ETATS.map((n, k) => `<option value="${k}" style="color:#000; background:#fff;" ${k === (a.e || 0) ? 'selected' : ''}>${n}</option>`).join('')}</select>` : ''}</td>
+      <td style="padding:5px 4px; width:130px;">${a ? `<input class="achat-f" type="text" list="blAchatsFournisseurs" value="${escapeHtml(a.f || '')}" placeholder="Fournisseur" style="${inp}">` : ''}</td>
+      <td style="padding:5px 4px; width:118px;">${a ? `<input class="achat-date" type="date" value="${a.at ? escapeHtml(isoLocalDate(a.at)) : ''}" title="Date du dernier changement d'état (bip ou saisie)" style="${inp}">` : ''}</td>
+    </tr>`;
+  }).join('');
+  list.innerHTML = `<table style="width:100%; border-collapse:collapse; font-family:sans-serif;">
+    <thead><tr style="font-size:.7rem; color:var(--muted); text-align:left;"><th style="padding:3px 4px;">Achat</th><th style="padding:3px 4px;">Réf</th><th style="padding:3px 4px;">Ligne de la commande</th><th style="padding:3px 4px;">État</th><th style="padding:3px 4px;">Fournisseur</th><th style="padding:3px 4px;">Date</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  list.querySelectorAll('tr[data-i]').forEach(row => {
+    const i = parseInt(row.dataset.i, 10), l = blAchatsLines[i], id = 'l' + i;
+    row.querySelector('.achat-chk').addEventListener('change', async e => {
+      if(e.target.checked){
+        const q = (l.quantity == null ? '' : String(l.quantity)) + (l.unit ? ' ' + l.unit : '');
+        blAchatsCurrent = [...blAchatsCurrent.filter(x => x.id !== id), { id, i, ref: l.product_code || '', d: stripHtmlToText(l.title || l.product_name || ''), q: q.trim(), f: '', e: 0, at: new Date().toISOString(), by: scanUserName() }];
+      }else{
+        const a = blAchatsCurrent.find(x => x.id === id);
+        if(a && (a.e || 0) > 0 && !confirm('Cet achat est déjà « ' + ACHAT_ETATS[a.e] + ' ». Le retirer de la liste ?')){ e.target.checked = true; return; }
+        blAchatsCurrent = blAchatsCurrent.filter(x => x.id !== id);
+      }
+      renderBlAchats(); await saveBlAchats();
+    });
+    const upd = (patch) => { blAchatsCurrent = blAchatsCurrent.map(a => a.id === id ? Object.assign({}, a, patch) : a); return saveBlAchats(); };
+    const et = row.querySelector('.achat-etat');
+    if(et) et.addEventListener('change', e => { upd({ e: parseInt(e.target.value, 10), at: new Date().toISOString(), by: scanUserName() }).then(renderBlAchats); });
+    const dt = row.querySelector('.achat-date');
+    if(dt) dt.addEventListener('change', e => { upd({ at: e.target.value ? new Date(e.target.value + 'T12:00:00').toISOString() : null }); });
+    const fo = row.querySelector('.achat-f');
+    if(fo) fo.addEventListener('change', async e => {
+      const f = e.target.value.trim();
+      await upd({ f });
+      if(f && !blAchatsFournisseurs.some(x => x.toLowerCase() === f.toLowerCase())){
+        blAchatsFournisseurs = [...blAchatsFournisseurs, f].sort((a, b) => a.localeCompare(b, 'fr'));
+        try{ await saveSharedSettingStrict('achats_fournisseurs', blAchatsFournisseurs); }catch(err){ /* suggestions non vitales */ }
+        document.getElementById('blAchatsFournisseurs').innerHTML = blAchatsFournisseurs.map(x => `<option value="${escapeHtml(x)}">`).join('');
+      }
+    });
+  });
+}
+async function saveBlAchats(){
+  const r = currentBlRecord;
+  if(!r) return;
+  const status = document.getElementById('blAchatsStatus');
+  status.style.color = 'var(--muted)'; status.textContent = 'Enregistrement…';
+  try{
+    const rec = await blFetchByContract(r.contractId); // relu pour ne pas écraser un scan fait entre-temps
+    const state = Object.assign({}, (rec && rec.lines_state) || {});
+    // les états changés par un scan depuis l'ouverture sont conservés si on n'a pas touché à l'achat
+    state._achats = blAchatsCurrent.filter(a => /^l\d+$/.test(a.id || '')); // écarte les anciennes saisies libres
+    const body = { contract_id: String(r.contractId), numero_commande: r.numeroCommande, lines_state: state };
+    const saved = rec ? await blPatch(rec.id, body) : await blCreate(Object.assign({ all_done: false, etat_valide: false }, body));
+    if(currentBlRecord === r){ currentBlPbRecord = saved; r.blState = saved.lines_state || state; }
+    status.style.color = 'var(--silk-green)'; status.textContent = '✔ Enregistré';
+    setTimeout(() => { if(status.textContent === '✔ Enregistré') status.textContent = ''; }, 1500);
+  }catch(e){
+    status.style.color = 'var(--silk-red)'; status.textContent = "Échec de l'enregistrement : " + e.message;
+  }
+}
+// Un QR « achat » bipé fait passer l'achat à l'état suivant (jusqu'à « Vérifié »).
+async function scanAchat(r, achatId, label){
+  const rec = await blFetchByContract(r.contractId);
+  const state = Object.assign({}, (rec && rec.lines_state) || {});
+  const achats = achatsOf(state).map(a => Object.assign({}, a));
+  const a = achats.find(x => x.id === achatId);
+  if(!a){ scanFeedback(false, 'Achat introuvable', label + ' — réimprime le bon de fabrication'); return; }
+  const name = (a.d || 'achat') + (a.f ? ' (' + a.f + ')' : '');
+  if((a.e || 0) >= ACHAT_ETATS.length - 1){ scanFeedback(true, 'Achat déjà vérifié', label + ' — ' + name, true); return; }
+  const at = new Date().toISOString(), who = scanUserName();
+  a.e = (a.e || 0) + 1; a.at = at; a.by = who;
+  state._achats = achats;
+  const log = Array.isArray(state._log) ? state._log.slice(-99) : [];
+  log.push({ a: achatId, e: a.e, at, by: who }); state._log = log;
+  const body = { contract_id: String(r.contractId), numero_commande: r.numeroCommande, lines_state: state };
+  const saved = rec ? await blPatch(rec.id, body) : await blCreate(Object.assign({ all_done: false, etat_valide: false }, body));
+  r.blState = state;
+  if(currentBlRecord === r){ currentBlPbRecord = saved; blAchatsCurrent = achats; renderBlAchats(); }
+  render();
+  scanFeedback(true, '🛒 ' + ACHAT_ETATS[a.e], label + ' — ' + name);
 }
 // Identifiant de ce poste, pour y associer un téléphone (partagé avec le socle via localStorage).
 function scanPoste(){
@@ -4899,8 +5110,9 @@ function drawPdfQr(page, text, x, y, size){
   }
 }
 // Lignes d'une commande (même ordre que le bon de fabrication et les cases à cocher).
-async function scanOrderLines(r){
-  if(currentBlRecord === r && currentBlQuotation) return currentBlQuotation.quotation_lines || [];
+async function scanOrderLines(r, fresh){
+  // fresh : ignore le devis déjà chargé dans la fiche (qui peut encore être celui de la commande précédente)
+  if(!fresh && currentBlRecord === r && currentBlQuotation) return currentBlQuotation.quotation_lines || [];
   if(isModuleOrder(r)) return moduleQuotation(r).quotation_lines || [];
   let qid = r.quotationId;
   if(!qid){
@@ -4932,6 +5144,7 @@ async function handleScan(text){
       scanFeedback(true, '📂 Commande ouverte', label);
       return;
     }
+    if(code.achat){ await scanAchat(r, code.achat, label); return; }
     const lines = await scanOrderLines(r);
     const rec = await blFetchByContract(r.contractId);
     const state = Object.assign({}, (rec && rec.lines_state) || {});
@@ -4951,6 +5164,7 @@ async function handleScan(text){
       const name = l.title || l.product_name || ('ligne ' + (code.line + 1));
       if(state[code.line] === true){ scanFeedback(true, 'Ligne déjà validée', label + ' — ' + name, true); return; }
       state[code.line] = true;
+      state._ld = Object.assign({}, state._ld || {}, { [code.line]: at }); // date de validation de la ligne
       if(state._qty) delete state._qty[code.line];
       log.push({ l: code.line, at, by: who });
       const done = lines.filter((x, i) => state[i] === true).length;
@@ -5885,7 +6099,7 @@ function setAdminMode(on){
 
 // ---------- Onglets ----------
 const ACTIVE_TAB_KEY = 'csb_envoi_axonaut_active_tab';
-const TAB_SUFFIX = { devis:'Devis', commande:'Commande', factures:'Factures', suivi:'Suivi', stats:'Stats', params:'Params' };
+const TAB_SUFFIX = { devis:'Devis', commande:'Commande', avancement:'Avancement', achats:'Achats', factures:'Factures', suivi:'Suivi', stats:'Stats', params:'Params' };
 function activateTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -5894,9 +6108,184 @@ function activateTab(tab){
   try{ localStorage.setItem(ACTIVE_TAB_KEY, tab); }catch(e){}
   if(tab === 'devis') ensureDevisModuleFrame();
   if(tab === 'factures') fxOpen();
+  if(tab === 'achats') acOpen();
+  if(tab === 'avancement') avOpen();
   if(tab === 'stats') stOpen();
   if(tab === 'suivi') scOpen();
 }
+
+// ---------- Onglet Avancement ----------
+// Toutes les commandes avec leurs lignes à valider : quantité validée, date du bip de chaque ligne
+// (bl_axonaut.lines_state._ld, sinon l'historique _log), dernier bip et expédition de la commande.
+// Lignes lues dans commandes_index (titre, réf, quantité) ; en cours = pas toutes les lignes validées.
+let avRows = [], avOpenSet = new Set(), avAllOpen = false;
+async function avFetchIndex(){
+  const out = new Map(); let page = 1;
+  while(true){
+    const res = await CSBAuth.authedFetch(commandesIndexBase() + `?perPage=200&page=${page}`);
+    if(!res.ok) break;
+    const items = (await res.json()).items || [];
+    items.forEach(it => out.set(String(it.contract_id), it));
+    if(items.length < 200) break;
+    page++;
+  }
+  return out;
+}
+async function avOpen(){
+  const body = document.getElementById('avBody');
+  if(!avRows.length) body.innerHTML = '<div class="hint" style="padding:16px;">Chargement…</div>';
+  try{
+    if(!contracts.length){ try{ await refreshAll(); }catch(e){} }
+    const [recs, idx] = await Promise.all([blFetchAll(), avFetchIndex()]);
+    const recBy = new Map(recs.map(x => [String(x.contract_id), x]));
+    avRows = contracts.map(r => {
+      const st = (recBy.get(String(r.contractId)) || {}).lines_state || {};
+      let lines = [];
+      const ix = idx.get(String(r.contractId));
+      if(ix){ try{ lines = JSON.parse(ix.lignes_json || '[]'); }catch(e){} }
+      if(!lines.length && Array.isArray(st._lq)) lines = st._lq.map((q, i) => ({ titre: 'Ligne ' + (i + 1), qte: q }));
+      const log = Array.isArray(st._log) ? st._log : [];
+      const items = lines.map((l, i) => {
+        const tot = Number(l.qte) > 0 ? Number(l.qte) : 0;
+        const done = blDoneQty(st, i, tot);
+        const full = st[i] === true;
+        const ent = full ? log.filter(x => x.l === i).pop() : null;
+        return { titre: l.titre || ('Ligne ' + (i + 1)), ref: l.ref || '', tot, done, full, at: full ? ((st._ld || {})[i] || (ent && ent.at) || '') : '', by: ent ? (ent.by || '') : '' };
+      });
+      const tot = items.reduce((s, x) => s + x.tot, 0), done = items.reduce((s, x) => s + x.done, 0);
+      const pct = tot > 0 ? Math.floor(done / tot * 100) : null;
+      const lastBip = [...log.map(x => x.at), st._expedie && st._expedie.at].filter(Boolean).sort().pop() || '';
+      return { r, items, tot, done, pct, lastBip, expAt: (st._expedie && st._expedie.at) || '', facturee: Array.isArray(r.invoicesId) && r.invoicesId.length > 0 };
+    });
+    avRender();
+  }catch(e){
+    body.innerHTML = `<div class="hint" style="padding:16px; color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+let avSort = { col: 'num', dir: -1 }; // tri par défaut : n° de commande décroissant
+function avTh(k, t){
+  const arrow = avSort.col === k ? (avSort.dir === 1 ? ' ▲' : ' ▼') : '';
+  return `<th data-sort="${k}" style="cursor:pointer; user-select:none;" title="Trier par ${t.toLowerCase()}">${t}${arrow}</th>`;
+}
+function avRender(){
+  const filter = document.getElementById('avFilter').value;
+  const q = document.getElementById('avSearch').value.trim().toLowerCase();
+  let rows = avRows.filter(o => {
+    const finie = o.pct !== null && o.pct >= 100;
+    if(filter === 'finies') return finie;
+    if(filter === 'cours') return !finie && !o.facturee;
+    return true;
+  });
+  if(q) rows = rows.filter(o => [o.r.numeroCommande, o.r.clientCompany, o.r.nomSoc, ...o.items.map(x => x.titre + ' ' + x.ref)].join(' ').toLowerCase().includes(q));
+  const cmp = {
+    num: (a, b) => String(a.r.numeroCommande || '').localeCompare(String(b.r.numeroCommande || ''), 'fr', { numeric:true }),
+    client: (a, b) => String(a.r.clientCompany || a.r.nomSoc || '').localeCompare(String(b.r.clientCompany || b.r.nomSoc || ''), 'fr'),
+    bip: (a, b) => String(a.lastBip).localeCompare(String(b.lastBip)),
+  }[avSort.col];
+  rows.sort((a, b) => avSort.dir * cmp(a, b) || String(b.r.numeroCommande || '').localeCompare(String(a.r.numeroCommande || ''), 'fr', { numeric:true }));
+  document.getElementById('avInfo').textContent = `${rows.length} commande(s) affichée(s). Les dates viennent des bips (douchette, téléphone) ou de la case cochée à la main.`;
+  const body = document.getElementById('avBody');
+  if(!rows.length){ body.innerHTML = '<div class="hint" style="padding:16px;">Aucune commande pour ce filtre.</div>'; return; }
+  const fd = iso => iso ? new Date(iso).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+  const bar = o => {
+    if(o.pct === null) return '<span style="color:var(--muted);" title="Lignes pas encore connues : ouvre la commande une fois">—</span>';
+    const col = o.pct >= 100 ? 'var(--silk-green,#2E7D32)' : (o.pct > 0 ? '#C98A1B' : 'var(--muted)');
+    return `<div style="display:flex; align-items:center; gap:6px; min-width:150px;"><span style="flex:1; height:6px; background:var(--paper-2,#eee); border-radius:999px; overflow:hidden;"><span style="display:block; height:100%; width:${Math.min(100, o.pct)}%; background:${col};"></span></span><b style="color:${col}; font-size:.8rem;">${o.pct} %</b><span style="font-size:.72rem; color:var(--muted);">${fmtQty(o.done)}/${fmtQty(o.tot)}</span></div>`;
+  };
+  body.innerHTML = `<table class="sc-table"><thead><tr><th></th>${[['num', 'Commande'], ['client', 'Client']].map(([k, t]) => avTh(k, t)).join('')}<th>Avancement</th>${avTh('bip', 'Dernier bip')}<th>Expédition</th></tr></thead><tbody>` +
+    rows.map((o, i) => {
+      const id = String(o.r.contractId), open = avAllOpen || avOpenSet.has(id);
+      const head = `<tr class="sc-row" data-id="${escapeHtml(id)}" style="${open ? 'background:var(--paper);' : ''}"><td style="width:20px;">${o.items.length ? (open ? '▾' : '▸') : ''}</td>
+        <td style="white-space:nowrap; font-weight:700;">${escapeHtml(o.r.numeroCommande || id)}</td><td>${escapeHtml(o.r.clientCompany || o.r.nomSoc || '')}</td>
+        <td>${bar(o)}</td><td style="white-space:nowrap;">${fd(o.lastBip)}</td>
+        <td style="white-space:nowrap;">${o.expAt ? '🚚 ' + fd(o.expAt) : '—'}</td></tr>`;
+      if(!open) return head;
+      const sub = o.items.map(x => `<tr style="background:var(--paper);"><td></td>
+        <td style="white-space:nowrap; color:var(--muted); font-size:.78rem;">${escapeHtml(x.ref)}</td>
+        <td colspan="2">${x.full ? '✅' : (x.done > 0 ? '🟡' : '⬜')} ${escapeHtml(x.titre)} <span style="color:var(--muted);">${x.tot ? fmtQty(x.done) + '/' + fmtQty(x.tot) : ''}</span></td>
+        <td style="white-space:nowrap;">${x.full ? fd(x.at) : '—'}</td><td style="color:var(--muted); font-size:.78rem;">${escapeHtml(x.by)}</td></tr>`).join('');
+      return head + sub + `<tr style="background:var(--paper);"><td></td><td colspan="5"><a href="#" class="av-open" data-id="${escapeHtml(id)}" style="font-size:.8rem;">Ouvrir la commande →</a></td></tr>`;
+    }).join('') + '</tbody></table>';
+  body.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const c = th.dataset.sort;
+    avSort = avSort.col === c ? { col: c, dir: -avSort.dir } : { col: c, dir: c === 'bip' ? -1 : 1 };
+    avRender();
+  }));
+  body.querySelectorAll('tr.sc-row').forEach(tr => tr.addEventListener('click', () => {
+    const id = tr.dataset.id;
+    if(avOpenSet.has(id)) avOpenSet.delete(id); else avOpenSet.add(id);
+    avRender();
+  }));
+  body.querySelectorAll('.av-open').forEach(a => a.addEventListener('click', async e => {
+    e.preventDefault();
+    const c = contracts.find(x => String(x.contractId) === a.dataset.id);
+    await jumpToCommande(c ? c.contractId : a.dataset.id);
+  }));
+}
+document.getElementById('avFilter').addEventListener('change', avRender);
+document.getElementById('avSearch').addEventListener('input', avRender);
+document.getElementById('avRefreshBtn').addEventListener('click', avOpen);
+document.getElementById('avToggleAll').addEventListener('click', () => {
+  avAllOpen = !avAllOpen; if(!avAllOpen) avOpenSet.clear();
+  document.getElementById('avToggleAll').textContent = avAllOpen ? 'Tout replier' : 'Tout déplier';
+  avRender();
+});
+
+// ---------- Onglet Achats matières ----------
+// Toutes les lignes cochées « Achat » dans les commandes (bl_axonaut.lines_state._achats), avec la
+// commande, le fournisseur et l'état. Un clic sur une ligne ouvre la commande.
+let acRows = [];
+async function acOpen(){
+  const body = document.getElementById('acBody');
+  if(!acRows.length) body.innerHTML = '<div class="hint" style="padding:16px;">Chargement…</div>';
+  try{
+    if(!contracts.length){ try{ await refreshAll(); }catch(e){} }
+    const recs = await blFetchAll();
+    const byId = new Map(contracts.map(c => [String(c.contractId), c]));
+    acRows = [];
+    recs.forEach(rec => {
+      // Seulement les vrais achats cochés sur une ligne de la commande (id « l<n° de ligne> ») ;
+      // les anciennes saisies libres, souvent vides, sont ignorées.
+      achatsOf(rec.lines_state).filter(a => /^l\d+$/.test(a.id || '') && (a.d || a.ref)).forEach(a => {
+        const c = byId.get(String(rec.contract_id));
+        acRows.push({
+          contractId: rec.contract_id, numero: rec.numero_commande || (c && c.numeroCommande) || String(rec.contract_id),
+          client: c ? (c.clientCompany || c.nomSoc || '') : '', date: c ? (c.startDate || '') : '',
+          ref: a.ref || '', d: a.d || '', q: a.q || '', f: a.f || '', e: a.e || 0, at: a.at || '', ln: parseInt(a.id.slice(1), 10),
+        });
+      });
+    });
+    acRender();
+  }catch(e){
+    body.innerHTML = `<div class="hint" style="padding:16px; color:var(--silk-red);">Erreur : ${escapeHtml(e.message)}</div>`;
+  }
+}
+function acRender(){
+  const filter = document.getElementById('acFilter').value;
+  const q = document.getElementById('acSearch').value.trim().toLowerCase();
+  let rows = acRows.filter(r => filter === 'tous' ? true : filter === 'actifs' ? r.e < 3 : r.e === parseInt(filter, 10));
+  if(q) rows = rows.filter(r => [r.numero, r.client, r.d, r.ref, r.f].join(' ').toLowerCase().includes(q));
+  rows.sort((a, b) => String(a.numero).localeCompare(String(b.numero), 'fr', { numeric:true }) || a.ln - b.ln);
+  const cnt = ACHAT_ETATS.map((n, k) => `${acRows.filter(r => r.e === k).length} ${n.toLowerCase()}`).join(' · ');
+  document.getElementById('acInfo').textContent = `${rows.length} achat(s) affiché(s) — total : ${cnt}`;
+  const body = document.getElementById('acBody');
+  if(!rows.length){ body.innerHTML = '<div class="hint" style="padding:16px;">Aucun achat pour ce filtre.</div>'; return; }
+  body.innerHTML = `<table class="sc-table"><thead><tr><th>Commande</th><th>Client</th><th>Réf</th><th>Article</th><th>Qté</th><th>Fournisseur</th><th>État</th><th>Date</th></tr></thead><tbody>` +
+    rows.map((r, i) => `<tr class="sc-row" data-i="${i}">
+      <td style="white-space:nowrap; font-weight:700;">${escapeHtml(r.numero)}</td><td>${escapeHtml(r.client)}</td>
+      <td style="color:var(--muted); white-space:nowrap;">${escapeHtml(r.ref)}</td><td>${escapeHtml(r.d)}</td><td style="white-space:nowrap;">${escapeHtml(r.q)}</td>
+      <td>${escapeHtml(r.f || '—')}</td>
+      <td><span style="background:${ACHAT_COULEURS[r.e]}; color:#fff; font-weight:700; border-radius:999px; padding:2px 10px; font-size:.75rem; white-space:nowrap;">${ACHAT_ETATS[r.e]}</span></td>
+      <td style="white-space:nowrap;">${r.at ? frDate(r.at) : '—'}</td></tr>`).join('') + '</tbody></table>';
+  body.querySelectorAll('tr.sc-row').forEach(tr => tr.addEventListener('click', async () => {
+    const r = rows[parseInt(tr.dataset.i, 10)];
+    const c = contracts.find(x => String(x.contractId) === String(r.contractId));
+    await jumpToCommande(c ? c.contractId : r.contractId);
+  }));
+}
+document.getElementById('acFilter').addEventListener('change', acRender);
+document.getElementById('acSearch').addEventListener('input', acRender);
+document.getElementById('acRefreshBtn').addEventListener('click', acOpen);
 
 // ---------- Onglet Suivi colis (Colissimo) ----------
 // Les colis = n° de suivi des étiquettes faites depuis l'appli (envois des commandes), plus les
@@ -7932,6 +8321,12 @@ function applyPermissions(){
   const canFactures = CSBAuth.can('axonaut', 'factures');
   const canSettings = CSBAuth.can('axonaut', 'settings');
   const canStats = CSBAuth.can('axonaut', 'stats');
+  const canAvancement = CSBAuth.can('axonaut', 'avancement');
+  const canAchats = CSBAuth.can('axonaut', 'achats');
+  document.getElementById('tabBtnAvancement').style.display = canAvancement ? '' : 'none';
+  document.getElementById('tabBtnAchats').style.display = canAchats ? '' : 'none';
+  if(!canAvancement && document.getElementById('tabBtnAvancement').classList.contains('active')) activateTab('commande');
+  if(!canAchats && document.getElementById('tabBtnAchats').classList.contains('active')) activateTab('commande');
   document.getElementById('tabBtnDevis').style.display = canDevis ? '' : 'none';
   document.getElementById('tabBtnCommande').style.display = canCommandes ? '' : 'none';
   document.getElementById('tabBtnFactures').style.display = canFactures ? '' : 'none';
