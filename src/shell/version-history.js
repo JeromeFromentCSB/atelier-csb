@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.74', items: [
+    "Gestion Commande : l'état d'achat matière (À commander, En commande, Reçu, Vérifié) et le fournisseur s'affichent sur chaque ligne de la commande concernée",
+    "Gestion Commande : les boutons « Actualiser » indiquent « Actualisation… » puis « ✔ Actualisé » (ou « ⚠ Échec »)",
+    "Avancement : une commande n'est « finie » que si toutes ses lignes sont validées et que l'expédition a été bipée",
+    "Bon de fabrication : QR codes plus grands et plus simples, lecture de la photo plus tolérante sur le téléphone (copier mobile/scan.html dans pb_public)",
+    "Correctif : envoi d'un devis avec pièces jointes (erreur ERR_INVALID_URL à la création du PDF)",
+  ]},
   { v: '0.2.73', items: [
     "Gestion Commande : section « Achats matières » dans le détail d'une commande — tableau des lignes avec case « Achat », état (À commander, En commande, Reçu, Vérifié), fournisseur et date ; ces achats ont leur QR code sur le bon de fabrication (un bip = état suivant, douchette ou téléphone)",
     "Gestion Commande : nouvel onglet « 🛒 Achats matières » listant les achats de toutes les commandes avec leur état et leur date",

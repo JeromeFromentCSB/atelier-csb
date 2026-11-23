@@ -341,8 +341,12 @@ ipcMain.handle('csb:html-to-pdf', async (_event, { html, footerHtml, headerHtml 
     show: false,
     webPreferences: { javascript: false, sandbox: true, contextIsolation: true, nodeIntegration: false }
   });
+  // Fichier temporaire plutôt qu'une adresse « data: » : celle-ci est refusée (ERR_INVALID_URL)
+  // quand le devis contient de grosses images (pièces jointes, vignettes).
+  const tmpHtml = path.join(require('os').tmpdir(), 'csb-pdf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.html');
   try {
-    await win.loadURL('data:text/html;charset=utf-8;base64,' + Buffer.from(page, 'utf8').toString('base64'));
+    fs.writeFileSync(tmpHtml, page, 'utf8');
+    await win.loadFile(tmpHtml);
     // Police du devis (Inter) chargée depuis Google Fonts : petit délai pour qu'elle soit prête ;
     // hors connexion, l'impression se fait avec la police de secours (Segoe UI / Arial).
     await new Promise(r => setTimeout(r, 400));
@@ -357,6 +361,7 @@ ipcMain.handle('csb:html-to-pdf', async (_event, { html, footerHtml, headerHtml 
     return pdf.toString('base64');
   } finally {
     if (!win.isDestroyed()) win.destroy();
+    try { fs.unlinkSync(tmpHtml); } catch (e) {}
   }
 });
 // Impression d'une page HTML (ex. un mail) : chargée dans une fenêtre cachée sans JavaScript

@@ -2986,7 +2986,7 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
   const isBL = !!opts.livraison;
   // QR codes de validation (bon de fabrication seulement, commande connue)
   const withCodes = !isBL && q.contract_id != null && q.contract_id !== '' && typeof qrcode === 'function';
-  const QR = 40;                       // côté du QR d'une ligne (≈ 14 mm)
+  const QR = 52;                       // côté du QR d'une ligne (≈ 18 mm)
   const HEAD_QR = 58;                  // QR « Commande » sous la date (≈ 20 mm)
   const qtyCol = withCodes ? 140 : 90; // la colonne quantité se décale pour laisser la place au QR
   const pdfDoc = await PDFLib.PDFDocument.create();
@@ -3202,7 +3202,7 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
       ly -= 11;
     });
     page.drawText(`${(l.quantity||0).toFixed(2).replace('.', ',')} ${l.unit || ''}`, { x: right - qtyCol, y: y - 10, size: 9.5, font });
-    if(withCodes) drawPdfQr(page, scanUrlFor(q.contract_id, i), right - 44, y - 4 - QR, QR);
+    if(withCodes) drawPdfQr(page, scanUrlFor(q.contract_id, i), right - QR - 4, y - 4 - QR, QR);
     totalQty += (l.quantity || 0);
     y -= blockHeight;
   }
@@ -3226,7 +3226,7 @@ async function generateBonDeFabrication(q, clientAddress, opts = {}){
       }).filter(Boolean);
     }catch(e){ /* bon imprimé sans la section achats */ }
     if(achats.length){
-      const AQ = 34, ROW = AQ + 8;
+      const AQ = 48, ROW = AQ + 8;
       y -= 30;
       if(y - 20 - ROW < bottom){ page = pdfDoc.addPage(PAGE_SIZE); y = height - 60; }
       page.drawRectangle({ x: left, y: y - 18, width: right - left, height: 20, color: navy });
@@ -4832,6 +4832,7 @@ function renderBlLines(lines, checkedState, contractComment, chapterText, quotat
       <span id="blLineImg${i}" style="width:48px; height:48px; flex-shrink:0; border-radius:6px; border:1.5px dashed var(--muted); background:var(--paper-2); color:var(--muted); font-size:16px; display:flex; align-items:center; justify-content:center; overflow:hidden;">✕</span>
       <span>
         <strong>${escapeHtml(l.title || l.product_name || '')}</strong> — Qté : ${l.quantity}${l.unit ? ' ' + escapeHtml(l.unit) : ''}
+        <span class="bl-achat-badge" data-i="${i}">${achatBadgeHtml(achatsOf(checkedState).find(x => x.id === 'l' + i))}</span>
         ${admin ? `<br><span style="color:var(--muted); font-size:.78rem;">${l.product_code ? 'Réf : ' + escapeHtml(l.product_code) : ''}${l.product_code ? ' · ' : ''}${(l.pre_tax_amount||0).toFixed(2).replace('.', ',')} € HT</span>` : ''}
         <br><span style="color:var(--muted); font-size:.8rem; white-space:pre-line;">${escapeHtml(stripHtmlToText(l.details))}</span>
       </span>
@@ -4973,6 +4974,17 @@ function newAchatId(){ return 'a' + Date.now().toString(36) + Math.random().toSt
 function isoLocalDate(iso){ const d = new Date(iso); if(isNaN(d)) return ''; return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function frDate(iso){ const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('fr-FR'); }
 function achatsOf(state){ return Array.isArray(state && state._achats) ? state._achats : []; }
+// Pastille d'état d'achat matière affichée sur la ligne de la commande (vide si la ligne n'est pas un achat).
+function achatBadgeHtml(a){
+  if(!a) return '';
+  const e = a.e || 0;
+  return `<span style="display:inline-block; margin-left:6px; padding:1px 8px; border-radius:10px; font-size:.72rem; font-weight:700; color:#fff; background:${ACHAT_COULEURS[e]};" title="Achat matière">🛒 ${escapeHtml(ACHAT_ETATS[e])}${a.f ? ' — ' + escapeHtml(a.f) : ''}</span>`;
+}
+function refreshBlAchatBadges(){
+  document.querySelectorAll('#blLinesList .bl-achat-badge').forEach(el => {
+    el.innerHTML = achatBadgeHtml(blAchatsCurrent.find(x => x.id === 'l' + el.dataset.i));
+  });
+}
 let blAchatsLines = []; // lignes de la commande (même ordre que le bon de fabrication)
 async function loadBlAchats(contractId){
   blAchatsCurrent = []; blAchatsLines = [];
@@ -5015,6 +5027,7 @@ function renderBlAchats(){
   list.innerHTML = `<table style="width:100%; border-collapse:collapse; font-family:sans-serif;">
     <thead><tr style="font-size:.7rem; color:var(--muted); text-align:left;"><th style="padding:3px 4px;">Achat</th><th style="padding:3px 4px;">Réf</th><th style="padding:3px 4px;">Ligne de la commande</th><th style="padding:3px 4px;">État</th><th style="padding:3px 4px;">Fournisseur</th><th style="padding:3px 4px;">Date</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
+  refreshBlAchatBadges();
   list.querySelectorAll('tr[data-i]').forEach(row => {
     const i = parseInt(row.dataset.i, 10), l = blAchatsLines[i], id = 'l' + i;
     row.querySelector('.achat-chk').addEventListener('change', async e => {
@@ -5103,7 +5116,7 @@ function setScanPosteName(name){
 // QR code dessiné dans le PDF (pdf-lib) : un carré noir par module.
 function drawPdfQr(page, text, x, y, size){
   if(typeof qrcode !== 'function') return;
-  const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
+  const qr = qrcode(0, 'L'); qr.addData(text); qr.make();
   const n = qr.getModuleCount(), cell = size / n, black = PDFLib.rgb(0, 0, 0);
   for(let r = 0; r < n; r++) for(let c = 0; c < n; c++){
     if(qr.isDark(r, c)) page.drawRectangle({ x: x + c * cell, y: y + size - (r + 1) * cell, width: cell + 0.05, height: cell + 0.05, color: black });
@@ -5542,6 +5555,23 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
   render();
 });
 
+// Retour visuel sur un bouton « Actualiser » : « Actualisation… » dès le clic, puis « ✔ Actualisé » (ou « ⚠ Échec »).
+function withRefreshFeedback(id, fn){
+  return async function(){
+    const btn = document.getElementById(id);
+    if(!btn || btn.dataset.fbBusy) return;
+    const label = btn.dataset.fbLabel || btn.textContent;
+    btn.dataset.fbLabel = label; btn.dataset.fbBusy = '1';
+    btn.disabled = true; btn.textContent = '↻ Actualisation…';
+    const t0 = Date.now();
+    let ok = true;
+    try{ await fn.apply(this, arguments); }catch(e){ ok = false; console.error(e); }
+    const wait = 700 - (Date.now() - t0);
+    if(wait > 0) await new Promise(r => setTimeout(r, wait));
+    btn.disabled = false; btn.textContent = ok ? '✔ Actualisé' : '⚠ Échec';
+    setTimeout(() => { btn.textContent = label; delete btn.dataset.fbBusy; delete btn.dataset.fbLabel; }, 1800);
+  };
+}
 async function refreshAll(){
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
@@ -5603,7 +5633,7 @@ async function refreshAll(){
   btn.disabled = false;
   render();
 }
-document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+document.getElementById('refreshBtn').addEventListener('click', withRefreshFeedback('refreshBtn', refreshAll));
 
 const COMMANDE_EXPANDED_KEY = 'csb_envoi_axonaut_commande_expanded';
 let expandedCommandeClients = (() => { try{ return new Set(JSON.parse(localStorage.getItem(COMMANDE_EXPANDED_KEY)) || []); }catch(e){ return new Set(); } })();
@@ -6171,7 +6201,8 @@ function avRender(){
   const filter = document.getElementById('avFilter').value;
   const q = document.getElementById('avSearch').value.trim().toLowerCase();
   let rows = avRows.filter(o => {
-    const finie = o.pct !== null && o.pct >= 100;
+    // finie = toutes les lignes validées ET expédition bipée
+    const finie = o.pct !== null && o.pct >= 100 && !!o.expAt;
     if(filter === 'finies') return finie;
     if(filter === 'cours') return !finie && !o.facturee;
     return true;
@@ -6224,7 +6255,7 @@ function avRender(){
 }
 document.getElementById('avFilter').addEventListener('change', avRender);
 document.getElementById('avSearch').addEventListener('input', avRender);
-document.getElementById('avRefreshBtn').addEventListener('click', avOpen);
+document.getElementById('avRefreshBtn').addEventListener('click', withRefreshFeedback('avRefreshBtn', avOpen));
 document.getElementById('avToggleAll').addEventListener('click', () => {
   avAllOpen = !avAllOpen; if(!avAllOpen) avOpenSet.clear();
   document.getElementById('avToggleAll').textContent = avAllOpen ? 'Tout replier' : 'Tout déplier';
@@ -6285,7 +6316,7 @@ function acRender(){
 }
 document.getElementById('acFilter').addEventListener('change', acRender);
 document.getElementById('acSearch').addEventListener('input', acRender);
-document.getElementById('acRefreshBtn').addEventListener('click', acOpen);
+document.getElementById('acRefreshBtn').addEventListener('click', withRefreshFeedback('acRefreshBtn', acOpen));
 
 // ---------- Onglet Suivi colis (Colissimo) ----------
 // Les colis = n° de suivi des étiquettes faites depuis l'appli (envois des commandes), plus les
@@ -6425,7 +6456,7 @@ function scRender(msg){
 }
 document.getElementById('scFilter').addEventListener('change', () => scRender());
 document.getElementById('scSearch').addEventListener('input', () => scRender());
-document.getElementById('scRefreshBtn').addEventListener('click', () => scRefresh(true));
+document.getElementById('scRefreshBtn').addEventListener('click', withRefreshFeedback('scRefreshBtn', () => scRefresh(true)));
 document.getElementById('scAddBtn').addEventListener('click', () => {
   const inp = document.getElementById('scAddNum');
   const num = inp.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -6721,7 +6752,7 @@ document.getElementById('fxReset').addEventListener('click', () => {
   document.getElementById('fxPaid').value = 'unpaid'; // filtre par défaut
   fxRender();
 });
-document.getElementById('fxRefresh').addEventListener('click', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); Object.keys(fxEventsCache).forEach(k => delete fxEventsCache[k]); fxOpen(true); });
+document.getElementById('fxRefresh').addEventListener('click', withRefreshFeedback('fxRefresh', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); Object.keys(fxEventsCache).forEach(k => delete fxEventsCache[k]); return fxOpen(true); }));
 window.addEventListener('resize', fxUpdateHeaderHeight);
 
 // ---------- Relance : mail pour les factures non réglées affichées d'un client ----------
@@ -7289,7 +7320,7 @@ function stDrawChart(d, amtLabel){
   });
 }
 ['stView', 'stYear', 'stFrom', 'stTo', 'stClient', 'stAmt'].forEach(id => document.getElementById(id).addEventListener('change', stRender));
-document.getElementById('stRefresh').addEventListener('click', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); stOpen(true); });
+document.getElementById('stRefresh').addEventListener('click', withRefreshFeedback('stRefresh', () => { Object.keys(fxDetailCache).forEach(k => delete fxDetailCache[k]); return stOpen(true); }));
 let stResizeT = null;
 window.addEventListener('resize', () => { clearTimeout(stResizeT); stResizeT = setTimeout(() => { if(document.getElementById('tabPanelStats').classList.contains('active')) stRender(); }, 150); });
 
@@ -7490,7 +7521,7 @@ async function refreshQuotations(){
   btn.textContent = '↻ Actualiser';
   renderDevisTab();
 }
-document.getElementById('devisRefreshBtn').addEventListener('click', refreshQuotations);
+document.getElementById('devisRefreshBtn').addEventListener('click', withRefreshFeedback('devisRefreshBtn', refreshQuotations));
 document.getElementById('devisExpandAllBtn').addEventListener('click', () => {
   quotations.forEach(q => expandedClients.add(q.company_name || 'Sans client'));
   saveExpandedClients();
