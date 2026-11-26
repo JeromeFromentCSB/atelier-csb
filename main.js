@@ -463,8 +463,10 @@ ipcMain.handle('csb:bring-to-front', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win.isDestroyed()) return false;
   if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
   win.show();
-  win.setAlwaysOnTop(true); win.focus(); win.setAlwaysOnTop(false);
+  try { app.focus({ steal: true }); } catch (e) {}
+  win.setAlwaysOnTop(true); win.moveTop(); win.focus(); win.setAlwaysOnTop(false);
   return true;
 });
 

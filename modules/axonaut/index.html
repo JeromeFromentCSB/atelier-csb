@@ -524,6 +524,7 @@
   <button class="tab-btn active" data-tab="commande" id="tabBtnCommande">📦 Commande</button>
   <button class="tab-btn" data-tab="avancement" id="tabBtnAvancement">📈 Avancement</button>
   <button class="tab-btn" data-tab="achats" id="tabBtnAchats">🛒 Achats matières</button>
+  <button class="tab-btn" data-tab="besoins" id="tabBtnBesoins">🧵 Besoins matière<span id="besoinsAlertDot" style="display:none; color:#d33; font-weight:900;"> ⚠</span></button>
   <button class="tab-btn" data-tab="factures" id="tabBtnFactures">💶 Factures</button>
   <!-- Suivi colis masqué pour le moment : retirer style="display:none" pour le réafficher -->
   <button class="tab-btn" data-tab="suivi" id="tabBtnSuivi" style="display:none">🚚 Suivi colis</button>
@@ -1136,6 +1137,10 @@
   </div>
 </div>
 
+<div id="tabPanelBesoins" class="tab-panel">
+  <iframe id="besoinsFrame" title="Besoins matière" style="display:block; width:100%; height:calc(100vh - 45px); border:0; background:var(--paper);"></iframe>
+</div>
+
 <div id="tabPanelAchats" class="tab-panel">
   <div class="sc-wrap" style="padding:14px 22px 40px;">
     <div class="sc-toolbar">
@@ -1319,6 +1324,7 @@
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
 <script src="../../src/shared/vendor/qrcode.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-besoins.js"></script>
 <script>
 // ---------- Réglages PocketBase ----------
 // L'URL du serveur PocketBase est désormais réglée une seule fois depuis l'écran de connexion
@@ -4928,6 +4934,7 @@ async function onBlCheckboxChange(quiet){
     if(currentBlPbRecord){ await blPatch(currentBlPbRecord.id, body); Object.assign(currentBlPbRecord, body); }
     else{ currentBlPbRecord = await blCreate(body); }
   }catch(e){ console.warn('Échec sauvegarde BL', e); }
+  matSyncOrder(r, state);
 
   const resultBox = document.getElementById('blResult');
   r.blReady = allChecked;
@@ -4941,6 +4948,25 @@ async function onBlCheckboxChange(quiet){
     resultBox.textContent = '';
   }
 }
+
+// ================== Besoins matière : déduction à la validation d'une ligne ==================
+// Les réservations sont faites par le module Devis (validation en commande). Quand une ligne du
+// bon de fabrication est validée (case, douchette), le stock est déduit ; décochée, il est restitué.
+async function matSyncOrder(r, state){
+  try{
+    if(!window.CSBBesoins || !r || !isModuleOrder(r) || !r.moduleRec) return;
+    const n = await CSBBesoins.syncOrder(r.moduleRec.id, state);
+    if(n) matRefreshAlertDot();
+  }catch(e){ /* collections absentes ou PocketBase indisponible : sans effet sur le bon de fabrication */ }
+}
+async function matRefreshAlertDot(){
+  try{
+    const low = await CSBBesoins.lowStock();
+    const dot = document.getElementById('besoinsAlertDot');
+    if(dot){ dot.style.display = low.length ? '' : 'none'; dot.title = low.map(x => x.e.nom).join(', ') + ' : stock limite'; }
+  }catch(e){}
+}
+setTimeout(() => { if(window.CSBBesoins && typeof CSBAuth !== 'undefined'){ CSBBesoins.reconcileAll().catch(() => {}).then(matRefreshAlertDot); } }, 4000);
 
 // ================== Scan des bons de fabrication (douchette, téléphone, saisie) ==================
 // Chaque ligne du bon de fabrication porte un QR code « ligne », et le bon un QR code « expédition ».
@@ -5189,6 +5215,7 @@ async function handleScan(text){
     const body = { contract_id: String(r.contractId), numero_commande: r.numeroCommande, lines_state: state, all_done: allDone, etat_valide: allDone };
     const saved = rec ? await blPatch(rec.id, body) : await blCreate(body);
     r.blReady = allDone; r.expedie = !!state._expedie; r.blState = state;
+    matSyncOrder(r, state);
     if(currentBlRecord === r){
       currentBlPbRecord = saved;
       syncBlInputs(state);
@@ -5205,7 +5232,7 @@ function scanFeedback(ok, title, detail, neutral){
   let box = document.getElementById('scanToast');
   if(!box){
     box = document.createElement('div'); box.id = 'scanToast';
-    box.style.cssText = 'position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:9999; min-width:320px; max-width:90vw; padding:14px 20px; border-radius:12px; color:#fff; font-family:sans-serif; box-shadow:0 8px 30px rgba(0,0,0,.25); transition:opacity .3s;';
+    box.style.cssText = 'position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:9999; pointer-events:none; min-width:320px; max-width:90vw; padding:14px 20px; border-radius:12px; color:#fff; font-family:sans-serif; box-shadow:0 8px 30px rgba(0,0,0,.25); transition:opacity .3s;';
     document.body.appendChild(box);
   }
   box.style.background = neutral ? '#5b6b80' : (ok ? '#2E7D32' : '#B3453A');
@@ -5249,6 +5276,7 @@ function qwertyChar(e){
   if(/^Numpad[0-9]$/.test(e.code)) return e.code.slice(6);
   const k = QWERTY[e.code]; return k ? k[e.shiftKey ? 1 : 0] : '';
 }
+window.CSB_SCAN_LOCAL = true; // la douchette est traitée ici (le relais partagé de csb-auth.js reste inactif)
 let scanKeys = { byKey: '', byCode: '', last: 0 };
 document.addEventListener('keydown', (e) => {
   const t = e.target;
@@ -6129,7 +6157,7 @@ function setAdminMode(on){
 
 // ---------- Onglets ----------
 const ACTIVE_TAB_KEY = 'csb_envoi_axonaut_active_tab';
-const TAB_SUFFIX = { devis:'Devis', commande:'Commande', avancement:'Avancement', achats:'Achats', factures:'Factures', suivi:'Suivi', stats:'Stats', params:'Params' };
+const TAB_SUFFIX = { devis:'Devis', commande:'Commande', avancement:'Avancement', achats:'Achats', besoins:'Besoins', factures:'Factures', suivi:'Suivi', stats:'Stats', params:'Params' };
 function activateTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -6139,6 +6167,7 @@ function activateTab(tab){
   if(tab === 'devis') ensureDevisModuleFrame();
   if(tab === 'factures') fxOpen();
   if(tab === 'achats') acOpen();
+  if(tab === 'besoins'){ const bf = document.getElementById('besoinsFrame'); if(!bf.getAttribute('src')) bf.setAttribute('src', '../besoins/index.html'); }
   if(tab === 'avancement') avOpen();
   if(tab === 'stats') stOpen();
   if(tab === 'suivi') scOpen();
@@ -7350,6 +7379,8 @@ function openInDevisTab(payload){
 async function handleGestionCommandeRequest(payload){
   if(!payload) return;
   if(payload.openDevis){ openInDevisTab(payload.openDevis); return; }
+  // code bipé à la douchette dans un autre module
+  if(payload.scanCode){ activateTab('commande'); handleScan(payload.scanCode); return; }
   // « Préparer une relance » depuis la fiche d'un client (module Clients)
   if(payload.factureClient){
     activateTab('factures');
@@ -8356,6 +8387,9 @@ function applyPermissions(){
   const canAchats = CSBAuth.can('axonaut', 'achats');
   document.getElementById('tabBtnAvancement').style.display = canAvancement ? '' : 'none';
   document.getElementById('tabBtnAchats').style.display = canAchats ? '' : 'none';
+  const canBesoins = CSBAuth.can('axonaut', 'besoins');
+  document.getElementById('tabBtnBesoins').style.display = canBesoins ? '' : 'none';
+  if(!canBesoins && document.getElementById('tabBtnBesoins').classList.contains('active')) activateTab('commande');
   if(!canAvancement && document.getElementById('tabBtnAvancement').classList.contains('active')) activateTab('commande');
   if(!canAchats && document.getElementById('tabBtnAchats').classList.contains('active')) activateTab('commande');
   document.getElementById('tabBtnDevis').style.display = canDevis ? '' : 'none';

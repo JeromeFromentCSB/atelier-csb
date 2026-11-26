@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Besoins matière</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{ --bg:#F5F2EC; --card:#fff; --ink:#211C16; --muted:#8A8074; --line:#E7E0D3; --accent:#B5452F; --accent-light:#F7E3DC; --ok:#2E7D32; --warn:#B26A00; --danger:#B5544A; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Public Sans','Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--ink); font-size:14px; }
+  .wrap{ padding:14px 18px 40px; max-width:1100px; margin:0 auto; }
+  .tabs{ display:flex; gap:4px; border-bottom:1.5px solid var(--line); margin-bottom:14px; }
+  .tabs button{ border:none; background:none; padding:9px 14px; font:inherit; font-weight:600; color:var(--muted); cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-1.5px; }
+  .tabs button.on{ color:var(--ink); border-bottom-color:var(--accent); }
+  .btn{ padding:6px 12px; border:1px solid var(--line); background:#fff; border-radius:8px; font:inherit; cursor:pointer; }
+  .btn:hover{ border-color:var(--accent); }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.danger{ color:var(--danger); }
+  .btn.sm{ padding:3px 8px; font-size:.8rem; }
+  input,select,textarea{ font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  table{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  th{ text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); padding:8px 10px; background:#FBF9F4; }
+  td{ padding:8px 10px; border-top:1px solid var(--line); vertical-align:top; }
+  td.r, th.r{ text-align:right; }
+  .banner{ padding:10px 14px; border-radius:10px; margin-bottom:12px; }
+  .banner.low{ background:#FBE5E1; border:1px solid #E7B4AC; color:#7A2418; font-weight:600; }
+  .banner.warn{ background:#FFF3DC; border:1px solid #EBCB8A; color:#6B4300; }
+  .pill{ display:inline-block; padding:1px 9px; border-radius:10px; font-size:.75rem; font-weight:700; color:#fff; }
+  .muted{ color:var(--muted); }
+  .bar{ display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .bar .sp{ flex:1; }
+  .modal{ position:fixed; inset:0; background:rgba(33,28,22,.45); display:none; align-items:center; justify-content:center; z-index:50; }
+  .modal.show{ display:flex; }
+  .modal .box{ background:#fff; border-radius:12px; padding:18px 20px; width:min(560px,94vw); max-height:90vh; overflow:auto; }
+  .modal h3{ margin:0 0 12px; }
+  .row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+  .row label{ min-width:110px; color:var(--muted); font-size:.85rem; }
+  .row input,.row select{ flex:1; }
+  pre{ background:#FBF9F4; border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; font-size:.78rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="msg"></div>
+  <div class="tabs" id="tabs">
+    <button data-t="stock" class="on">📦 Stock</button>
+    <button data-t="articles">🧵 Articles (nomenclatures)</button>
+    <button data-t="resa">🔒 Réservations</button>
+    <button data-t="alertes">🔔 Alertes</button>
+  </div>
+  <div id="view"></div>
+</div>
+<div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
+
+<script src="../../src/shared/vendor/pocketbase.umd.js"></script>
+<script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-besoins.js"></script>
+<script>
+const B = window.CSBBesoins;
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const fmt = n => String(Math.round(B.num(n) * 1000) / 1000).replace('.', ',');
+let tab = 'stock', data = null, openEl = new Set(), missing = false;
+
+const SCHEMA = `Collections à créer dans PocketBase (Collections → New collection, type « Base »).
+Pour chacune, onglet « API Rules » : List/View/Create/Update/Delete = @request.auth.id != ""   (comme les autres collections).
+
+mat_elements      nom (Text, requis) · unite (Text) · stock_min (Number) · alerte (Bool) · notes (Text)
+mat_lots          element (Text, requis) · label (Text) · initial (Number) · restant (Number)
+mat_nomenclature  ref (Text, requis) · titre (Text) · lignes_json (JSON)
+mat_reservations  order_key (Text) · contract_id (Text) · numero (Text) · line_idx (Number) · ref (Text)
+                  titre (Text) · qte_article (Number) · lignes_json (JSON) · etat (Text) · alloc_json (JSON)`;
+
+function show(html){ document.getElementById('modalBox').innerHTML = html; document.getElementById('modal').classList.add('show'); }
+function hide(){ document.getElementById('modal').classList.remove('show'); }
+document.getElementById('modal').addEventListener('click', e => { if(e.target.id === 'modal') hide(); });
+
+async function load(){
+  try{ data = await B.loadAll(); missing = false; }
+  catch(e){ if(e.missing){ missing = true; data = null; } else { document.getElementById('view').innerHTML = `<div class="banner warn">Erreur de chargement : ${esc(e.message)}</div>`; return false; } }
+  return true;
+}
+const unit = id => { const e = data.elements.find(x => x.id === id); return e ? e.unite || '' : ''; };
+const elName = id => { const e = data.elements.find(x => x.id === id); return e ? e.nom : '(supprimé)'; };
+
+async function render(){
+  const v = document.getElementById('view');
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
+  if(missing){ v.innerHTML = `<div class="banner warn"><b>Première utilisation :</b> les collections PocketBase de ce module n'existent pas encore.<pre>${esc(SCHEMA)}</pre>Une fois créées, clique sur « Actualiser ».<div style="margin-top:8px;"><button class="btn primary" id="reload">↻ Actualiser</button></div></div>`;
+    document.getElementById('reload').onclick = async () => { await load(); render(); }; document.getElementById('msg').innerHTML = ''; return; }
+  if(!data){ v.innerHTML = '<div class="muted">Chargement…</div>'; return; }
+  const low = B.lowList(data);
+  document.getElementById('msg').innerHTML = low.length ? `<div class="banner low">⚠ Stock limite atteint : ${low.map(x => `${esc(x.e.nom)} (${fmt(x.stock)} ${esc(x.e.unite || '')}, limite ${fmt(x.min)})`).join(' · ')}</div>` : '';
+  ({ stock: renderStock, articles: renderArticles, resa: renderResa, alertes: renderAlertes })[tab](v);
+}
+document.getElementById('tabs').addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if(b){ tab = b.dataset.t; render(); } });
+
+// ---------------- Stock ----------------
+function renderStock(v){
+  const sm = B.stockMap(data);
+  const rows = data.elements.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr')).map(e => {
+    const x = sm.get(e.id), min = B.num(e.stock_min), low = min > 0 && x.stock <= min + 1e-9;
+    const lots = data.lots.filter(l => l.element === e.id);
+    const open = openEl.has(e.id);
+    return `<tr data-id="${e.id}">
+      <td><b>${esc(e.nom)}</b>${e.notes ? `<div class="muted" style="font-size:.78rem;">${esc(e.notes)}</div>` : ''}</td>
+      <td>${esc(e.unite || '')}</td>
+      <td class="r"><b>${fmt(x.stock)}</b></td><td class="r">${fmt(x.reserve)}</td><td class="r" style="${x.dispo < 0 ? 'color:var(--danger);font-weight:700;' : ''}">${fmt(x.dispo)}</td>
+      <td class="r">${min ? fmt(min) : '—'}</td>
+      <td>${low ? '<span class="pill" style="background:var(--danger)">⚠ limite</span>' : '<span class="pill" style="background:var(--ok)">OK</span>'}</td>
+      <td style="white-space:nowrap;"><button class="btn sm" data-a="lots">${open ? '▾' : '▸'} ${lots.length} rouleau(x)/sachet(s)</button> <button class="btn sm" data-a="editEl">✎</button></td>
+    </tr>${open ? `<tr><td colspan="8" style="background:#FBF9F4;">${lotsHtml(e, lots)}</td></tr>` : ''}`;
+  }).join('');
+  v.innerHTML = `<div class="bar"><button class="btn primary" id="addEl">+ Nouvel élément</button><span class="sp"></span><button class="btn" id="reconc" title="Relit les lignes validées (y compris au téléphone) et déduit le stock">↻ Mettre à jour les déductions</button></div>
+    <table><thead><tr><th>Élément</th><th>Unité</th><th class="r">Stock</th><th class="r">Réservé</th><th class="r">Disponible</th><th class="r">Limite</th><th>État</th><th></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="8" class="muted">Aucun élément. Crée par exemple « Tapis rouge » (unité m) puis ajoute ses rouleaux.</td></tr>'}</tbody></table>
+    <div class="muted" style="margin-top:8px;font-size:.8rem;">Stock = somme des restes de chaque rouleau / sachet. Réservé = besoins des commandes validées, pas encore déduits (déduits quand la ligne est validée sur le bon de fabrication).</div>`;
+  document.getElementById('addEl').onclick = () => editElement(null);
+  document.getElementById('reconc').onclick = async e => { e.target.disabled = true; try{ const n = await B.reconcileAll(); await load(); render(); alert(n ? n + ' déduction(s) mise(s) à jour.' : 'Rien à mettre à jour.'); }catch(err){ alert(err.message); } e.target.disabled = false; };
+  v.querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    tr.querySelector('[data-a="lots"]').onclick = () => { openEl.has(id) ? openEl.delete(id) : openEl.add(id); render(); };
+    tr.querySelector('[data-a="editEl"]').onclick = () => editElement(data.elements.find(x => x.id === id));
+  });
+  v.querySelectorAll('[data-lotact]').forEach(b => b.onclick = () => lotAction(b.dataset.lotact, b.dataset.el, b.dataset.lot));
+}
+function lotsHtml(e, lots){
+  return `<div style="padding:4px 0;">${lots.length ? `<table><thead><tr><th>Rouleau / sachet</th><th class="r">Initial</th><th class="r">Reste</th><th></th></tr></thead><tbody>${lots.map(l => `<tr><td>${esc(l.label || 'Sans nom')}</td><td class="r">${fmt(l.initial)} ${esc(e.unite || '')}</td><td class="r"><b>${fmt(l.restant)}</b> ${esc(e.unite || '')}</td>
+    <td style="white-space:nowrap;"><button class="btn sm" data-lotact="edit" data-el="${e.id}" data-lot="${l.id}">✎ Corriger</button> <button class="btn sm danger" data-lotact="del" data-el="${e.id}" data-lot="${l.id}">✕</button></td></tr>`).join('')}</tbody></table>` : '<div class="muted">Aucun rouleau / sachet.</div>'}
+    <div style="margin-top:8px;"><button class="btn sm primary" data-lotact="add" data-el="${e.id}">+ Ajouter un rouleau / sachet</button></div></div>`;
+}
+function editElement(e){
+  show(`<h3>${e ? 'Modifier' : 'Nouvel'} élément</h3>
+    <div class="row"><label>Nom</label><input id="f_nom" value="${esc(e ? e.nom : '')}" placeholder="Tapis rouge, Galon extérieur, Œillets…"></div>
+    <div class="row"><label>Unité</label><input id="f_unite" value="${esc(e ? e.unite : 'm')}" placeholder="m, pièce, sachet…"></div>
+    <div class="row"><label>Stock limite</label><input id="f_min" type="number" step="any" value="${e ? B.num(e.stock_min) : ''}" placeholder="alerte quand le stock atteint cette valeur"></div>
+    <div class="row"><label>Notes</label><input id="f_notes" value="${esc(e ? e.notes : '')}" placeholder="fournisseur, référence…"></div>
+    <div style="display:flex; gap:8px; justify-content:space-between; margin-top:12px;"><span>${e ? '<button class="btn danger" id="f_del">Supprimer</button>' : ''}</span><span><button class="btn" id="f_cancel">Annuler</button> <button class="btn primary" id="f_ok">Enregistrer</button></span></div>`);
+  document.getElementById('f_cancel').onclick = hide;
+  if(e) document.getElementById('f_del').onclick = async () => {
+    if(!confirm(`Supprimer « ${e.nom} » et ses rouleaux ? Les nomenclatures qui l'utilisent perdront cet élément.`)) return;
+    try{ for(const l of data.lots.filter(l => l.element === e.id)) await B.del(B.C.lot, l.id); await B.del(B.C.el, e.id); hide(); await load(); render(); }catch(err){ alert(err.message); }
+  };
+  document.getElementById('f_ok').onclick = async () => {
+    const body = { nom: document.getElementById('f_nom').value.trim(), unite: document.getElementById('f_unite').value.trim(), stock_min: B.num(document.getElementById('f_min').value), notes: document.getElementById('f_notes').value.trim() };
+    if(!body.nom){ alert('Nom obligatoire.'); return; }
+    try{ if(e) await B.patch(B.C.el, e.id, body); else await B.create(B.C.el, Object.assign(body, { alerte: false })); hide(); await load(); await B.checkAlerts(data).catch(() => {}); await load(); render(); }catch(err){ alert(err.message); }
+  };
+}
+function lotAction(act, elId, lotId){
+  const e = data.elements.find(x => x.id === elId);
+  if(act === 'del'){
+    const l = data.lots.find(x => x.id === lotId);
+    if(!confirm(`Supprimer « ${l.label || 'ce rouleau'} » (reste ${fmt(l.restant)} ${e.unite || ''}) ?`)) return;
+    B.del(B.C.lot, lotId).then(load).then(render).catch(err => alert(err.message)); return;
+  }
+  const l = act === 'edit' ? data.lots.find(x => x.id === lotId) : null;
+  show(`<h3>${l ? 'Corriger le reste' : 'Nouveau rouleau / sachet'} — ${esc(e.nom)}</h3>
+    <div class="row"><label>Nom</label><input id="l_label" value="${esc(l ? l.label : '')}" placeholder="Rouleau n°1, lot du 12/11…"></div>
+    ${l ? '' : `<div class="row"><label>Quantité (${esc(e.unite || '')})</label><input id="l_init" type="number" step="any" placeholder="longueur du rouleau / contenu du sachet"></div>`}
+    ${l ? `<div class="row"><label>Reste (${esc(e.unite || '')})</label><input id="l_rest" type="number" step="any" value="${B.num(l.restant)}"></div>` : ''}
+    <div style="text-align:right; margin-top:12px;"><button class="btn" id="l_cancel">Annuler</button> <button class="btn primary" id="l_ok">Enregistrer</button></div>`);
+  document.getElementById('l_cancel').onclick = hide;
+  document.getElementById('l_ok').onclick = async () => {
+    try{
+      const label = document.getElementById('l_label').value.trim();
+      if(l) await B.patch(B.C.lot, l.id, { label, restant: B.num(document.getElementById('l_rest').value) });
+      else{ const q = B.num(document.getElementById('l_init').value); if(q <= 0){ alert('Indique la quantité.'); return; } await B.create(B.C.lot, { element: e.id, label, initial: q, restant: q }); }
+      hide(); await load(); await B.checkAlerts(data).catch(() => {}); await load(); render();
+    }catch(err){ alert(err.message); }
+  };
+}
+
+// ---------------- Articles (nomenclatures) ----------------
+function renderArticles(v){
+  const rows = data.noms.slice().sort((a, b) => String(a.ref).localeCompare(String(b.ref), 'fr')).map(n => `<tr data-id="${n.id}">
+    <td><b>${esc(n.ref)}</b></td><td>${esc(n.titre || '')}</td>
+    <td>${(n._lignes || []).map(c => `${esc(elName(c.element))} <span class="muted">${fmt(c.qte)} ${esc(unit(c.element))}</span>`).join('<br>') || '<span class="muted">—</span>'}</td>
+    <td><button class="btn sm" data-a="edit">✎</button></td></tr>`).join('');
+  v.innerHTML = `<div class="bar"><button class="btn primary" id="addNom">+ Nouvel article</button><span class="muted">Besoin pour <b>1 unité</b> de l'article. L'article est reconnu par sa <b>référence Axonaut</b> (celle de la ligne du devis).</span></div>
+    <table><thead><tr><th>Réf. article</th><th>Désignation</th><th>Éléments consommés pour 1 unité</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">Aucun article. Crée par exemple « TAPIS-ROUGE » avec 1,2 m de tapis, 1,1 m de galon extérieur…</td></tr>'}</tbody></table>`;
+  document.getElementById('addNom').onclick = () => editNom(null);
+  v.querySelectorAll('tr[data-id]').forEach(tr => tr.querySelector('[data-a="edit"]').onclick = () => editNom(data.noms.find(x => x.id === tr.dataset.id)));
+}
+// Articles Axonaut (réf + nom), chargés une fois : proposés pendant la saisie de la référence.
+let prods = null, prodsPromise = null;
+const AX_KEY_CFG = 'csb_envoi_axonaut_api_config', DEFAULT_PROXY = 'https://axonaut-proxy.atelier-csb.workers.dev';
+function loadProds(){
+  if(prods) return Promise.resolve(prods);
+  if(!prodsPromise) prodsPromise = (async () => {
+    let proxy = DEFAULT_PROXY, key = '';
+    try{ const j = await (await CSBAuth.authedFetch(CSBAuth.getPbUrl().replace(/\/+$/, '') + '/api/collections/axonaut_settings/records?perPage=1&filter=(' + encodeURIComponent("settings_key='colissimo'") + ')')).json(); const rec = (j.items || [])[0]; if(rec){ const c = JSON.parse(rec.settings_value); if(c && c.workerUrl) proxy = c.workerUrl.replace(/\/+$/, ''); } }catch(e){}
+    try{ const cfg = await window.csbHost.getConfig(); key = (cfg && cfg[AX_KEY_CFG] && cfg[AX_KEY_CFG].apiKey) || ''; }catch(e){}
+    if(!key) return [];
+    const seen = new Set(); let all = [];
+    for(let page = 1; page <= 40; page++){
+      const res = await fetch(proxy + '?path=' + encodeURIComponent(`/products?page=${page}&per_page=200`), { headers: { 'x-axonaut-key': key } });
+      if(!res.ok) break;
+      const d = await res.json(); const arr = Array.isArray(d) ? d : (d && d.data) || [];
+      const fresh = arr.filter(p => p && !seen.has(p.id));
+      if(!fresh.length) break;
+      fresh.forEach(p => seen.add(p.id)); all = all.concat(fresh);
+      if(arr.length < 50) break;
+    }
+    return all.filter(p => !p.disabled && p.product_code).map(p => ({ code: p.product_code, name: p.name || '' }));
+  })().catch(() => []);
+  return prodsPromise.then(p => (prods = p));
+}
+function refSuggestions(){
+  const m = new Map();
+  (prods || []).forEach(p => m.set(B.norm(p.code), p));
+  data.noms.forEach(n => { if(!m.has(B.norm(n.ref))) m.set(B.norm(n.ref), { code: n.ref, name: n.titre || '' }); });
+  return [...m.values()].sort((a, b) => a.code.localeCompare(b.code, 'fr'));
+}
+async function editNom(n){
+  await Promise.race([loadProds(), new Promise(r => setTimeout(r, 4000))]);
+  let lignes = (n ? n._lignes : []).map(x => ({ element: x.element, qte: x.qte }));
+  if(!lignes.length) lignes.push({ element: '', qte: '' });
+  const draw = () => {
+    show(`<h3>${n ? 'Modifier' : 'Nouvel'} article</h3>
+      <div class="row"><label>Référence</label><input id="n_ref" list="n_refs" autocomplete="off" value="${esc(n ? n.ref : '')}" placeholder="tape la référence ou le nom : les articles Axonaut sont proposés">
+        <datalist id="n_refs">${refSuggestions().map(p => `<option value="${esc(p.code)}" label="${esc(p.name)}">${esc(p.name)}</option>`).join('')}</datalist></div>
+      <div class="row"><label>Désignation</label><input id="n_titre" value="${esc(n ? n.titre : '')}"></div>
+      <div class="muted" style="margin:8px 0 4px;">Éléments consommés pour <b>1 unité</b> :</div>
+      ${lignes.map((l, i) => `<div class="row"><select data-i="${i}" class="n_el"><option value="">— élément —</option>${data.elements.map(e => `<option value="${e.id}" ${e.id === l.element ? 'selected' : ''}>${esc(e.nom)} (${esc(e.unite || '')})</option>`).join('')}</select>
+        <input class="n_q" data-i="${i}" type="number" step="any" value="${l.qte}" placeholder="quantité" style="max-width:110px;"><button class="btn sm danger" data-rm="${i}">✕</button></div>`).join('')}
+      <button class="btn sm" id="n_add">+ Ajouter un élément</button>
+      <div style="display:flex; justify-content:space-between; margin-top:14px;"><span>${n ? '<button class="btn danger" id="n_del">Supprimer</button>' : ''}</span><span><button class="btn" id="n_cancel">Annuler</button> <button class="btn primary" id="n_ok">Enregistrer</button></span></div>`);
+    const keep = () => { document.querySelectorAll('.n_el').forEach(s => { lignes[+s.dataset.i].element = s.value; }); document.querySelectorAll('.n_q').forEach(i => { lignes[+i.dataset.i].qte = i.value; }); };
+    const ref = document.getElementById('n_ref'), titre = document.getElementById('n_titre');
+    // choix d'une suggestion : la désignation se remplit si elle est vide
+    ref.addEventListener('change', () => {
+      const p = refSuggestions().find(x => B.norm(x.code) === B.norm(ref.value));
+      if(p && !titre.value.trim()) titre.value = p.name;
+    });
+    document.getElementById('n_add').onclick = () => { keep(); lignes.push({ element: '', qte: '' }); const r = ref.value, t = titre.value; draw(); document.getElementById('n_ref').value = r; document.getElementById('n_titre').value = t; };
+    document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { keep(); lignes.splice(+b.dataset.rm, 1); if(!lignes.length) lignes.push({ element: '', qte: '' }); const r = ref.value, t = titre.value; draw(); document.getElementById('n_ref').value = r; document.getElementById('n_titre').value = t; });
+    document.getElementById('n_cancel').onclick = hide;
+    if(n) document.getElementById('n_del').onclick = async () => { if(!confirm('Supprimer cet article ?')) return; try{ await B.del(B.C.nom, n.id); hide(); await load(); render(); }catch(err){ alert(err.message); } };
+    document.getElementById('n_ok').onclick = async () => {
+      keep();
+      const body = { ref: ref.value.trim(), titre: titre.value.trim(), lignes_json: lignes.filter(l => l.element && B.num(l.qte) > 0).map(l => ({ element: l.element, qte: B.num(l.qte) })) };
+      if(!body.ref){ alert('Référence obligatoire.'); return; }
+      if(data.noms.some(x => x.id !== (n && n.id) && B.norm(x.ref) === B.norm(body.ref))){ alert('Cette référence existe déjà.'); return; }
+      try{ if(n) await B.patch(B.C.nom, n.id, body); else await B.create(B.C.nom, body); hide(); await load(); render(); }catch(err){ alert(err.message); }
+    };
+  };
+  draw();
+}
+
+// ---------------- Réservations ----------------
+function renderResa(v){
+  const rs = data.reservations.slice().sort((a, b) => String(b.created).localeCompare(String(a.created)));
+  const rows = rs.map(r => `<tr><td><b>${esc(r.numero || r.order_key)}</b></td><td>${esc(r.titre || r.ref)} <span class="muted">× ${fmt(r.qte_article)}</span></td>
+    <td>${(r._lignes || []).map(c => `${esc(elName(c.element))} ${fmt(c.qte)} ${esc(unit(c.element))}`).join('<br>')}</td>
+    <td>${r.etat === 'consomme' ? '<span class="pill" style="background:var(--ok)">Déduit</span>' : '<span class="pill" style="background:var(--warn)">Réservé</span>'}</td>
+    <td>${r.etat === 'reserve' ? `<button class="btn sm danger" data-rel="${r.id}" title="Libérer cette réservation (sans déduire)">Libérer</button>` : ''}</td></tr>`).join('');
+  v.innerHTML = `<table><thead><tr><th>Commande</th><th>Article</th><th>Éléments</th><th>État</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">Aucune réservation. Elles se créent quand un devis est validé en commande.</td></tr>'}</tbody></table>`;
+  v.querySelectorAll('[data-rel]').forEach(b => b.onclick = async () => { if(!confirm('Libérer cette réservation ?')) return; try{ await B.del(B.C.res, b.dataset.rel); await load(); render(); }catch(err){ alert(err.message); } });
+}
+
+// ---------------- Alertes ----------------
+async function renderAlertes(v){
+  const emails = await B.getAlertEmails();
+  v.innerHTML = `<div style="max-width:620px;">
+    <div class="muted" style="margin-bottom:8px;">Quand le stock d'un élément atteint sa limite, un mail est envoyé (une seule fois, jusqu'à ce que le stock remonte) et un message rouge s'affiche dans l'application. Le mail part du compte configuré dans le module Email.</div>
+    <label style="font-weight:600;">Destinataires (un par ligne ou séparés par des virgules)</label>
+    <textarea id="al_to" rows="4" style="width:100%; margin:6px 0;">${esc(emails.join('\n'))}</textarea>
+    <button class="btn primary" id="al_save">Enregistrer</button> <button class="btn" id="al_test">Envoyer un mail de test</button> <span id="al_st" class="muted"></span></div>`;
+  const parse = () => document.getElementById('al_to').value.split(/[\s,;]+/).map(s => s.trim()).filter(s => /.+@.+\..+/.test(s));
+  const st = t => { document.getElementById('al_st').textContent = t; };
+  document.getElementById('al_save').onclick = async () => { try{ await B.setAlertEmails(parse()); st('Enregistré.'); }catch(e){ st('Erreur : ' + e.message); } };
+  document.getElementById('al_test').onclick = async () => {
+    try{ await B.setAlertEmails(parse()); const ok = await B.sendAlertMail([{ e: { nom: 'TEST — élément fictif', unite: 'm' }, stock: 0, min: 1 }]); st(ok ? 'Mail de test envoyé.' : 'Mail non envoyé (destinataires vides ou messagerie non configurée).'); }catch(e){ st('Erreur : ' + e.message); }
+  };
+}
+
+// ---------------- Démarrage ----------------
+(async () => {
+  document.getElementById('view').innerHTML = '<div class="muted">Chargement…</div>';
+  await load(); render();
+  if(!missing && data){ try{ await B.reconcileAll(); await load(); render(); }catch(e){} }
+})();
+</script>
+</body>
+</html>

@@ -155,3 +155,41 @@
     USERS_COLLECTION
   };
 })(window);
+
+/* Douchette : détecte une rafale de touches contenant un QR de bon de fabrication, hors champ de saisie,
+   et la transmet au socle, qui ouvre Gestion Commande pour la traiter. Inactif dans Gestion Commande
+   (qui la traite lui-même : window.CSB_SCAN_LOCAL). */
+(function () {
+  if (window.__csbScanRelay) return; window.__csbScanRelay = true;
+  var QW = { Minus: ['-', '_'], Equal: ['=', '+'], Slash: ['/', '?'], Semicolon: [';', ':'], Period: ['.', '>'], Comma: [',', '<'],
+    Digit1: ['1', '!'], Digit2: ['2', '@'], Digit3: ['3', '#'], Digit4: ['4', '$'], Digit5: ['5', '%'], Digit6: ['6', '^'], Digit7: ['7', '&'], Digit8: ['8', '*'], Digit9: ['9', '('], Digit0: ['0', ')'] };
+  function qch(e) {
+    if (/^Key[A-Z]$/.test(e.code)) { var c = e.code.slice(3); return e.shiftKey ? c : c.toLowerCase(); }
+    if (/^Numpad[0-9]$/.test(e.code)) return e.code.slice(6);
+    var k = QW[e.code]; return k ? k[e.shiftKey ? 1 : 0] : '';
+  }
+  var RE = /[?&]o=([^&# ]+)&(?:l=([0-9]+)|x=1|v=1|a=([A-Za-z0-9]+))/;
+  var keys = { a: '', b: '', last: 0 };
+  document.addEventListener('keydown', function (e) {
+    if (window.CSB_SCAN_LOCAL) return;
+    var t = e.target;
+    var inField = t && t !== document.body && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    if (inField || e.ctrlKey || e.altKey || e.metaKey) return;
+    var now = Date.now();
+    if (now - keys.last > 120) keys = { a: '', b: '', last: now };
+    keys.last = now;
+    if (e.key === 'Enter') {
+      var a = keys.a, b = keys.b; keys = { a: '', b: '', last: 0 };
+      var hit = RE.test(a) ? a : (RE.test(b) ? b : null);
+      if (!hit) return;
+      e.preventDefault();
+      try {
+        if (window.top === window) window.postMessage({ type: 'csb:scan-code', text: hit }, '*');
+        else window.top.postMessage({ type: 'csb:scan-code', text: hit }, '*');
+      } catch (err) {}
+      return;
+    }
+    if (e.key && e.key.length === 1) keys.a += e.key;
+    keys.b += qch(e);
+  }, true);
+})();

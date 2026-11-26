@@ -5,6 +5,7 @@
       { key: 'commandes', label: 'Onglet Commande' },
       { key: 'avancement', label: 'Onglet Avancement (suivi des lignes bipées)' },
       { key: 'achats', label: 'Onglet Achats matières' },
+      { key: 'besoins', label: 'Onglet Besoins matière (stocks, nomenclatures, alertes)' },
       { key: 'factures', label: 'Onglet Factures (liste des factures Axonaut)' },
       { key: 'stats', label: "Onglet Statistiques (chiffre d'affaires)" },
       { key: 'etiquettes', label: 'Gestion des étiquettes' },
@@ -295,15 +296,25 @@
       const rec = ((await res.json()).items || [])[0];
       const ev = rec ? JSON.parse(rec.settings_value || 'null') : null;
       const seq = ev ? String(ev.seq) : '';
-      if (scanPosteLastSeq === null) { scanPosteLastSeq = seq; return; } // premier passage : rien d'ancien
+      const first = scanPosteLastSeq === null;
       if (!ev || seq === scanPosteLastSeq) return;
       scanPosteLastSeq = seq;
-      if (Date.now() - new Date(ev.at).getTime() > 2 * 60 * 1000) return; // scan trop ancien
+      // premier passage : on ignore un scan ancien, mais on ouvre un scan de moins de 20 s
+      if (Date.now() - new Date(ev.at).getTime() > (first ? 20 * 1000 : 2 * 60 * 1000)) return;
       if (window.csbHost && window.csbHost.bringToFront) window.csbHost.bringToFront();
       window.postMessage({ type: 'csb:open-module', module: 'axonaut', payload: { contractId: ev.contractId, scanMsg: ev.msg || '' } }, '*');
     } catch (e) { /* PocketBase injoignable : on réessaie au tour suivant */ }
   }
   setInterval(pollScanPoste, 2500);
+  // Douchette bipée depuis n'importe quel module : on ouvre Gestion Commande (fenêtre au premier plan)
+  // qui traite le code.
+  window.addEventListener('message', (event) => {
+    const d = event.data;
+    if (!d || d.type !== 'csb:scan-code' || !d.text) return;
+    if (!CSBAuth.currentUser() || !CSBAuth.hasModuleAccess('axonaut')) return;
+    if (window.csbHost && window.csbHost.bringToFront) window.csbHost.bringToFront();
+    window.postMessage({ type: 'csb:open-module', module: 'axonaut', payload: { scanCode: d.text } }, '*');
+  });
 
   function renderModuleNav() {
     moduleNav.innerHTML = '';
@@ -979,7 +990,10 @@
     }
     if (!CSBAuth.hasModuleAccess(mod.id)) { alert("Tu n'as pas accès au module « " + mod.label + " » — demande à un administrateur."); return; }
     const alreadyLoaded = !!moduleFrames[mod.id];
+    const prevModule = MODULES.find((m) => m.id === activeModuleId);
     openModule(mod);
+    // Demande « en arrière-plan » : le module cible se charge et traite la demande, mais on reste où on est.
+    if (msg.background && prevModule && prevModule.id !== mod.id) openModule(prevModule);
     const frame = moduleFrames[mod.id];
     if (!frame || !frame.contentWindow) return;
     const forward = () => frame.contentWindow.postMessage({ type: 'csb:open-item', payload: msg.payload || {} }, '*');

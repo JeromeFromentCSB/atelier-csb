@@ -1748,7 +1748,8 @@ async function dmCreateDevis(t, kind){
       mails.push({ from: full.from, date: full.date, subject: full.subject, html: full.html, text: full.text,
         attachments: (full.attachments || []).map(a => ({ filename: a.filename, contentType: a.contentType, contentBase64: a.contentBase64 })) });
     }
-    window.parent.postMessage({ type: 'csb:open-module', module: 'devis', payload: { fromMail: {
+    // background : le devis se crée en arrière-plan, on reste sur le mail
+    window.parent.postMessage({ type: 'csb:open-module', module: 'devis', background: true, payload: { fromMail: {
       kind, threadId: t.id, subject: t.subject, email: t.contactEmail, name: t.contactName, date: t.firstDate,
       client: dmClientOf(t) || null, mails } } }, '*');
     // Le mail n'est PAS marqué « Traité » : il reste (ou passe) « À traiter » tant que le devis

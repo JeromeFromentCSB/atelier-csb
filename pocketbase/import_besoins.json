@@ -1,0 +1,372 @@
+[
+  {
+    "id": "pbc_3100001000",
+    "name": "mat_elements",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\"",
+    "deleteRule": "@request.auth.id != \"\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "primaryKey": true,
+        "required": true,
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "pattern": "^[a-z0-9]+$",
+        "min": 15,
+        "max": 15,
+        "hidden": false,
+        "presentable": false
+      },
+      {
+        "id": "text3100001001",
+        "name": "nom",
+        "type": "text",
+        "required": true,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text3100001002",
+        "name": "unite",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "number3100001003",
+        "name": "stock_min",
+        "type": "number",
+        "required": false,
+        "min": null,
+        "max": null,
+        "onlyInt": false
+      },
+      {
+        "id": "bool3100001004",
+        "name": "alerte",
+        "type": "bool",
+        "required": false
+      },
+      {
+        "id": "text3100001005",
+        "name": "notes",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "autodate3100001900",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      },
+      {
+        "id": "autodate3100001901",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true
+      }
+    ],
+    "indexes": []
+  },
+  {
+    "id": "pbc_3100002000",
+    "name": "mat_lots",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\"",
+    "deleteRule": "@request.auth.id != \"\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "primaryKey": true,
+        "required": true,
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "pattern": "^[a-z0-9]+$",
+        "min": 15,
+        "max": 15,
+        "hidden": false,
+        "presentable": false
+      },
+      {
+        "id": "text3100002001",
+        "name": "element",
+        "type": "text",
+        "required": true,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text3100002002",
+        "name": "label",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "number3100002003",
+        "name": "initial",
+        "type": "number",
+        "required": false,
+        "min": null,
+        "max": null,
+        "onlyInt": false
+      },
+      {
+        "id": "number3100002004",
+        "name": "restant",
+        "type": "number",
+        "required": false,
+        "min": null,
+        "max": null,
+        "onlyInt": false
+      },
+      {
+        "id": "autodate3100002900",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      },
+      {
+        "id": "autodate3100002901",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true
+      }
+    ],
+    "indexes": []
+  },
+  {
+    "id": "pbc_3100003000",
+    "name": "mat_nomenclature",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\"",
+    "deleteRule": "@request.auth.id != \"\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "primaryKey": true,
+        "required": true,
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "pattern": "^[a-z0-9]+$",
+        "min": 15,
+        "max": 15,
+        "hidden": false,
+        "presentable": false
+      },
+      {
+        "id": "text3100003001",
+        "name": "ref",
+        "type": "text",
+        "required": true,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text3100003002",
+        "name": "titre",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "json3100003003",
+        "name": "lignes_json",
+        "type": "json",
+        "required": false,
+        "maxSize": 2000000
+      },
+      {
+        "id": "autodate3100003900",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      },
+      {
+        "id": "autodate3100003901",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true
+      }
+    ],
+    "indexes": []
+  },
+  {
+    "id": "pbc_3100004000",
+    "name": "mat_reservations",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != \"\"",
+    "viewRule": "@request.auth.id != \"\"",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "@request.auth.id != \"\"",
+    "deleteRule": "@request.auth.id != \"\"",
+    "fields": [
+      {
+        "id": "text3208210256",
+        "name": "id",
+        "type": "text",
+        "system": true,
+        "primaryKey": true,
+        "required": true,
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "pattern": "^[a-z0-9]+$",
+        "min": 15,
+        "max": 15,
+        "hidden": false,
+        "presentable": false
+      },
+      {
+        "id": "text3100004001",
+        "name": "order_key",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text3100004002",
+        "name": "contract_id",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text3100004003",
+        "name": "numero",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "number3100004004",
+        "name": "line_idx",
+        "type": "number",
+        "required": false,
+        "min": null,
+        "max": null,
+        "onlyInt": false
+      },
+      {
+        "id": "text3100004005",
+        "name": "ref",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "text3100004006",
+        "name": "titre",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "number3100004007",
+        "name": "qte_article",
+        "type": "number",
+        "required": false,
+        "min": null,
+        "max": null,
+        "onlyInt": false
+      },
+      {
+        "id": "json3100004008",
+        "name": "lignes_json",
+        "type": "json",
+        "required": false,
+        "maxSize": 2000000
+      },
+      {
+        "id": "text3100004009",
+        "name": "etat",
+        "type": "text",
+        "required": false,
+        "min": 0,
+        "max": 500,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "json3100004010",
+        "name": "alloc_json",
+        "type": "json",
+        "required": false,
+        "maxSize": 2000000
+      },
+      {
+        "id": "autodate3100004900",
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      },
+      {
+        "id": "autodate3100004901",
+        "name": "updated",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": true
+      }
+    ],
+    "indexes": []
+  }
+]

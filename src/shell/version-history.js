@@ -2,6 +2,13 @@
 // (en haut à droite du bandeau). À mettre à jour à chaque nouvelle version publiée — ajouter
 // une entrée en tête de tableau (ordre décroissant, la plus récente en premier).
 const APP_VERSION_HISTORY = [
+  { v: '0.2.75', items: [
+    "Gestion Commande : nouvel onglet « Besoins matière » — stocks d'éléments (rouleaux, sachets), nomenclature par article avec suggestion des références, réservation à la validation en commande, déduction à la validation de la fabrication, alertes de stock limite par mail et dans l'application",
+    "Devis : avertissement si le besoin matière n'est pas réalisable (sans rien déduire)",
+    "Scan d'un QR code (téléphone associé ou douchette, depuis n'importe quel module) : la fenêtre passe au premier plan et la commande s'ouvre dans Gestion Commande",
+    "Mail : « Créer le devis » reste sur le mail en cours",
+    "Correctif : après un scan, les filtres et boutons du haut de l'onglet Commande pouvaient ne plus être cliquables",
+  ]},
   { v: '0.2.74', items: [
     "Gestion Commande : l'état d'achat matière (À commander, En commande, Reçu, Vérifié) et le fournisseur s'affichent sur chaque ligne de la commande concernée",
     "Gestion Commande : les boutons « Actualiser » indiquent « Actualisation… » puis « ✔ Actualisé » (ou « ⚠ Échec »)",

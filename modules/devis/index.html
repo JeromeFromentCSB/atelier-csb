@@ -381,6 +381,7 @@
 
 <script src="../../src/shared/vendor/pocketbase.umd.js"></script>
 <script src="../../src/shared/csb-auth.js"></script>
+<script src="../../src/shared/csb-besoins.js"></script>
 <script src="../../src/shared/csb-clients.js"></script>
 <script>
 // ================== Accès Axonaut (même relais et même clé que Gestion Commande) ==================
@@ -862,6 +863,13 @@ async function setStatut(next, action){
     const pb = validationProblems(current);
     if(pb.length){ alert('Avant de continuer : ' + pb.join(', ') + '.'); return; }
   }
+  // Matière : on prévient si le besoin n'est pas couvert, sans rien bloquer ni déduire.
+  if(['envoye', 'accepte'].includes(next) && window.CSBBesoins){
+    try{
+      const res = await CSBBesoins.check(matLinesOf(current), currentRecId);
+      if(res.shortages.length && !confirm(`⚠ Matière insuffisante :\n\n${matShortageText(res)}\n\nContinuer quand même ?`)) return;
+    }catch(e){ /* Besoins matière non installé */ }
+  }
   changingStatut = true;
   const before = { statut: current.statut, numero: current.numero, n: (current.historique || []).length };
   try{
@@ -884,6 +892,15 @@ async function setStatut(next, action){
     }
     addHisto(action);
     await saveCurrent();
+    // Matière : validation en commande = on bloque le besoin (déduit à la validation de la ligne au bon de fabrication)
+    if(window.CSBBesoins && currentRecId){
+      if(next === 'accepte'){
+        CSBBesoins.reserve({ orderKey: currentRecId, contractId: current.linkedContractId || ('D-' + currentRecId), numero: current.numero || '',
+          lines: matLinesOf(current.commande || current) }).catch(e => console.warn('Réservation matière impossible', e));
+      }else if(['brouillon', 'annule', 'refuse'].includes(next)){
+        CSBBesoins.release(currentRecId).catch(() => {});
+      }
+    }
     if(['annule', 'refuse'].includes(next) && current.suivi && current.suivi.token){
       suiviApi('/api/devis/' + current.suivi.token + '/close', { method:'POST', body: JSON.stringify({ reason: next === 'annule' ? 'devis annulé' : 'devis refusé' }) }).catch(() => {});
     }
@@ -2606,6 +2623,7 @@ async function applyOnlineAcceptance(d, acc){
   const up = await CSBAuth.authedFetch(devisBase() + '/' + recId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
   if(!up.ok) return;
   const saved = await up.json();
+  if(window.CSBBesoins) CSBBesoins.reserve({ orderKey: recId, contractId: fresh.linkedContractId || ('D-' + recId), numero: fresh.numero || '', lines: matLinesOf(fresh.commande || fresh) }).catch(() => {});
   const i = drafts.findIndex(x => x.recId === recId);
   if(i >= 0) drafts[i] = { recId, updated: saved.updated, draft: recordToDraft(saved) };
   renderDraftList();
@@ -3685,7 +3703,31 @@ function renderTotals(){
     ${t.taxes.map(x => `<div class="tr"><span>TVA ${String(x.rate).replace('.', ',')} %</span><span class="v">${eur(x.amount)}</span></div>`).join('')}
     <div class="tr big"><span>Total TTC</span><span class="v">${eur(t.ttc)}</span></div>
     ${canMarge() ? `<div class="margin-box">Coût d'achat ${eur(t.cost)} · Marge ${eur(t.margin)}${t.ht ? ' (' + Math.round(t.margin / t.ht * 100) + ' %)' : ''}</div>` : ''}
-    <div class="hint" style="text-align:right; margin-top:4px;">Montants repris tels quels sur le PDF ; Axonaut les recalcule à la facturation.</div>`;
+    <div class="hint" style="text-align:right; margin-top:4px;">Montants repris tels quels sur le PDF ; Axonaut les recalcule à la facturation.</div>
+    <div id="matCheckBox"></div>`;
+  matCheckSoon();
+}
+
+// ================== Besoins matière : contrôle de faisabilité (rien n'est déduit ici) ==================
+const matLinesOf = d => (d.lines || []).filter(l => l.type !== 'section').map((l, i) => ({ idx: i, productCode: l.productCode || '', quantity: l.quantity, name: l.name || '' }));
+function matShortageText(res){
+  return res.shortages.map(s => `• ${s.nom} : besoin ${String(s.besoin).replace('.', ',')} ${s.unite}, disponible ${String(s.dispo).replace('.', ',')} ${s.unite}`).join('\n');
+}
+let matCheckTimer = null;
+function matCheckSoon(){
+  clearTimeout(matCheckTimer);
+  matCheckTimer = setTimeout(async () => {
+    const box = document.getElementById('matCheckBox');
+    if(!box || !current || !window.CSBBesoins) return;
+    if(['facture', 'annule', 'refuse'].includes(current.statut)) { box.innerHTML = ''; return; }
+    try{
+      const res = await CSBBesoins.check(matLinesOf(current), currentRecId);
+      const b2 = document.getElementById('matCheckBox'); if(!b2) return;
+      b2.innerHTML = res.shortages.length
+        ? `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#FBE5E1; border:1px solid #E7B4AC; color:#7A2418; font-size:.82rem;"><b>⚠ Matière insuffisante pour ce devis</b> (rien n'est déduit)<div style="white-space:pre-line; margin-top:3px;">${escapeHtml(matShortageText(res))}</div></div>`
+        : (res.managed ? `<div style="margin-top:8px; font-size:.8rem; color:var(--ok);">✔ Matière disponible pour ${res.managed} article(s) suivi(s).</div>` : '');
+    }catch(e){ /* module Besoins matière non installé : pas de contrôle */ }
+  }, 600);
 }
 
 // ================== Nouveau client ==================
